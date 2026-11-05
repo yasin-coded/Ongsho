@@ -167,10 +167,27 @@
   }
 
   @media (max-width: 63.99rem) {
-    .chat-grid .l-lede {
-      max-width: none;
+    .chat-grid {
+      justify-items: stretch;
+    }
+    .chat-grid > .grid {
+      width: 100%;
+      min-width: 0;
+    }
+    .ledger-copy .l-ledger-title,
+    .ledger-copy .l-lede {
       width: 100%;
       text-align: justify;
+      text-align-last: left;
+      text-wrap: pretty;
+      text-justify: inter-word;
+      word-spacing: normal;
+      letter-spacing: normal;
+    }
+    .ledger-copy .l-lede {
+      max-width: none;
+      hyphens: auto;
+      hyphenate-limit-chars: 6 4 4;
     }
   }
 
@@ -247,34 +264,71 @@
   /* ---------- footer ---------- */
   .l-footer {
     position: relative;
+    display: grid;
     overflow: hidden;
     margin-top: clamp(5rem, 10vw, 9rem);
     background: var(--color-cream);
     color: #fff;
+    container-type: inline-size;
   }
-  .l-footer__art { display: block; width: 100%; height: auto; }
-  .l-footer__body {
+  .l-footer__fill {
     position: absolute;
-    inset: 0;
+    z-index: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: calc(100cqi * 710.35 / 1440 - 1px);
+    background: #bf1d1d;
+  }
+  .l-footer__art,
+  .l-footer__body { grid-area: 1 / 1; }
+  .l-footer__art {
+    position: relative;
+    z-index: 1;
+    align-self: start;
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .l-footer__body {
+    position: relative;
+    z-index: 2;
     display: grid;
     justify-items: center;
     align-content: center;
-    gap: clamp(0.75rem, 2vw, 2rem);
-    padding: 14% 1.25rem 4%;
+    gap: clamp(0.75rem, 2.2cqi, 2rem);
+    min-height: calc(100cqi * 710.35 / 1440);
+    padding: calc(8.313% + clamp(1.25rem, 2.5cqi, 2.5rem)) 1.25rem clamp(1.25rem, 3cqi, 2.75rem);
     text-align: center;
   }
-  .l-footer__wordmark { width: calc(167.06px * 1.1); height: auto; max-width: 100%; }
-  .l-footer__notes { display: grid; gap: 0.5rem; font-size: calc(0.95rem * 1.1); }
+  .l-footer__wordmark {
+    width: min(calc(167.06px * 1.1), 70%);
+    height: auto;
+    aspect-ratio: 167.06 / 42.58;
+  }
+  .l-footer__notes { display: grid; gap: 0.5rem; max-width: 40rem; font-size: calc(0.95rem * 1.1); }
   .l-footer__close {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: max-content;
+    max-width: 100%;
     margin: 0;
     font-family: var(--font-display);
     font-weight: 700;
     font-style: italic;
-    font-size: clamp(1.35rem, 0.7rem + 3.2vw, 4.5rem);
+    font-size: min(4.5rem, 5.2cqi);
     line-height: 1.05;
     text-align: center;
   }
-  .l-footer__links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 2rem; }
+  .l-footer__close-lead { white-space: nowrap; }
+  .l-footer__close-sub {
+    display: block;
+    white-space: nowrap;
+    word-spacing: 0;
+    letter-spacing: 0;
+  }
+  .l-footer__links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 2rem; max-width: 36rem; }
   .l-footer__links a {
     color: #fff;
     font-family: "Bahnschrift", system-ui, sans-serif;
@@ -284,26 +338,4 @@
     text-decoration: none;
   }
   .l-footer__links a:hover { text-decoration: underline; text-underline-offset: 0.3em; }
-
-  /* The art is shorter than the copy below ~768px, and the wordmark's grid
-     track then collapses to 0 so the links paint on top of the logo. */
-  @media (max-width: 47.99rem) {
-    .l-footer { display: grid; }
-    .l-footer__art,
-    .l-footer__body { grid-area: 1 / 1; }
-    .l-footer__art { width: 100%; height: 100%; }
-    .l-footer__body {
-      position: relative;
-      inset: auto;
-      align-content: start;
-      gap: 0.85rem;
-      padding: 22% 1.25rem 1.75rem;
-    }
-    .l-footer__wordmark {
-      width: min(calc(167.06px * 1.1), 77%);
-      aspect-ratio: 167.06 / 42.58;
-      justify-self: center;
-    }
-    .l-footer__links { max-width: 22rem; gap: 0.35rem 0.85rem; }
-  }
 }

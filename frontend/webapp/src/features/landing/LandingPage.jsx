@@ -130,7 +130,7 @@ export function LandingPage() {
         <section className="l-section" aria-labelledby="ledger-title">
           <div className="chat-grid">
             <ChatPhone className="media chat-phone" role="img" aria-label="A group chat where friends argue about who paid for Netflix" />
-            <div className="grid gap-6">
+            <div className="ledger-copy grid gap-6" lang="en">
               <h2 id="ledger-title" className="l-display l-ledger-title">
                 The group chat is <span className="l-ledger-not">not</span> a ledger.
               </h2>
@@ -169,7 +169,8 @@ export function LandingPage() {
       </main>
 
       <footer className="l-footer">
-        <FooterShape className="l-footer__art" preserveAspectRatio="none" aria-hidden="true" />
+        <div className="l-footer__fill" aria-hidden="true" />
+        <FooterShape className="l-footer__art" aria-hidden="true" />
         <div className="l-footer__body">
           <Wordmark className="media l-footer__wordmark" role="img" aria-label="Ongsho" />
           <nav aria-label="Footer" className="l-footer__links">
@@ -182,9 +183,8 @@ export function LandingPage() {
             <p>2026 Ongsho. Built by Yasin Bin Ahsan.</p>
           </div>
           <p className="l-footer__close l-shadow">
-            MANAGE ALL SUBSCRIPTIONS
-            <br />
-            IN ONE PLACE
+            <span className="l-footer__close-lead">MANAGE ALL SUBSCRIPTIONS</span>
+            <span className="l-footer__close-sub">IN ONE PLACE</span>
           </p>
         </div>
       </footer>
