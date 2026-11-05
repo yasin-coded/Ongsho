@@ -8,6 +8,7 @@ import CursorLogo from '@/assets/media/cursor-mine.svg?react'
 import GoogleLogo from '@/assets/media/google-1-mine.svg?react'
 import PrimeLogo from '@/assets/media/amazon-prime-mine.svg?react'
 import HotstarLogo from '@/assets/media/hotstar-mine.svg?react'
+import CanvaLogo from '@/assets/media/canva-mine.svg?react'
 
 /** Natural sizes from each file's viewBox. The files have no width or height. */
 export const SVG_SIZES = {
@@ -30,7 +31,7 @@ export const SERVICES = {
   google: { name: 'Google One', Logo: GoogleLogo, color: '#4285f4' },
   prime: { name: 'Amazon Prime', Logo: PrimeLogo, color: '#00a8e1' },
   hotstar: { name: 'Disney+ Hotstar', Logo: HotstarLogo, color: '#1f3fbf' },
-  canva: { name: 'Canva', Logo: null, color: '#1e88e5' },
+  canva: { name: 'Canva', Logo: CanvaLogo, color: '#1e88e5' },
 }
 
 export function serviceInfo(key) {

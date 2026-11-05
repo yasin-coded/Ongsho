@@ -38,6 +38,7 @@ const EMPTY = {
   method: 'bkash',
   note: '',
   invites: [],
+  nextRenewalDate: '',
 }
 
 function cycleOf(form) {
@@ -91,22 +92,24 @@ function Preview({ form, names, editing }) {
   const seats = Math.max(1, Number(form.seats) || 1)
   const ownerTakes = form.mode === 'owner' && (seats > 1 || form.invites.length > 0)
   const per = amount ? splitExact(amount, form.mode === 'reseller' ? seats : Math.max(ownerTakes ? membersCount(form) : 1, 1), 0)[0] : 0
-  const next = nextRenewalOf(form)
+  const next = form.nextRenewalDate || nextRenewalOf(form)
   const usd = form.currency === 'USD' && parseTaka(form.price) > 0 && parseTaka(form.rate) > 0
   return (
-    <Box className="lg:sticky lg:top-6">
+    <Box className="min-w-0">
       <BoxHead title="Live preview" />
       <div className="grid gap-4">
         <div className="row gap-3">
           <ServiceLogo serviceKey={catalog?.serviceKey} name={form.serviceName || form.planName || 'Plan'} size="compact" />
           <div className="grid min-w-0 gap-1">
             <p className="t-sub truncate">{form.planName || 'Untitled plan'}</p>
-            <RoleTag role={form.mode === 'reseller' ? 'reseller' : seats > 1 || form.invites.length ? 'owner' : 'solo'} />
             <p className="t-meta">
               {cycleLabel(cycle)}
               {next ? ` · renews ${fmtShort(next)}` : ''}
               {` · ${seats} seat${seats === 1 ? '' : 's'}`}
             </p>
+            <span className="w-fit max-w-full">
+              <RoleTag role={form.mode === 'reseller' ? 'reseller' : seats > 1 || form.invites.length ? 'owner' : 'solo'} />
+            </span>
           </div>
         </div>
         <dl className="dashed-rows">
@@ -152,7 +155,10 @@ function membersCount(form) {
 
 function PlanForm({ initial, editing, planId }) {
   const navigate = useNavigate()
-  const [form, setForm] = useState(initial)
+  const [form, setForm] = useState(() => ({
+    ...initial,
+    nextRenewalDate: initial.nextRenewalDate || nextRenewalOf(initial) || '',
+  }))
   const [email, setEmail] = useState('')
   const [shares, setShares] = useState({})
   const cats = useQuery({ queryKey: ['categories'], queryFn: getCategories })
@@ -175,8 +181,6 @@ function PlanForm({ initial, editing, planId }) {
   }, [form.mode, form.invites])
   const customTotal = people.reduce((a, p) => a + (parseTaka(shares[p.key]) ?? 0), 0)
   const customOk = form.split !== 'custom' || (amount > 0 && customTotal === amount)
-  const next = nextRenewalOf(form)
-
   useEffect(() => {
     const first = document.querySelector('[aria-invalid="true"]')
     first?.focus()
@@ -281,8 +285,19 @@ function PlanForm({ initial, editing, planId }) {
                 </div>
               )}
             </fieldset>
-            <Input label="Start date" type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} error={f.startDate} locked={editing} />
-            <Input label="Next renewal date" type="date" value={next ?? ''} locked help="Computed from the start date, trial, and billing cycle." />
+            <div className="plan-date-pair sm:col-span-2">
+              <Input label="Start date" type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} error={f.startDate} locked={editing} />
+              <Input
+                label="Next renewal date"
+                type="date"
+                value={form.nextRenewalDate ?? ''}
+                onChange={(e) => set({ nextRenewalDate: e.target.value })}
+                error={f.nextRenewalDate}
+              />
+              <p className="plan-date-pair__help field__help">
+                When the next charge is due. Must match your billing cycle from the start date.
+              </p>
+            </div>
             <Input label="Trial end date (optional)" type="date" value={form.trialEnd} onChange={(e) => set({ trialEnd: e.target.value })} error={f.trialEnd} locked={editing} />
             <Select label="Renewal" value={form.renewal} onChange={(e) => set({ renewal: e.target.value })} options={[{ value: 'auto', label: 'Auto-renews' }, { value: 'fixed', label: 'Fixed term' }]} />
             {form.renewal === 'fixed' && <Input label="End date" type="date" value={form.endDate} onChange={(e) => set({ endDate: e.target.value })} error={f.endDate} />}
@@ -386,9 +401,9 @@ function PlanForm({ initial, editing, planId }) {
         </div>
       </div>
 
-      <div className="stack">
+      <div className="stack min-w-0">
         <Preview form={form} names={serviceList} editing={editing} />
-        <Box variant="highlight">
+        <Box className="min-w-0">
           <BoxHead title="What happens next" />
           <ol className="grid gap-3">
             <li>1. Each invited person gets an email.</li>

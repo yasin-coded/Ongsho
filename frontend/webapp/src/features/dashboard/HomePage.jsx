@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRightLeft, Check, Eye, Inbox, LogOut, Mail, X } from 'lucide-react'
+import { Check, Eye, Inbox, LogOut, X } from 'lucide-react'
+import { notificationLook } from '@/lib/notificationLook'
 import { getDashboard } from '@/api/dashboard'
 import { acceptInvite, acceptTransfer, declineInvite, declineTransfer } from '@/api/shared'
 import { useAction } from '@/hooks/useAction'
@@ -16,6 +17,8 @@ import { ServiceLogo } from '@/components/ui/ServiceLogo'
 import { DashedDivider, EmptyState, SkeletonCard } from '@/components/ui/Misc'
 import { Donut, ForecastBars, Legend } from '@/components/ui/Charts'
 import { EventList, Loadable, ownerMeta, Price, renewText } from '@/features/common/PlanBits'
+
+const HOME_PLAN_LIMIT = 5
 
 function OwnerRow({ plan }) {
   return (
@@ -65,12 +68,19 @@ function AttentionItem({ item }) {
   const acceptT = useAction(() => acceptTransfer(item.transferId))
   const declineT = useAction(() => declineTransfer(item.transferId), { tone: 'waived' })
 
+  const { icon: KindIcon, tile } = notificationLook(item)
+
   if (item.kind === 'review') {
     return (
       <div className="grid gap-3">
-        <div className="min-w-0">
-          <p className="t-sub">{plural(item.count, 'payment')} to review</p>
-          <p className="t-meta">{item.planName}, transaction IDs waiting</p>
+        <div className="row gap-3">
+          <span className="icon-tile !size-10 shrink-0" style={{ background: tile }} aria-hidden="true">
+            <KindIcon />
+          </span>
+          <div className="min-w-0">
+            <p className="t-sub">{plural(item.count, 'payment')} to review</p>
+            <p className="t-meta">{item.planName}, transaction IDs waiting</p>
+          </div>
         </div>
         <LinkButton to={`/app/plans/${item.planId}/review`} variant="review" size="sm" icon={Eye} className="neo-btn--block w-full">
           Review
@@ -81,9 +91,14 @@ function AttentionItem({ item }) {
   if (item.kind === 'leave') {
     return (
       <div className="grid gap-3">
-        <div className="min-w-0">
-          <p className="t-sub">{item.name} wants to leave</p>
-          <p className="t-meta">{item.planName}, needs your OK</p>
+        <div className="row gap-3">
+          <span className="icon-tile !size-10 shrink-0" style={{ background: tile }} aria-hidden="true">
+            <KindIcon />
+          </span>
+          <div className="min-w-0">
+            <p className="t-sub">{item.name} wants to leave</p>
+            <p className="t-meta">{item.planName}, needs your OK</p>
+          </div>
         </div>
         <Button variant="request" size="sm" icon={LogOut} className="neo-btn--block w-full" onClick={() => navigate(`/app/plans/${item.planId}?leave=${item.memberId}`)}>
           Open request
@@ -97,8 +112,8 @@ function AttentionItem({ item }) {
   return (
     <div className="grid gap-3">
       <div className="row gap-3">
-        <span className="icon-tile !size-10" style={{ background: invite ? '#14b3f2' : '#d9ccff' }} aria-hidden="true">
-          {invite ? <Mail /> : <ArrowRightLeft />}
+        <span className="icon-tile !size-10 shrink-0" style={{ background: tile }} aria-hidden="true">
+          <KindIcon />
         </span>
         <div className="min-w-0">
           <p className="t-sub">{invite ? `Invite from ${item.from}` : `${item.from} wants you to own a plan`}</p>
@@ -224,10 +239,21 @@ export function HomePage() {
             <div className="two-col dash-home__cols">
               <div className="stack">
                 <Box>
-                  <BoxHead title="My Plans" tag={<RoleTag role="asOwner" />} sub="Plans you own and pay the provider for" action={<Link to="/app/plans" className="text-link t-meta">See all</Link>} />
+                  <BoxHead
+                    title="My Plans"
+                    tag={<RoleTag role="asOwner" />}
+                    sub="Plans you own and pay the provider for"
+                    action={
+                      d.owned.length > HOME_PLAN_LIMIT ? (
+                        <Link to="/app/plans" className="text-link t-meta">
+                          See all · {plural(d.owned.length, 'plan')}
+                        </Link>
+                      ) : undefined
+                    }
+                  />
                   {d.owned.length ? (
                     <ul className="stack-sm">
-                      {d.owned.map((p) => (
+                      {d.owned.slice(0, HOME_PLAN_LIMIT).map((p) => (
                         <OwnerRow key={p.id} plan={p} />
                       ))}
                     </ul>
@@ -240,10 +266,21 @@ export function HomePage() {
                   )}
                 </Box>
                 <Box>
-                  <BoxHead title="Shared with me" tag={<RoleTag role="asMember" />} sub="Plans you joined. You pay your share to the owner." action={<Link to="/app/shared" className="text-link t-meta">See all</Link>} />
+                  <BoxHead
+                    title="Shared with me"
+                    tag={<RoleTag role="asMember" />}
+                    sub="Plans you joined. You pay your share to the owner."
+                    action={
+                      d.joined.length > HOME_PLAN_LIMIT ? (
+                        <Link to="/app/shared" className="text-link t-meta">
+                          See all · {plural(d.joined.length, 'plan')}
+                        </Link>
+                      ) : undefined
+                    }
+                  />
                   {d.joined.length ? (
                     <ul className="stack-sm">
-                      {d.joined.map((p) => (
+                      {d.joined.slice(0, HOME_PLAN_LIMIT).map((p) => (
                         <MemberRow key={p.id} plan={p} />
                       ))}
                     </ul>

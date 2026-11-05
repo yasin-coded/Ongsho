@@ -13,7 +13,8 @@ const ROW = [
 ]
 
 /** Positions in hero.svg's own viewBox units (0 0 1440 760). */
-const ISLAND = { timeX: 712, timeY: 206.55, dotX: 803, dotR: 6.5 }
+/** Island pill in hero.svg: x≈615, w≈210. Blinker left; clock right-aligned inside the pill. */
+const ISLAND = { timeX: 807, timeY: 206.55, dotX: 632, dotR: 6.5, timeSize: 13 }
 const ORIGIN = { x: 720, y: 672, r: 9, stubFrom: 632 }
 /** Narrow hero is zoomed, so the desktop stub (40 units) shrinks to a sliver. */
 const NARROW_QUERY = '(max-width: 30rem)'
@@ -110,7 +111,7 @@ export function HeroStage() {
     <div className="stage" ref={stageRef}>
       <svg className="stage__lines" width={lines.w} height={lines.h} aria-hidden="true">
         {lines.paths.map((p) => (
-          <path key={p.key} d={p.d} stroke={p.color} />
+          <path key={p.key} className="stage__line" d={p.d} stroke={p.color} />
         ))}
       </svg>
 
@@ -121,18 +122,28 @@ export function HeroStage() {
             <text
               x={ISLAND.timeX}
               y={ISLAND.timeY}
-              textAnchor="middle"
+              textAnchor="end"
               dominantBaseline="central"
               fill="#fdfbcf"
               fontFamily="Bahnschrift, system-ui, sans-serif"
               fontWeight="700"
-              fontSize="15"
+              fontSize={ISLAND.timeSize}
               style={{ fontVariantNumeric: 'tabular-nums' }}
             >
               {time}
             </text>
             <circle className="blink" cx={ISLAND.dotX} cy={ISLAND.timeY} r={ISLAND.dotR} fill="#a2ff00" />
-            <line x1={ORIGIN.x} y1={ORIGIN.stubFrom} x2={ORIGIN.x} y2={hubViewY} stroke="#274f00" strokeWidth="4" strokeDasharray="9 9" strokeLinecap="round" />
+            <line
+              className="hero-hub-stub"
+              x1={ORIGIN.x}
+              y1={ORIGIN.stubFrom}
+              x2={ORIGIN.x}
+              y2={hubViewY - ORIGIN.r}
+              stroke="#274f00"
+              strokeWidth="4"
+              strokeDasharray="9 9"
+              strokeLinecap="round"
+            />
             <circle cx={ORIGIN.x} cy={hubViewY} r={ORIGIN.r} fill="#274f00" />
           </svg>
           <span className="sr-only">Live time, Dhaka</span>

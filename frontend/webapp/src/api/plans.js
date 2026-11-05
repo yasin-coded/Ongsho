@@ -123,6 +123,40 @@ function cycleOf(form) {
   return { unit: form.cycleUnit, count: 1 }
 }
 
+/** Align anchor day and skip dates so the next due on or after today is `nextRenewalDate`. */
+function scheduleFromForm(form, existingSkip = []) {
+  const firstBill = form.trialEnd || form.startDate
+  let anchorDay = dayOfMonth(firstBill)
+  const target = form.nextRenewalDate?.trim()
+  if (!target) return { anchorDay, skipDates: [...existingSkip] }
+
+  anchorDay = dayOfMonth(target)
+  const added = []
+  const probe = () => ({
+    startDate: form.startDate,
+    trialEnd: form.trialEnd || null,
+    cycle: cycleOf(form),
+    skipDates: [...existingSkip, ...added],
+    anchorDay,
+    renewal: form.renewal,
+    endDate: form.renewal === 'fixed' ? form.endDate : null,
+    pausedOn: null,
+    cancelledOn: null,
+  })
+
+  let next = nextDueDate(probe(), MOCK_TODAY)
+  while (next && next < target) {
+    added.push(next)
+    next = nextDueDate(probe(), MOCK_TODAY)
+  }
+  if (next !== target) {
+    throw new ApiError('Some answers need a fix.', {
+      fields: { nextRenewalDate: 'That date does not match this billing cycle from the start date. Pick a valid renewal date or change the cycle.' },
+    })
+  }
+  return { anchorDay, skipDates: [...existingSkip, ...added] }
+}
+
 export function createSubscription(form) {
   return write(() => {
     validatePlanForm(form)
@@ -135,11 +169,11 @@ export function createSubscription(form) {
       ? { usdCents: Math.round(form.price * 100), rate: Math.round(form.rate * 100), effectiveFrom: form.startDate }
       : { amount: Math.round(form.price * 100), effectiveFrom: form.startDate }
     const shared = form.mode === 'reseller' || form.seats > 1 || (form.invites ?? []).length > 0
-    const firstBill = form.trialEnd || form.startDate
+    const { anchorDay, skipDates } = scheduleFromForm(form)
     const plan = {
       id, ownerId: ME, serviceKey: catalogItem?.serviceKey ?? null, serviceName: form.serviceName.trim(), planName: form.planName.trim(),
       mode: form.mode, categoryId: form.categoryId, currency: form.currency, cycle: cycleOf(form), startDate: form.startDate,
-      anchorDay: dayOfMonth(firstBill), trialEnd: form.trialEnd || null, renewal: form.renewal, endDate: form.renewal === 'fixed' ? form.endDate : null,
+      anchorDay, skipDates, trialEnd: form.trialEnd || null, renewal: form.renewal, endDate: form.renewal === 'fixed' ? form.endDate : null,
       status: form.trialEnd && form.trialEnd > MOCK_TODAY ? 'trial' : 'active', method: form.method, note: (form.note ?? '').trim(),
       rarelyUsed: false, seats: Number(form.seats), split: form.split, shared, prices: [pricePoint], createdAt: mockNow(), createdOnDate: MOCK_TODAY,
     }
@@ -168,9 +202,11 @@ export function updateSubscription(id, form) {
     validatePlanForm({ ...form, mode: plan.mode }, { editing: true })
     const taken = membersOf(id).length
     if (Number(form.seats) < taken) throw new ApiError('Fewer seats than members.', { fields: { seats: `${taken} people are in this plan, so it needs at least ${taken} seats.` } })
+    const { anchorDay, skipDates } = scheduleFromForm(form, plan.skipDates ?? [])
     Object.assign(plan, {
       planName: form.planName.trim(), serviceName: form.serviceName.trim(), categoryId: form.categoryId, method: form.method,
       note: (form.note ?? '').trim(), seats: Number(form.seats), renewal: form.renewal, endDate: form.renewal === 'fixed' ? form.endDate : null,
+      anchorDay, skipDates,
       shared: plan.shared || plan.mode === 'reseller' || Number(form.seats) > 1,
     })
     audit({ planId: id, action: 'plan_edited', text: 'You edited the plan details' })

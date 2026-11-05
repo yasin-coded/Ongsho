@@ -54,10 +54,10 @@ export function TopBar({ title, subtitle, tools = true, actions, breadcrumb, lea
             </LinkButton>
           )}
           {actions}
-          <Link to="/app/profile" aria-label="Your profile" className="topbar__profile rounded-full">
-            {me ? <Avatar name={me.name} color={me.avatarColor} size="md" decorative /> : <span className="avatar avatar--md bg-white" />}
-          </Link>
         </div>
+        <Link to="/app/profile" aria-label="Your profile" className="topbar__profile rounded-full">
+          {me ? <Avatar name={me.name} color={me.avatarColor} size="md" decorative /> : <span className="avatar avatar--md bg-white" />}
+        </Link>
       </div>
     </header>
   )

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ArrowRightLeft, BadgeDollarSign, Bell, Check, CheckCheck, Inbox, LogOut, Mail, Trash2, UserRound, X } from 'lucide-react'
+import { Check, CheckCheck, Inbox, LogOut, X } from 'lucide-react'
+import { notificationLook } from '@/lib/notificationLook'
 import { getNotifications, markAllRead, markRead } from '@/api/dashboard'
 import { confirmPayment } from '@/api/payments'
 import { acceptInvite, acceptTransfer, declineInvite, declineTransfer } from '@/api/shared'
@@ -21,17 +22,6 @@ const FILTERS = [
   { key: 'plans', label: 'Plans & members' },
   { key: 'reminders', label: 'Reminders' },
 ]
-
-function look(n) {
-  if (n.kind.startsWith('payment')) return { icon: CheckCheck, tile: '#fff200' }
-  if (n.kind.startsWith('invite')) return { icon: Mail, tile: '#14b3f2' }
-  if (n.kind.startsWith('leave')) return { icon: LogOut, tile: '#846ace' }
-  if (n.kind.startsWith('transfer')) return { icon: ArrowRightLeft, tile: '#d9ccff' }
-  if (['price_change', 'amount_changed'].includes(n.kind)) return { icon: BadgeDollarSign, tile: '#ff9700' }
-  if (n.kind === 'plan_deleted') return { icon: Trash2, tile: '#ff1a1a' }
-  if (n.group === 'reminders') return { icon: Bell, tile: '#e87400' }
-  return { icon: UserRound, tile: '#00ff8b' }
-}
 
 const RESOLVED = { approved: 'Approved', rejected: 'Rejected', joined: 'Joined', declined: 'Declined', accepted: 'Accepted', waived: 'Waived' }
 
@@ -88,7 +78,7 @@ function Actions({ n, onReject }) {
 }
 
 function Row({ n, onReject }) {
-  const { icon: Icon, tile } = look(n)
+  const { icon: Icon, tile } = notificationLook(n)
   const read = useAction(() => markRead(n.id), { toastMessage: null })
   const unread = !n.readAt
   return (

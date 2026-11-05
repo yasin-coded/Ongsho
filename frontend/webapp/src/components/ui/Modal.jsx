@@ -42,8 +42,10 @@ export function Modal({ open, onClose, title, subtitle, wide, children, footer }
               <X aria-hidden="true" className="size-5" />
             </button>
           </div>
-          {children}
-          {footer && <div className="row justify-end">{footer}</div>}
+          <div className="modal__body">
+            {children}
+            {footer && <div className="row justify-end">{footer}</div>}
+          </div>
         </div>
       )}
     </dialog>

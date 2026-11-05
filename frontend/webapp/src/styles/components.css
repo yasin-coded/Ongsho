@@ -221,6 +221,16 @@
 
   /* ---------- inputs ---------- */
   .field { display: grid; gap: 0.4rem; min-width: 0; }
+  .plan-date-pair {
+    display: grid;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (min-width: 40rem) {
+    .plan-date-pair { grid-template-columns: 1fr 1fr; }
+  }
+  .plan-date-pair__help { grid-column: 1 / -1; margin: 0; }
+
   .field__label { font-weight: 700; font-size: 0.95rem; }
   .field__help { font-size: 0.875rem; line-height: 1.45; color: var(--color-muted); }
   .field__error { display: flex; align-items: flex-start; gap: 0.35rem; font-size: 0.875rem; font-weight: 700; color: #c00000; }
@@ -341,13 +351,27 @@
     border-radius: var(--radius-card);
     background: #fff;
     box-shadow: var(--shadow-neo);
-    overflow: auto;
+    overflow: hidden;
     color: #000;
   }
   .modal--wide { width: min(44rem, calc(100% - 2rem)); }
   .modal::backdrop { background: rgb(0 0 0 / 0.55); }
-  .modal__inner { padding: clamp(1.25rem, 1rem + 1.5vw, 2rem); display: grid; gap: 1.25rem; }
+  .modal__inner {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 1.25rem;
+    max-height: calc(100dvh - 2rem);
+    padding: clamp(1.25rem, 1rem + 1.5vw, 2rem);
+    overflow: hidden;
+  }
   .modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .modal__body {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
 
   /* ---------- toast ---------- */
   .toast-stack {
@@ -402,9 +426,20 @@
   .dash-home__aside .box-head__title-row .t-card { font-size: 1.05rem; }
   .dash-home__aside .t-sub,
   .dash-home__aside .t-meta { overflow-wrap: anywhere; }
-  .attention-actions { display: grid; gap: 0.5rem; width: 100%; max-width: 100%; }
-  .attention-actions .neo-btn { width: 100%; justify-content: center; }
+  .attention-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 100%;
+  }
+  .attention-actions .neo-btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
   .needs-attention-wrap { position: relative; overflow: visible; }
+  .needs-attention-wrap > .neo-box { overflow: visible; }
   .needs-attention__badge {
     position: absolute;
     top: -0.7rem;

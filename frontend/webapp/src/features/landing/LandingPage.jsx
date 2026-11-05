@@ -91,7 +91,21 @@ const FEATURES = [
   { title: 'Know where your money goes', icon: BarChart3, tile: '#ff9700', body: 'One dashboard for what you spend each month, split between plans you own and plans you joined, with a six-month forecast.' },
 ]
 
-function FeatureCard({ index, title, icon: Icon, tile, children }) {
+function FeatureCard({ index, title, icon: Icon, tile, children, titleInline }) {
+  if (titleInline) {
+    return (
+      <article className="neo-box neo-box--roomy grid content-start gap-4 feature-card--title-inline">
+        <div className="feature-card__head">
+          <h3 className="t-card feature-card__title">{title}</h3>
+          <span className="icon-tile" style={{ background: tile }} aria-hidden="true">
+            <Icon />
+          </span>
+        </div>
+        <p>{children}</p>
+      </article>
+    )
+  }
+
   return (
     <article className="neo-box neo-box--roomy grid content-start gap-4">
       <div className="flex items-start justify-between gap-4">
@@ -117,8 +131,8 @@ export function LandingPage() {
           <div className="chat-grid">
             <ChatPhone className="media chat-phone" role="img" aria-label="A group chat where friends argue about who paid for Netflix" />
             <div className="grid gap-6">
-              <h2 id="ledger-title" className="l-display l-shadow text-[var(--color-brand)]">
-                The group chat is <span className="text-[#ff0000]">not</span> a ledger.
+              <h2 id="ledger-title" className="l-display l-ledger-title">
+                The group chat is <span className="l-ledger-not">not</span> a ledger.
               </h2>
               <p className="l-lede">
                 Screenshots, “I’ll send it tomorrow”, and nobody remembers who paid for November. <strong className="text-[#274f00]">Ongsho</strong> gives every person one clear status per plan.
@@ -127,29 +141,29 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="l-section" id="how-it-works" aria-labelledby="how-title">
-          <h2 id="how-title" className="l-display mb-10 text-[#274f00]">
+        <section className="l-section l-section--features" id="how-it-works" aria-labelledby="how-title about-title">
+          <h2 id="how-title" className="l-display l-section__title mb-10 text-[#274f00]">
             Three Plans. No Spreadsheet.
           </h2>
-          <div className="feature-grid">
+          <div className="feature-grid feature-grid--steps">
             {STEPS.map((s, i) => (
               <FeatureCard key={s.title} index={i + 1} title={s.title} icon={s.icon} tile={s.tile}>
                 {s.body}
               </FeatureCard>
             ))}
           </div>
-        </section>
 
-        <section className="l-section" id="about" aria-labelledby="about-title">
-          <h2 id="about-title" className="l-display mb-10 text-[#ff0000]">
-            Built for people who split plans.
-          </h2>
-          <div className="feature-grid">
-            {FEATURES.map((f) => (
-              <FeatureCard key={f.title} title={f.title} icon={f.icon} tile={f.tile}>
-                {f.body}
-              </FeatureCard>
-            ))}
+          <div className="l-features-block" id="about">
+            <h2 id="about-title" className="l-display l-section__title mb-10 text-[#ff0000]">
+              Built for people who split plans.
+            </h2>
+            <div className="feature-grid feature-grid--about">
+              {FEATURES.map((f) => (
+                <FeatureCard key={f.title} title={f.title} icon={f.icon} tile={f.tile} titleInline>
+                  {f.body}
+                </FeatureCard>
+              ))}
+            </div>
           </div>
         </section>
       </main>
@@ -157,7 +171,7 @@ export function LandingPage() {
       <footer className="l-footer">
         <FooterShape className="l-footer__art" preserveAspectRatio="none" aria-hidden="true" />
         <div className="l-footer__body">
-          <Wordmark className="media" style={{ width: `${SVG_SIZES.wordmark.w}px` }} role="img" aria-label="Ongsho" />
+          <Wordmark className="media l-footer__wordmark" role="img" aria-label="Ongsho" />
           <nav aria-label="Footer" className="l-footer__links">
             <a href="#top">Home</a>
             <a href="#how-it-works">How it works?</a>
