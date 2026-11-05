@@ -1,0 +1,51 @@
+import { createBrowserRouter } from 'react-router'
+import { RequireAuth } from '@/auth/AuthProvider'
+import { AppShell } from '@/components/layout/AppShell'
+import { LandingPage } from '@/features/landing/LandingPage'
+import { LoginPage, RegisterPage, VerifyEmailPage, ResetPasswordPage } from '@/features/auth/AuthPages'
+import { InvitePage } from '@/features/auth/InvitePage'
+import { HomePage } from '@/features/dashboard/HomePage'
+import { MyPlansPage } from '@/features/plans/MyPlansPage'
+import { PlanFormPage } from '@/features/plans/PlanFormPage'
+import { OwnerPlanPage } from '@/features/plans/OwnerPlanPage'
+import { ReviewPaymentsPage } from '@/features/plans/ReviewPaymentsPage'
+import { SharedPlansPage } from '@/features/shared/SharedPlansPage'
+import { MemberPlanPage } from '@/features/shared/MemberPlanPage'
+import { CalendarPage } from '@/features/calendar/CalendarPage'
+import { NotificationsPage } from '@/features/notifications/NotificationsPage'
+import { ProfilePage } from '@/features/profile/ProfilePage'
+import { KitPage } from '@/features/kit/KitPage'
+import { NotFoundPage } from '@/features/NotFoundPage'
+
+export const router = createBrowserRouter([
+  { path: '/', element: <LandingPage /> },
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  { path: '/verify-email', element: <VerifyEmailPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
+  { path: '/invite/:token', element: <InvitePage /> },
+  { path: '/kit', element: <KitPage /> },
+  {
+    path: '/app',
+    element: (
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <HomePage /> },
+      { path: 'plans', element: <MyPlansPage /> },
+      { path: 'plans/new', element: <PlanFormPage /> },
+      { path: 'plans/:id', element: <OwnerPlanPage /> },
+      { path: 'plans/:id/edit', element: <PlanFormPage /> },
+      { path: 'plans/:id/review', element: <ReviewPaymentsPage /> },
+      { path: 'shared', element: <SharedPlansPage /> },
+      { path: 'shared/:id', element: <MemberPlanPage /> },
+      { path: 'calendar', element: <CalendarPage /> },
+      { path: 'notifications', element: <NotificationsPage /> },
+      { path: 'profile', element: <ProfilePage /> },
+      { path: '*', element: <NotFoundPage inApp /> },
+    ],
+  },
+  { path: '*', element: <NotFoundPage /> },
+])

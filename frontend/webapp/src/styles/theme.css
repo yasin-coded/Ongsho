@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@theme {
+  /* breakpoints */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+
+  /* core */
+  --color-brand: #bf1d1d;
+  --color-brand-deep: #500c0c;
+  --color-notify: #ff5b00;
+  --color-cream: #fdfbcf;
+  --color-ink: #000000;
+  --color-dash: #ff9700;
+  --color-accept: #00aa45;
+  --color-reject: #ff0000;
+  --color-add-plan: #e87400;
+  --color-tag-owner: #ff00ff;
+  --color-tag-member: #00ff8b;
+  --color-tag-solo: #000c7c;
+  --color-open-request: #846ace;
+  --color-logout: #f15a24;
+  --color-selected: #0096ff;
+  --color-muted: #4a4a3a;
+
+  /* status */
+  --color-due: #ff1a1a;
+  --color-pending: #fff200;
+  --color-paid: #2fd600;
+  --color-waived: #19c8f0;
+  --color-trial: #d9ccff;
+
+  /* payment methods */
+  --color-bkash: #e2136e;
+  --color-nagad: #f26522;
+  --color-rocket: #8c3494;
+  --color-mobile-banking: #0b6b3a;
+  --color-bank: #1c3d8f;
+  --color-cash: #9a6700;
+  --color-other: #6b6b6b;
+
+  /* landing */
+  --color-live-dot: #a2ff00;
+  --color-chat-dot: #ff0000;
+  --color-bubble-in: #14b3f2;
+  --color-bubble-out: #e5e5e5;
+  --color-chat-bar: #c1c1c1;
+  --color-landing-green: #274f00;
+
+  /* type */
+  --font-display: "Ongsho Taka", "Noto Sans Bengali", "Cocogoose", "Bahnschrift", system-ui, sans-serif;
+  --font-body: "Ongsho Taka", "Noto Sans Bengali", "Bahnschrift", "Nirmala UI", "Hind Siliguri", system-ui, sans-serif;
+
+  /* shape */
+  --radius-card: 1.5rem;
+  --radius-panel: 2rem;
+  --shadow-neo: 0.5rem 0.5rem 0 0 #000;
+  --shadow-neo-sm: 0.25rem 0.25rem 0 0 #000;
+  --shadow-neo-lg: 0.375rem 0.375rem 0 0 #000;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5.5rem;
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: var(--color-brand) var(--color-cream);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  body {
+    margin: 0;
+    background: var(--color-cream);
+    color: #000;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.5;
+    min-height: 100dvh;
+    caret-color: var(--color-brand);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p { margin: 0; text-wrap: pretty; }
+  ::selection { background: var(--color-pending); color: #000; }
+  svg.media { max-width: 100%; height: auto; }
+  button { cursor: pointer; font: inherit; color: inherit; }
+  button:disabled { cursor: not-allowed; }
+  a { color: inherit; text-underline-offset: 0.2em; text-decoration-thickness: 0.1em; }
+  input, select, textarea { font: inherit; color: inherit; }
+
+  :focus-visible {
+    outline: 0.1875rem solid #000;
+    outline-offset: 0.125rem;
+    box-shadow: 0 0 0 0.125rem #fff;
+  }
+}

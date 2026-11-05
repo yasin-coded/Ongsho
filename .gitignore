@@ -1,0 +1,12 @@
+docs/
+venv/
+__pycache__/
+*.pyc
+env
+.env
+.impeccable
+.gemini
+.cursor
+.grok
+.claude
+Assets

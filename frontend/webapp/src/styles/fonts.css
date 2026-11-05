@@ -1,0 +1,48 @@
+/* One @font-face per supplied file. Weight, style and width come from the file name. */
+
+/* Taka sign only. Cocogoose trial paints U+09F3 as a ZetaFonts watermark, so this face owns that glyph. */
+@font-face {
+  font-family: "Ongsho Taka";
+  src: local("Nirmala UI"), local("NirmalaUI"), local("Noto Sans Bengali"), local("Hind Siliguri"), local("Vrinda");
+  unicode-range: U+09F3;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* Cocogoose */
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Thin.woff2") format("woff2"); font-weight: 100; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-ThinItalic.woff2") format("woff2"); font-weight: 100; font-style: italic; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Ultralight.woff2") format("woff2"); font-weight: 200; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-UltralightItalic.woff2") format("woff2"); font-weight: 200; font-style: italic; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Light.woff2") format("woff2"); font-weight: 300; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-LightItalic.woff2") format("woff2"); font-weight: 300; font-style: italic; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Semilight.woff2") format("woff2"); font-weight: 350; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-SemilightItalic.woff2") format("woff2"); font-weight: 350; font-style: italic; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Italic.woff2") format("woff2"); font-weight: 400; font-style: italic; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-BoldItalic.woff2") format("woff2"); font-weight: 700; font-style: italic; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose Darkmode"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-Darkmode.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose Darkmode"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProTrial-DarkmodeItalic.woff2") format("woff2"); font-weight: 400; font-style: italic; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+@font-face { font-family: "Cocogoose Letterpress"; src: url("../assets/fonts/cocogoose-woff2/CocogooseProLetterpressTrial-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; unicode-range: U+0000-002F, U+003A-09F2, U+09F4-10FFFF; font-display: swap; }
+
+/* Bahnschrift, normal width */
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Light.woff2") format("woff2"); font-weight: 300; font-stretch: 100%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift SemiLight.woff2") format("woff2"); font-weight: 350; font-stretch: 100%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Regular.woff2") format("woff2"); font-weight: 400; font-stretch: 100%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift SemiBold.woff2") format("woff2"); font-weight: 600; font-stretch: 100%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Bold.woff2") format("woff2"); font-weight: 700; font-stretch: 100%; font-display: swap; }
+
+/* Bahnschrift, semi-condensed */
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Light SemiCondensed.woff2") format("woff2"); font-weight: 300; font-stretch: 87.5%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift SemiLight SemiCondensed.woff2") format("woff2"); font-weight: 350; font-stretch: 87.5%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift SemiCondensed.woff2") format("woff2"); font-weight: 400; font-stretch: 87.5%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift SemiBold SemiCondensed.woff2") format("woff2"); font-weight: 600; font-stretch: 87.5%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Bold SemiCondensed.woff2") format("woff2"); font-weight: 700; font-stretch: 87.5%; font-display: swap; }
+
+/* Bahnschrift, condensed */
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Light Condensed.woff2") format("woff2"); font-weight: 300; font-stretch: 75%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift SemiLight Condensed.woff2") format("woff2"); font-weight: 350; font-stretch: 75%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Condensed.woff2") format("woff2"); font-weight: 400; font-stretch: 75%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift SemiBold Condensed.woff2") format("woff2"); font-weight: 600; font-stretch: 75%; font-display: swap; }
+@font-face { font-family: "Bahnschrift"; src: url("../assets/fonts/bahnschrift-woff2/Bahnschrift Bold Condensed.woff2") format("woff2"); font-weight: 700; font-stretch: 75%; font-display: swap; }
