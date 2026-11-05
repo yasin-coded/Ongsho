@@ -45,6 +45,15 @@
       border-bottom: 0.1875rem solid #000;
     }
     .l-header__panel a { color: #fff; font-family: "Bahnschrift", system-ui, sans-serif; font-weight: 700; font-size: calc(0.95rem * 1.1025); padding: 0.8rem 0.5rem; text-decoration: none; border-radius: 0.5rem; }
+    .l-header__panel-cta {
+      margin-top: 0.5rem;
+      text-align: center;
+      border: 0.1875rem solid #fff;
+      border-radius: 999px;
+      background: var(--color-accept, #2fd600);
+      color: #000 !important;
+    }
+    .l-header__panel-cta--ghost { background: transparent; color: #fff !important; }
   }
   @media (min-width: 48rem) { .l-header__panel { display: none; } }
   .l-header .icon-btn { background: transparent; color: #fff; border-color: #fff; }

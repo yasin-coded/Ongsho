@@ -41,9 +41,20 @@ function LandingHeader() {
           ))}
         </nav>
         <div className="l-header__right">
-          <Link to={isAuthed ? '/app' : '/login'} className="neo-btn btn-dark neo-btn--sm">
-            {isAuthed ? 'Dashboard' : 'Login'}
-          </Link>
+          {isAuthed ? (
+            <Link to="/app" className="neo-btn btn-dark neo-btn--sm">
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link to="/login" className="neo-btn btn-dark neo-btn--sm">
+                Login
+              </Link>
+              <Link to="/register" className="neo-btn btn-accept neo-btn--sm">
+                Get started
+              </Link>
+            </>
+          )}
           {isAuthed && (
             <Link to="/app/profile" aria-label="Your profile" className="rounded-full">
               <Avatar name={session.user.name} color={session.user.avatarColor} size="md" decorative />
@@ -61,6 +72,16 @@ function LandingHeader() {
               {l.label}
             </a>
           ))}
+          {!isAuthed && (
+            <>
+              <Link to="/register" className="l-header__panel-cta" onClick={() => setOpen(false)}>
+                Get started
+              </Link>
+              <Link to="/login" className="l-header__panel-cta l-header__panel-cta--ghost" onClick={() => setOpen(false)}>
+                Login
+              </Link>
+            </>
+          )}
         </nav>
       )}
     </header>
