@@ -21,7 +21,7 @@ function FormModal({ title, subtitle, onClose, onSubmit, children, submit }) {
         }}
       >
         {children}
-        <div className="row justify-end">
+        <div className="modal__footer row justify-end">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>

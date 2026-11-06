@@ -46,7 +46,9 @@ export function AppShell() {
 
       <div className="shell__main">
         <main id="main" className="content">
-          <Outlet />
+          <div key={pathname} className="content-route">
+            <Outlet />
+          </div>
           <OutsideNote className="mobile-foot border-t-[0.125rem] border-dashed border-[var(--color-dash)] pt-4 text-center" />
         </main>
       </div>

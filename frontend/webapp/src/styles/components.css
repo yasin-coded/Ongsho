@@ -138,10 +138,23 @@
     font-size: 0.8rem;
     text-transform: uppercase;
     box-shadow: var(--shadow-neo-sm);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.22s ease,
+      background-color 0.22s ease,
+      color 0.22s ease,
+      border-color 0.22s ease;
   }
   .chip:hover { transform: translate(-0.125rem, -0.125rem); box-shadow: var(--shadow-neo-lg); }
-  .chip[aria-pressed="true"] { background: var(--color-pending); }
+  .chip[aria-pressed="true"] {
+    background: var(--color-pending);
+    box-shadow: none;
+    transform: none;
+  }
+  .chip[aria-pressed="true"]:hover {
+    box-shadow: none;
+    transform: none;
+  }
   .chip__count {
     display: inline-grid;
     place-items: center;
@@ -339,7 +352,10 @@
 
   /* ---------- skeleton ---------- */
   .skeleton { background: #e6e3c0; border-radius: 0.75rem; animation: ongsho-pulse 1.6s ease-in-out infinite; }
-  @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton { animation: none; }
+    .chip { transition: none; }
+  }
 
   /* ---------- modal ---------- */
   .modal {
@@ -358,7 +374,7 @@
   .modal::backdrop { background: rgb(0 0 0 / 0.55); }
   .modal__inner {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 1.25rem;
     max-height: calc(100dvh - 2rem);
     padding: clamp(1.25rem, 1rem + 1.5vw, 2rem);
@@ -371,6 +387,16 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
+  }
+  .modal__footer {
+    flex-shrink: 0;
+    gap: 0.75rem;
+    overflow: visible;
+    padding: 0.125rem 0.5rem 0.5rem 0.125rem;
+  }
+  .modal__body .modal__footer {
+    margin-top: 0.25rem;
+    padding: 0.125rem 0.5rem 0.5rem 0.125rem;
   }
 
   /* ---------- toast ---------- */
@@ -461,20 +487,30 @@
   }
 
   /* Owner floating member window: sticky beside Members on lg, bottom sheet below. */
-  .float-win { position: relative; }
+  .float-win { position: relative; overflow: visible; }
   .float-win__close { position: absolute; top: -0.7rem; left: -0.7rem; z-index: 1; }
+  .float-win__actions {
+    overflow: visible;
+    padding: 0.125rem 0.5rem 0.5rem 0.125rem;
+  }
   @media (min-width: 64rem) {
     .float-win { position: sticky; top: 1.5rem; }
   }
+  .float-win--dock { overflow: visible; }
   .float-sheet {
     position: fixed; inset: 0; z-index: 50;
     background: rgba(0, 0, 0, 0.55);
     display: grid; align-items: end;
+    overflow: visible;
   }
   .float-sheet .float-win {
-    max-height: 85dvh; overflow: auto;
+    max-height: 85dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
     border-radius: 1.5rem 1.5rem 0 0;
     width: 100%;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0));
+    padding-inline-end: 0.375rem;
   }
   @media (min-width: 64rem) {
     .float-sheet { display: none; }

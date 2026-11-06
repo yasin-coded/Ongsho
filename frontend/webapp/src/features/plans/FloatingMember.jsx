@@ -71,7 +71,7 @@ function WindowBody({ member, planId, onClose, onRemove, rowRefs }) {
           <p className="t-meta">No payments yet.</p>
         )}
       </div>
-      <div className="row justify-end">
+      <div className="float-win__actions row justify-end">
         {member.pendingPaymentId && (
           <LinkButton to={`/app/plans/${planId}/review`} variant="review" size="sm" icon={Eye}>
             Review Payment
