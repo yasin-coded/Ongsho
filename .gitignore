@@ -12,6 +12,8 @@ env
 .grok
 .claude
 Assets
+.agents/
+
 
 # frontend (Vite / npm)
 frontend/**/node_modules/
