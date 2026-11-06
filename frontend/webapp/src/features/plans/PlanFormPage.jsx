@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Plus, X } from 'lucide-react'
@@ -90,9 +90,9 @@ function Preview({ form, names, editing }) {
   const cycle = cycleOf(form)
   const amount = chargePaisa(form)
   const seats = Math.max(1, Number(form.seats) || 1)
-  const ownerTakes = form.mode === 'owner' && (seats > 1 || form.invites.length > 0)
-  const per = amount ? splitExact(amount, form.mode === 'reseller' ? seats : Math.max(ownerTakes ? membersCount(form) : 1, 1), 0)[0] : 0
-  const next = form.nextRenewalDate || nextRenewalOf(form)
+  const seatCountForSplit = form.mode === 'reseller' ? seats : form.mode === 'owner' && (seats > 1 || form.invites.length > 0) ? seats : 1
+  const per = amount ? splitExact(amount, seatCountForSplit, 0)[0] : 0
+  const next = (form.renewal === 'fixed' ? form.endDate : form.nextRenewalDate) || nextRenewalOf(form)
   const usd = form.currency === 'USD' && parseTaka(form.price) > 0 && parseTaka(form.rate) > 0
   return (
     <Box className="min-w-0">
@@ -104,7 +104,7 @@ function Preview({ form, names, editing }) {
             <p className="t-sub truncate">{form.planName || 'Untitled plan'}</p>
             <p className="t-meta">
               {cycleLabel(cycle)}
-              {next ? ` · renews ${fmtShort(next)}` : ''}
+              {next ? (form.renewal === 'fixed' ? ` · ends ${fmtShort(next)}` : ` · renews ${fmtShort(next)}`) : ''}
               {` · ${seats} seat${seats === 1 ? '' : 's'}`}
             </p>
             <span className="w-fit max-w-full">
@@ -149,18 +149,20 @@ function Preview({ form, names, editing }) {
   )
 }
 
-function membersCount(form) {
-  return (form.mode === 'owner' ? 1 : 0) + form.invites.length
-}
-
 function PlanForm({ initial, editing, planId }) {
   const navigate = useNavigate()
-  const [form, setForm] = useState(() => ({
-    ...initial,
-    nextRenewalDate: initial.nextRenewalDate || nextRenewalOf(initial) || '',
-  }))
+  const [form, setForm] = useState(() => {
+    const nextRenewalDate =
+      initial.renewal === 'fixed' && initial.endDate
+        ? initial.endDate
+        : initial.nextRenewalDate || nextRenewalOf(initial) || ''
+    return {
+      ...initial,
+      nextRenewalDate,
+      ...(initial.renewal === 'fixed' && initial.endDate ? { endDate: initial.endDate } : {}),
+    }
+  })
   const [email, setEmail] = useState('')
-  const [shares, setShares] = useState({})
   const cats = useQuery({ queryKey: ['categories'], queryFn: getCategories })
   const names = useQuery({ queryKey: ['service-names'], queryFn: getServiceNames })
   const save = useAction(
@@ -171,16 +173,10 @@ function PlanForm({ initial, editing, planId }) {
     },
   )
 
-  const set = (patch) => setForm((f) => ({ ...f, ...patch }))
+  /** Functional updaters must return a partial patch; always merged so we never drop `invites` etc. */
+  const set = (patch) =>
+    setForm((f) => (typeof patch === 'function' ? { ...f, ...patch(f) } : { ...f, ...patch }))
   const amount = chargePaisa(form)
-  const people = useMemo(() => {
-    const list = []
-    if (form.mode === 'owner') list.push({ key: 'owner', label: 'You (owner seat)' })
-    form.invites.forEach((e) => list.push({ key: e, label: e }))
-    return list
-  }, [form.mode, form.invites])
-  const customTotal = people.reduce((a, p) => a + (parseTaka(shares[p.key]) ?? 0), 0)
-  const customOk = form.split !== 'custom' || (amount > 0 && customTotal === amount)
   useEffect(() => {
     const first = document.querySelector('[aria-invalid="true"]')
     first?.focus()
@@ -202,8 +198,7 @@ function PlanForm({ initial, editing, planId }) {
       seats: Number(form.seats),
       trialEnd: form.trialEnd || null,
       endDate: form.renewal === 'fixed' ? form.endDate : null,
-      customShares: Object.fromEntries(people.map((p) => [p.key, parseTaka(shares[p.key]) ?? 0])),
-      customTotalOk: customOk,
+      ...(editing ? {} : { split: 'equal', customTotalOk: true }),
     }
     save.run(payload)
   }
@@ -287,20 +282,52 @@ function PlanForm({ initial, editing, planId }) {
             </fieldset>
             <div className="plan-date-pair sm:col-span-2">
               <Input label="Start date" type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} error={f.startDate} locked={editing} />
-              <Input
-                label="Next renewal date"
-                type="date"
-                value={form.nextRenewalDate ?? ''}
-                onChange={(e) => set({ nextRenewalDate: e.target.value })}
-                error={f.nextRenewalDate}
-              />
+              {form.renewal === 'fixed' ? (
+                <Input
+                  label="End date"
+                  type="date"
+                  value={form.endDate ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    set({ endDate: v, nextRenewalDate: v })
+                  }}
+                  error={f.endDate || f.nextRenewalDate}
+                />
+              ) : (
+                <Input
+                  label="Next renewal date"
+                  type="date"
+                  value={form.nextRenewalDate ?? ''}
+                  onChange={(e) => set({ nextRenewalDate: e.target.value })}
+                  error={f.nextRenewalDate}
+                />
+              )}
               <p className="plan-date-pair__help field__help">
-                When the next charge is due. Must match your billing cycle from the start date.
+                {form.renewal === 'fixed'
+                  ? 'When the last charge is due before the plan ends. Must match your billing cycle from the start date.'
+                  : 'When the next charge is due. Must match your billing cycle from the start date.'}
               </p>
             </div>
             <Input label="Trial end date (optional)" type="date" value={form.trialEnd} onChange={(e) => set({ trialEnd: e.target.value })} error={f.trialEnd} locked={editing} />
-            <Select label="Renewal" value={form.renewal} onChange={(e) => set({ renewal: e.target.value })} options={[{ value: 'auto', label: 'Auto-renews' }, { value: 'fixed', label: 'Fixed term' }]} />
-            {form.renewal === 'fixed' && <Input label="End date" type="date" value={form.endDate} onChange={(e) => set({ endDate: e.target.value })} error={f.endDate} />}
+            <Select
+              label="Renewal"
+              value={form.renewal}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === 'fixed') {
+                  set((f) => {
+                    const end = f.endDate?.trim() || f.nextRenewalDate?.trim() || ''
+                    return { ...f, renewal: v, endDate: end, nextRenewalDate: end }
+                  })
+                } else {
+                  set((f) => {
+                    const next = nextRenewalOf({ ...f, renewal: v, endDate: '' }) || ''
+                    return { ...f, renewal: v, endDate: '', nextRenewalDate: next }
+                  })
+                }
+              }}
+              options={[{ value: 'auto', label: 'Auto-renews' }, { value: 'fixed', label: 'Fixed term' }]}
+            />
             {form.currency === 'USD' && (
               <Input
                 label="Exchange rate to ৳"
@@ -331,32 +358,7 @@ function PlanForm({ initial, editing, planId }) {
               error={f.seats}
               help={form.mode === 'reseller' ? 'You take no seat.' : 'Includes your own seat, because you are the Owner.'}
             />
-            {!editing && (
-              <fieldset>
-                <legend className="field__label mb-2">Split</legend>
-                <div className="row gap-2">
-                  <button type="button" className="chip" aria-pressed={form.split === 'equal'} onClick={() => set({ split: 'equal' })}>
-                    Equal
-                  </button>
-                  <button type="button" className="chip" aria-pressed={form.split === 'custom'} onClick={() => set({ split: 'custom' })}>
-                    Custom
-                  </button>
-                </div>
-                {form.split === 'custom' && (
-                  <div className="mt-4 grid gap-3">
-                    {people.map((p) => (
-                      <Input key={p.key} label={p.label} inputMode="decimal" numeric value={shares[p.key] ?? ''} onChange={(e) => setShares({ ...shares, [p.key]: e.target.value })} />
-                    ))}
-                    {!people.length && <p className="t-meta">Add invites first, then set each amount.</p>}
-                    <p className={customOk ? 't-meta font-bold' : 'field__error'}>
-                      Running total {formatBDT(customTotal)} of {formatBDT(amount)}
-                      {customOk ? '' : ` · off by ${formatBDT(Math.abs(amount - customTotal))}`}
-                    </p>
-                    {f.split && <p className="field__error">{f.split}</p>}
-                  </div>
-                )}
-              </fieldset>
-            )}
+            <p className="t-meta">Seat amounts are equal at first. After you create the plan, open it and use <strong>Seat split</strong> to switch to custom shares if you want.</p>
           </div>
         </Card>
 

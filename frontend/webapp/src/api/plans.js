@@ -6,7 +6,7 @@ import {
 import { audit, generateMissingCharges, recalcUnlocked, resolveNotifications } from '@/mocks/engine'
 import { dueDatesBetween, nextDueDate } from '@/mocks/schedule'
 import { MOCK_TODAY, addDays, mockNow, fmtShort, dayOfMonth } from '@/lib/dates'
-import { splitExact, usdToPaisa } from '@/lib/money'
+import { formatBDT, splitExact, usdToPaisa } from '@/lib/money'
 import { checkPassword } from './accounts'
 import { ApiError, paginate, read, write } from './client'
 
@@ -114,7 +114,6 @@ function validatePlanForm(form, { editing = false } = {}) {
   if ((form.invites ?? []).length > form.seats - (form.mode === 'owner' ? 1 : 0) + (editing ? 0 : 0)) {
     fields.invites = 'There are more invites than free seats. Add seats or remove an email.'
   }
-  if (form.split === 'custom' && form.customTotalOk === false) fields.split = 'The amounts must add up to the full charge.'
   if (Object.keys(fields).length) throw new ApiError('Some answers need a fix.', { fields })
 }
 
@@ -132,6 +131,7 @@ function scheduleFromForm(form, existingSkip = []) {
 
   anchorDay = dayOfMonth(target)
   const added = []
+  /** Omit fixed `endDate` here: `stopDate` would cut the series before `target`, so alignment can never succeed when target equals the form end date. */
   const probe = () => ({
     startDate: form.startDate,
     trialEnd: form.trialEnd || null,
@@ -139,7 +139,7 @@ function scheduleFromForm(form, existingSkip = []) {
     skipDates: [...existingSkip, ...added],
     anchorDay,
     renewal: form.renewal,
-    endDate: form.renewal === 'fixed' ? form.endDate : null,
+    endDate: null,
     pausedOn: null,
     cancelledOn: null,
   })
@@ -175,19 +175,19 @@ export function createSubscription(form) {
       mode: form.mode, categoryId: form.categoryId, currency: form.currency, cycle: cycleOf(form), startDate: form.startDate,
       anchorDay, skipDates, trialEnd: form.trialEnd || null, renewal: form.renewal, endDate: form.renewal === 'fixed' ? form.endDate : null,
       status: form.trialEnd && form.trialEnd > MOCK_TODAY ? 'trial' : 'active', method: form.method, note: (form.note ?? '').trim(),
-      rarelyUsed: false, seats: Number(form.seats), split: form.split, shared, prices: [pricePoint], createdAt: mockNow(), createdOnDate: MOCK_TODAY,
+      rarelyUsed: false, seats: Number(form.seats), split: 'equal', shared, prices: [pricePoint], createdAt: mockNow(), createdOnDate: MOCK_TODAY,
     }
     db.plans.push(plan)
     if (shared && form.mode === 'owner') {
       db.members.push({
         id: nextId('m'), planId: id, userId: ME, joinedOn: MOCK_TODAY, status: 'active', leftOn: null, leaveRequestedAt: null,
-        isOwnerSeat: true, prefMethod: form.method, customShare: form.split === 'custom' ? form.customShares?.owner : undefined,
+        isOwnerSeat: true, prefMethod: form.method, customShare: undefined,
       })
     }
     for (const email of form.invites ?? []) {
       db.invites.push({
         id: nextId('inv'), planId: id, email, status: 'pending', invitedBy: ME, createdAt: mockNow(), expiresOn: addDays(MOCK_TODAY, INVITE_DAYS),
-        acceptedBy: null, token: nextId('tok'), customShare: form.split === 'custom' ? form.customShares?.[email] : undefined,
+        acceptedBy: null, token: nextId('tok'), customShare: undefined,
       })
     }
     generateMissingCharges(plan)
@@ -264,6 +264,57 @@ export function setRarelyUsed(id, value) {
   return write(() => {
     const plan = ownedOr404(id)
     plan.rarelyUsed = Boolean(value)
+  })
+}
+
+/** Equal: clear custom shares. Custom: set each active member’s `customShare` (paisa); amounts must sum to the current charge price. */
+export function updatePlanSplit(planId, { split, shares = {} }) {
+  return write(() => {
+    const plan = ownedOr404(planId)
+    const fields = {}
+    if (plan.mode === 'reseller') throw new ApiError('Reseller plans use one price per buyer; there is no shared split.', { status: 400 })
+    if (!plan.shared) throw new ApiError('This plan is solo. Add seats or members to set a split.', { status: 400 })
+    if (split !== 'equal' && split !== 'custom') throw new ApiError('Pick Equal or Custom.', { fields: { split: 'Pick Equal or Custom.' } })
+    const active = membersOf(planId).filter((m) => m.status === 'active')
+    if (!active.length) throw new ApiError('No active members on this plan.', { status: 400 })
+    const price = plan.prices.at(-1)
+    const chargeAmount = plan.currency === 'USD' ? usdToPaisa(price.usdCents, price.rate) : price.amount
+
+    if (split === 'equal') {
+      plan.split = 'equal'
+      for (const m of active) {
+        delete m.customShare
+      }
+      for (const inv of db.invites.filter((i) => i.planId === planId && i.status === 'pending')) {
+        delete inv.customShare
+      }
+      recalcUnlocked(plan)
+      audit({ planId, action: 'split_equal', text: 'Seat split set to equal shares' })
+      return
+    }
+
+    let total = 0
+    for (const m of active) {
+      const raw = shares[m.id]
+      const paisa = typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : Math.round(Number(String(raw ?? '').replace(/,/g, '')) * 100)
+      if (!(paisa > 0)) fields[m.id] = 'Enter an amount greater than 0.'
+      else total += paisa
+    }
+    if (total !== chargeAmount) {
+      fields._total = `Amounts must add up to ${formatBDT(chargeAmount)} (current plan price).`
+    }
+    if (Object.keys(fields).length) throw new ApiError('Fix the seat amounts.', { fields })
+
+    plan.split = 'custom'
+    for (const m of active) {
+      const raw = shares[m.id]
+      m.customShare = typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : Math.round(Number(String(raw ?? '').replace(/,/g, '')) * 100)
+    }
+    for (const inv of db.invites.filter((i) => i.planId === planId && i.status === 'pending')) {
+      delete inv.customShare
+    }
+    recalcUnlocked(plan)
+    audit({ planId, action: 'split_custom', text: 'Custom seat shares updated' })
   })
 }
 

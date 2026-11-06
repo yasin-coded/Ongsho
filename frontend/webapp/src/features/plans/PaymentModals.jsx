@@ -52,7 +52,7 @@ export function WaiveModal({ paymentId, dueId, name, onClose }) {
         }}
       >
         <Textarea label="Note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="For example: Birthday month." error={act.fields.note} />
-        <div className="row justify-end">
+        <div className="modal__footer row justify-end">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>

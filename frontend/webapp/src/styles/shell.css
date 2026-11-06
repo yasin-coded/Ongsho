@@ -227,6 +227,9 @@
     height: 5.25rem;
     padding: 0.2rem;
     box-sizing: content-box;
+    position: relative;
+    z-index: 2;
+    overflow: visible;
   }
   .stat-card__visual > figure,
   .stat-card__visual > figure > div {
@@ -259,4 +262,61 @@
   .breadcrumb { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: 0.875rem; font-weight: 700; margin-bottom: 0.75rem; }
   .breadcrumb a { text-decoration: underline; text-underline-offset: 0.2em; }
   .breadcrumb span[aria-hidden] { color: var(--color-muted); }
+
+  /* Dashboard (app shell): neo offset on hover only — resting state is flat */
+  .shell .content .neo-box:not(.neo-box--flat) {
+    box-shadow: none;
+    transform: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .shell .content .neo-box:not(.neo-box--flat):hover {
+    transform: translate(-0.125rem, -0.125rem);
+    box-shadow: var(--shadow-neo);
+  }
+  .shell .content a.neo-box:not(.neo-box--flat):hover,
+  .shell .content .neo-box--link:hover {
+    transform: translate(-0.125rem, -0.125rem);
+    box-shadow: 0.625rem 0.625rem 0 0 #000;
+  }
+
+  .shell .content .neo-btn {
+    box-shadow: none;
+  }
+  .shell .content .neo-btn:focus-visible {
+    box-shadow: 0 0 0 0.125rem #fff, var(--shadow-neo-sm);
+  }
+
+  .shell .content .chip:not([aria-pressed="true"]) {
+    box-shadow: none;
+  }
+
+  .shell .content .search input {
+    box-shadow: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .shell .content .search input:hover,
+  .shell .content .search input:focus-visible {
+    transform: translate(-0.125rem, -0.125rem);
+    box-shadow: var(--shadow-neo-sm);
+  }
+
+  .shell .content .chart-pop {
+    box-shadow: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .shell .content .chart-pop:hover {
+    transform: translate(-0.125rem, -0.125rem);
+    box-shadow: var(--shadow-neo-sm);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shell .content .neo-box:not(.neo-box--flat):hover,
+    .shell .content a.neo-box:not(.neo-box--flat):hover,
+    .shell .content .neo-box--link:hover,
+    .shell .content .search input:hover,
+    .shell .content .search input:focus-visible,
+    .shell .content .chart-pop:hover {
+      transform: none;
+    }
+  }
 }

@@ -1,18 +1,18 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowRightLeft, Ban, Download, Eye, Pause, Play, RotateCcw, Trash2 } from 'lucide-react'
 import * as plansApi from '@/api/plans'
 import { METHODS, STATUS } from '@/lib/colors'
 import { MOCK_TODAY, diffDays, fmtFull, fmtShort, fmtWhen, monthKey, plural } from '@/lib/dates'
-import { formatBDT, formatRate, formatUSD } from '@/lib/money'
+import { formatBDT, formatRate, formatUSD, parseTaka } from '@/lib/money'
 import { cycleLabel, perCycleLabel } from '@/mocks/schedule'
 import { useAction } from '@/hooks/useAction'
 import { TopBar } from '@/components/layout/TopBar'
 import { Box, BoxHead, StatCard } from '@/components/ui/Box'
 import { Button, LinkButton } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
-import { Select, Switch } from '@/components/ui/Field'
+import { Input, Select, Switch } from '@/components/ui/Field'
 import { LockedNote, MethodTag, PlanStatusPill, RoleTag, StatusDot, StatusPill } from '@/components/ui/Pill'
 import { ServiceLogo } from '@/components/ui/ServiceLogo'
 import { CopyField, EmptyState, FilterChip, Pagination, ProgressBar, SkeletonCard } from '@/components/ui/Misc'
@@ -34,6 +34,83 @@ function lastPay(m) {
   if (m.isOwnerSeat) return 'No proof needed'
   if (!m.lastPayment) return 'No payment yet'
   return `${fmtWhen(m.lastPayment.at)} · ${METHODS[m.lastPayment.method]?.label ?? m.lastPayment.method}`
+}
+
+function SeatSplitCard({ plan }) {
+  const [split, setSplit] = useState(plan.split)
+  const [amounts, setAmounts] = useState(() =>
+    Object.fromEntries(plan.members.map((m) => [m.id, m.customShare != null ? String(m.customShare / 100) : ''])),
+  )
+  const saveSplit = useAction((p) => plansApi.updatePlanSplit(plan.id, p), { toastMessage: 'Seat split saved.' })
+
+  useEffect(() => {
+    setSplit(plan.split)
+    setAmounts(Object.fromEntries(plan.members.map((m) => [m.id, m.customShare != null ? String(m.customShare / 100) : ''])))
+  }, [plan.id, plan.split, plan.members])
+
+  if (plan.mode !== 'owner' || !plan.shared) return null
+
+  const chargeTotal = plan.price.amount
+  const lineTotal = plan.members.reduce((a, m) => a + (parseTaka(amounts[m.id]) ?? 0), 0)
+  const customValid =
+    split !== 'custom' || (plan.members.every((m) => (parseTaka(amounts[m.id]) ?? 0) > 0) && lineTotal === chargeTotal)
+
+  return (
+    <Box>
+      <BoxHead
+        title="Seat split"
+        sub={`The plan price is ${formatBDT(chargeTotal, { trim: true })} each cycle. Equal divides it across ${plan.members.length} seat${plan.members.length === 1 ? '' : 's'}. Custom lets you set each person’s share; they must add up to that total.`}
+      />
+      <div className="row gap-2" role="group" aria-label="Split type">
+        <button type="button" className="chip" aria-pressed={split === 'equal'} onClick={() => setSplit('equal')}>
+          Equal
+        </button>
+        <button type="button" className="chip" aria-pressed={split === 'custom'} onClick={() => setSplit('custom')}>
+          Custom
+        </button>
+      </div>
+      {split === 'custom' && (
+        <div className="mt-4 grid gap-3">
+          {plan.members.map((m) => (
+            <Input
+              key={m.id}
+              label={m.isOwnerSeat ? `${m.firstName} (you, owner seat)` : m.firstName}
+              inputMode="decimal"
+              numeric
+              value={amounts[m.id] ?? ''}
+              onChange={(e) => setAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))}
+              error={saveSplit.fields[m.id]}
+            />
+          ))}
+          <p className={customValid ? 't-meta font-bold' : 'field__error'}>
+            Running total {formatBDT(lineTotal, { trim: true })} of {formatBDT(chargeTotal, { trim: true })}
+            {customValid ? '' : ` · off by ${formatBDT(Math.abs(chargeTotal - lineTotal), { trim: true })}`}
+          </p>
+          {saveSplit.fields._total && <p className="field__error">{saveSplit.fields._total}</p>}
+        </div>
+      )}
+      <div className="mt-4 row justify-end">
+        <Button
+          type="button"
+          variant="accept"
+          busy={saveSplit.busy}
+          disabled={split === 'custom' && !customValid}
+          onClick={() =>
+            saveSplit.run(
+              split === 'equal'
+                ? { split: 'equal' }
+                : {
+                    split: 'custom',
+                    shares: Object.fromEntries(plan.members.map((m) => [m.id, amounts[m.id] ?? ''])),
+                  },
+            )
+          }
+        >
+          Save split
+        </Button>
+      </div>
+    </Box>
+  )
 }
 
 function MembersCard({ plan, onOpen, onInvite, openId, rowRefs }) {
@@ -315,14 +392,21 @@ function OwnerPlan({ plan }) {
         <div className="row-between mb-4">
           <h2 className="t-card">Confirmed so far</h2>
           <p className="t-num font-bold">
-            {formatBDT(plan.confirmedSoFar.paid, { trim: true })} / {formatBDT(plan.confirmedSoFar.total, { trim: true })}
+            {formatBDT(plan.confirmedSoFar.paid + plan.confirmedSoFar.waived, { trim: true })} / {formatBDT(plan.confirmedSoFar.total, { trim: true })}
           </p>
         </div>
         <ProgressBar
           total={plan.confirmedSoFar.total}
-          label={`${formatBDT(plan.confirmedSoFar.paid)} confirmed, ${formatBDT(plan.confirmedSoFar.pending)} pending`}
+          label={[
+            `${formatBDT(plan.confirmedSoFar.paid + plan.confirmedSoFar.waived)} confirmed`,
+            plan.confirmedSoFar.waived > 0 && `${formatBDT(plan.confirmedSoFar.waived)} waived`,
+            `${formatBDT(plan.confirmedSoFar.pending)} pending`,
+          ]
+            .filter(Boolean)
+            .join(', ')}
           parts={[
             { key: 'paid', value: plan.confirmedSoFar.paid, fill: STATUS.paid.fill },
+            { key: 'waived', value: plan.confirmedSoFar.waived, fill: STATUS.waived.fill },
             { key: 'pending', value: plan.confirmedSoFar.pending, fill: STATUS.pending.fill },
           ]}
         />
@@ -410,6 +494,8 @@ function OwnerPlan({ plan }) {
               </ul>
             </div>
           </Box>
+
+          <SeatSplitCard plan={plan} />
 
           <Box>
             <BoxHead title="IOUs in this plan" />

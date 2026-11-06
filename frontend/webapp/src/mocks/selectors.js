@@ -1,5 +1,5 @@
 import { MOCK_TODAY, addDays, diffDays, monthStart, monthEnd, addMonthsToKey, monthKey, fmtMonth, fmtShort, dhakaDate } from '@/lib/dates'
-import { sum } from '@/lib/money'
+import { splitExact, sum } from '@/lib/money'
 import { db, LEAD_DAYS } from './db'
 import { dueDatesBetween, monthlyEquivalent, nextDueDate, priceAt, splitCharge } from './schedule'
 
@@ -67,7 +67,23 @@ export function seatShareNow(plan) {
   const price = priceNow(plan)
   const date = nextRenewal(plan) ?? MOCK_TODAY
   const shares = splitCharge(plan, members.map((m) => ({ ...m, joinedOn: '0000-01-01', leftOn: null })), price.amount, date)
-  return { shares, perSeat: shares.length ? Math.min(...shares.map((s) => s.amount)) : price.amount }
+  /**
+   * "Each seat" in the UI should follow the configured seat count for equal splits — not only
+   * people who have joined yet. Otherwise a 5-seat plan with only the owner present shows the
+   * full plan price as one person's share (min of one due = total).
+   */
+  let perSeat = price.amount
+  if (!plan.shared) {
+    perSeat = shares.length ? Math.min(...shares.map((s) => s.amount)) : price.amount
+  } else if (plan.split === 'equal' && plan.seats > 0) {
+    const parts = splitExact(price.amount, plan.seats, 0)
+    perSeat = Math.min(...parts)
+  } else if (shares.length) {
+    perSeat = Math.min(...shares.map((s) => s.amount))
+  } else if (plan.seats > 0) {
+    perSeat = splitExact(price.amount, plan.seats, 0)[0]
+  }
+  return { shares, perSeat }
 }
 
 /** What `userId` personally pays for one cycle of `plan` dated `date`. */
@@ -200,6 +216,7 @@ export function memberView(member, charge) {
   return {
     id: member.id, userId: user.id, name: user.name, firstName: firstName(user), email: user.email, avatarColor: user.avatarColor,
     isOwnerSeat: member.isOwnerSeat, status: member.status, joinedOn: member.joinedOn, leftOn: member.leftOn,
+    customShare: member.customShare ?? null,
     leaveRequested: member.status === 'leave_requested', leaveRequestedAt: member.leaveRequestedAt,
     dueId: due?.id ?? null, dueStatus: due?.status ?? null, dueAmount: due?.amount ?? null,
     lastPayment: payment ? { method: payment.method, at: payment.submittedAt, review: payment.review, id: payment.id } : null,
@@ -415,13 +432,22 @@ export function ownerPlanDetail(planId) {
   const invites = db.invites
     .filter((i) => i.planId === planId && i.invitedBy === plan.ownerId)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map((i) => ({
+      ...i,
+      customSharePaisa: i.customShare ?? null,
+    }))
   return {
     ...summary,
     startDate: plan.startDate, renewal: plan.renewal, endDate: plan.endDate ?? null, split: plan.split,
     categoryId: plan.categoryId, categoryName: category?.name ?? '—',
     prices: [...plan.prices].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1)),
     leftMembers: left,
-    confirmedSoFar: { paid: sum(chargeDues.filter((d) => d.status === 'paid' || d.status === 'waived'), (d) => d.amount), pending: sum(chargeDues.filter((d) => d.status === 'pending'), (d) => d.amount), total: charge?.amount ?? 0 },
+    confirmedSoFar: {
+      paid: sum(chargeDues.filter((d) => d.status === 'paid'), (d) => d.amount),
+      waived: sum(chargeDues.filter((d) => d.status === 'waived'), (d) => d.amount),
+      pending: sum(chargeDues.filter((d) => d.status === 'pending'), (d) => d.amount),
+      total: charge?.amount ?? 0,
+    },
     cycleLabel: charge ? fmtMonth(charge.dueDate) : null,
     activity: planActivity(planId),
     ious: planIous(planId),

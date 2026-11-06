@@ -39,9 +39,9 @@ function PlanCard({ plan }) {
           </div>
           <p className="t-meta">{`${ownerMeta(plan, { seats: false })} · ${seatsText(plan)}`}</p>
         </div>
-        <p className="text-right">
+        <p className="basis-full text-left sm:ml-auto sm:basis-auto sm:text-right">
           <span className="t-mid block">{formatBDT(plan.price.amount, { trim: true })}</span>
-          <span className="t-meta">
+          <span className="t-meta block">
             {perCycleLabel(plan.cycle)}
             {plan.shared && ` · ${formatBDT(plan.perSeat, { trim: true })} per seat`}
           </span>

@@ -35,13 +35,14 @@ function TidForm({ plan, onClose }) {
 
   return (
     <form
-      className="grid gap-5"
+      className="modal__form"
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
         send.run({ planId: plan.id, dueIds: [...picked], method, tid })
       }}
     >
+      <div className="modal__form-scroll modal__scroll grid gap-5">
       <Box variant="highlight" className="flex flex-wrap items-center gap-4 !p-4 !shadow-none">
         <ServiceLogo serviceKey={plan.serviceKey} name={plan.serviceName} size="small" />
         <div className="min-w-0 flex-1">
@@ -111,8 +112,9 @@ function TidForm({ plan, onClose }) {
         <Stepper current="pending" labels={{ due: 'Due', pending: 'Pending, after you send', paid: `Paid, when ${owner} confirms` }} />
         <p className="t-meta">If {owner} cannot match the ID, this goes back to Due and you can send a new one.</p>
       </div>
+      </div>
 
-      <div className="row-between border-t-[0.125rem] border-dashed border-[var(--color-dash)] pt-4">
+      <div className="modal__footer row-between border-t-[0.125rem] border-dashed border-[var(--color-dash)] pt-4">
         <p className="t-meta font-bold">Payments are made outside Ongsho.</p>
         <div className="row">
           <Button variant="ghost" onClick={onClose}>

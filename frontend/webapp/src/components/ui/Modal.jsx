@@ -8,6 +8,7 @@ import { cx } from './Box'
  */
 export function Modal({ open, onClose, title, subtitle, wide, children, footer }) {
   const ref = useRef(null)
+  const bodyRef = useRef(null)
   const titleId = useId()
   useEffect(() => {
     const el = ref.current
@@ -15,6 +16,38 @@ export function Modal({ open, onClose, title, subtitle, wide, children, footer }
     if (open && !el.open) el.showModal()
     if (!open && el.open) el.close()
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const body = bodyRef.current
+    if (!body) return
+    const scrollEl = body.querySelector('.modal__form-scroll') ?? body
+
+    const syncOverflow = () => {
+      scrollEl.classList.toggle('modal__scroll--overflow', scrollEl.scrollHeight > scrollEl.clientHeight + 1)
+    }
+
+    let scrollTimer
+    const onScroll = () => {
+      scrollEl.classList.add('modal__scroll--active')
+      clearTimeout(scrollTimer)
+      scrollTimer = window.setTimeout(() => scrollEl.classList.remove('modal__scroll--active'), 700)
+    }
+
+    syncOverflow()
+    const ro = new ResizeObserver(syncOverflow)
+    ro.observe(scrollEl)
+    const inner = scrollEl.firstElementChild
+    if (inner instanceof Element) ro.observe(inner)
+    scrollEl.addEventListener('scroll', onScroll, { passive: true })
+
+    return () => {
+      ro.disconnect()
+      scrollEl.removeEventListener('scroll', onScroll)
+      clearTimeout(scrollTimer)
+      scrollEl.classList.remove('modal__scroll--overflow', 'modal__scroll--active')
+    }
+  }, [open, children])
 
   return (
     <dialog
@@ -42,7 +75,9 @@ export function Modal({ open, onClose, title, subtitle, wide, children, footer }
               <X aria-hidden="true" className="size-5" />
             </button>
           </div>
-          <div className="modal__body">{children}</div>
+          <div ref={bodyRef} className="modal__body modal__scroll">
+            {children}
+          </div>
           {footer && <div className="modal__footer row justify-end">{footer}</div>}
         </div>
       )}

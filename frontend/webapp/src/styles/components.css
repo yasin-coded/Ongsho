@@ -384,19 +384,71 @@
   .modal__body {
     min-height: 0;
     overflow-x: hidden;
+  }
+  .modal__body:has(.modal__form) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .modal__form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    gap: 1rem;
+  }
+  .modal__form-scroll {
+    min-height: 0;
+    flex: 1;
+  }
+  .modal__scroll {
+    --modal-scroll-wall-gap: 0.375rem;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
+    scrollbar-gutter: auto;
+    padding-inline-end: var(--modal-scroll-wall-gap);
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .modal__scroll:not(.modal__scroll--overflow) {
+    overflow-y: hidden;
+    padding-inline-end: 0;
+    margin-inline-end: 0;
+  }
+  .modal__scroll.modal__scroll--overflow {
+    margin-inline-end: calc(-1 * var(--modal-scroll-wall-gap));
+    padding-inline-end: calc(var(--modal-scroll-wall-gap) * 2);
+  }
+  .modal__scroll.modal__scroll--overflow:hover,
+  .modal__scroll.modal__scroll--overflow:focus-within,
+  .modal__scroll.modal__scroll--active {
+    scrollbar-color: var(--color-brand) transparent;
+  }
+  .modal__scroll.modal__scroll--overflow::-webkit-scrollbar {
+    width: 0.4375rem;
+  }
+  .modal__scroll.modal__scroll--overflow::-webkit-scrollbar-track {
+    background: transparent;
+    margin-block: 0.15rem;
+  }
+  .modal__scroll.modal__scroll--overflow::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 999px;
+  }
+  .modal__scroll.modal__scroll--overflow:hover::-webkit-scrollbar-thumb,
+  .modal__scroll.modal__scroll--overflow:focus-within::-webkit-scrollbar-thumb,
+  .modal__scroll.modal__scroll--overflow.modal__scroll--active::-webkit-scrollbar-thumb {
+    background-color: var(--color-brand);
   }
   .modal__footer {
     flex-shrink: 0;
     gap: 0.75rem;
     overflow: visible;
-    padding: 0.125rem 0.5rem 0.5rem 0.125rem;
+    padding: 0.375rem 0.75rem 0.75rem 0.375rem;
   }
   .modal__body .modal__footer {
-    margin-top: 0.25rem;
-    padding: 0.125rem 0.5rem 0.5rem 0.125rem;
+    margin-top: 0;
+    padding: 0.5rem 0.875rem 0.875rem 0.5rem;
   }
 
   /* ---------- toast ---------- */
@@ -426,6 +478,12 @@
   .neo-table tfoot td { border-top: 0.1875rem solid #000; font-weight: 700; }
   .table-scroll { overflow-x: auto; }
 
+  /* Recharts: tooltip wrapper must not stretch to chart width (tiny donut + huge floating box) */
+  .recharts-tooltip-wrapper {
+    width: auto !important;
+    max-width: min(14rem, 85vw);
+  }
+
   /* ---------- layout helpers ---------- */
   .card-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
   .stat-grid { display: grid; gap: 1.5rem; }
@@ -449,6 +507,10 @@
   }
   .dash-home__cols > .stack { min-width: 0; }
   .dash-home__aside .neo-box { min-width: 0; overflow: hidden; }
+  /* Donut / chart tooltips render in a portal-sized wrapper; parent must not clip */
+  .dash-home__aside .neo-box:where(:has(.recharts-wrapper), :has(.chart-pop)) {
+    overflow: visible;
+  }
   .dash-home__aside .box-head__title-row .t-card { font-size: 1.05rem; }
   .dash-home__aside .t-sub,
   .dash-home__aside .t-meta { overflow-wrap: anywhere; }

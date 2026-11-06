@@ -36,8 +36,8 @@ export function ownerMeta(plan, { seats = true } = {}) {
 
 export function Price({ amount, cycle, className, small }) {
   return (
-    <p className={cx('text-right', className)}>
-      <span className={cx('t-num font-[family-name:var(--font-display)] font-bold', small ? 'text-[1.25rem]' : 'text-[1.6rem]')}>{formatBDT(amount, { trim: true })}</span>
+    <p className={cx('basis-full text-left sm:basis-auto sm:text-right', className)}>
+      <span className={cx('t-num block font-[family-name:var(--font-display)] font-bold', small ? 'text-[1.25rem]' : 'text-[1.6rem]')}>{formatBDT(amount, { trim: true })}</span>
       <span className="t-meta block">{perCycleLabel(cycle)}</span>
     </p>
   )

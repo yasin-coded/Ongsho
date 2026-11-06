@@ -5,11 +5,16 @@ function ChartTip({ active, payload, labelKey = 'label' }) {
   if (!active || !payload?.length) return null
   const item = payload[0].payload
   return (
-    <div className="rounded-xl border-[0.1875rem] border-black bg-white px-3 py-2 shadow-[var(--shadow-neo-sm)]">
+    <div className="chart-pop w-max max-w-[min(14rem,85vw)] rounded-xl border-[0.1875rem] border-black bg-white px-3 py-2">
       <p className="t-meta font-bold">{item[labelKey] ?? item.name}</p>
       <p className="t-num font-bold">{formatBDT(item.value ?? item.total, { trim: true })}</p>
     </div>
   )
+}
+
+const tooltipShell = {
+  wrapperStyle: { width: 'auto', maxWidth: 'min(14rem, 85vw)', pointerEvents: 'none' },
+  contentStyle: { margin: 0, padding: 0, background: 'transparent', border: 'none', boxShadow: 'none' },
 }
 
 /** Donut with the hard black outline and the small yellow centre from the wireframe. */
@@ -25,7 +30,15 @@ export function Donut({ data, size = 9, label, center = true }) {
                 <Cell key={i} fill={d.fill} />
               ))}
             </Pie>
-            {total > 0 && <Tooltip content={<ChartTip labelKey="name" />} />}
+            {total > 0 && (
+              <Tooltip
+                {...tooltipShell}
+                cursor={false}
+                allowEscapeViewBox={{ x: true, y: true }}
+                offset={8}
+                content={<ChartTip labelKey="name" />}
+              />
+            )}
           </PieChart>
         </ResponsiveContainer>
         {center && <span className="pointer-events-none absolute top-1/2 left-1/2 size-[22%] -translate-x-1/2 -translate-y-1/2 rounded-full border-[0.1875rem] border-black bg-[#fff200]" />}
@@ -45,7 +58,7 @@ export function ForecastBars({ data, colors, height = 15 }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 28, right: 8, left: 8, bottom: 0 }} barCategoryGap="22%">
             <XAxis dataKey="label" axisLine={{ stroke: '#000', strokeWidth: 3 }} tickLine={false} tick={{ fill: '#000', fontSize: '0.875rem', fontFamily: 'Bahnschrift', fontWeight: 700 }} />
-            <Tooltip cursor={{ fill: 'rgba(0,0,0,0.06)' }} content={<ChartTip />} />
+            <Tooltip {...tooltipShell} cursor={{ fill: 'rgba(0,0,0,0.06)' }} content={<ChartTip />} />
             <Bar dataKey="value" stroke="#000" strokeWidth={3} radius={[10, 10, 0, 0]} isAnimationActive={false}>
               {rows.map((r) => (
                 <Cell key={r.key} fill={r.fill} />
