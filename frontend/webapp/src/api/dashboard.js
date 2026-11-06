@@ -39,6 +39,11 @@ export function getNavCounts() {
   return read(() => navCounts(ME))
 }
 
+/** Sync counts from the in-memory mock DB (no latency). Use after writes so the sidebar updates immediately. */
+export function snapshotNavCounts() {
+  return structuredClone(navCounts(ME))
+}
+
 export function getNotifications({ filter = 'all', page = 1, size = 8 } = {}) {
   return read(
     () => {

@@ -592,8 +592,9 @@ export function notificationsFor(userId) {
 }
 
 export function navCounts(userId) {
-  const reviews = sum(ownedPlans(userId), (p) => pendingPaymentsFor(p.id).length)
-  const dues = sum(joinedPlans(userId), (p) => db.dues.filter((d) => d.planId === p.id && d.memberId === myMemberRow(p.id, userId).id && d.status === 'due').length)
+  // Match My Plans (`ownerPlanSummary.pendingCount`) and Shared (`sharedTotals.dueCount`) so badges track the same work as those screens.
+  const reviews = sum(ownedPlans(userId), (p) => ownerPlanSummary(p).pendingCount)
+  const dues = sharedTotals(userId).dueCount
   const unread = db.notifications.filter((n) => n.userId === userId && !n.readAt).length
   return { reviews, dues, unread }
 }

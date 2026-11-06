@@ -1,9 +1,9 @@
 import { NavLink, Outlet, useLocation } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, CalendarDays, House, Layers, UserRound, Users } from 'lucide-react'
 import Wordmark from '@/assets/media/logo-monochrome.svg?react'
 import { SVG_SIZES } from '@/lib/services'
-import { getNavCounts } from '@/api/dashboard'
+import { getNavCounts, snapshotNavCounts } from '@/api/dashboard'
 import { CountBubble, OutsideNote } from '@/components/ui/Misc'
 import { useEffect } from 'react'
 
@@ -17,11 +17,19 @@ const NAV = [
 ]
 
 export function AppShell() {
-  const { data: counts } = useQuery({ queryKey: ['nav-counts'], queryFn: getNavCounts })
+  const queryClient = useQueryClient()
+  const { data: counts } = useQuery({
+    queryKey: ['nav-counts'],
+    queryFn: getNavCounts,
+    refetchOnMount: 'always',
+  })
   const { pathname } = useLocation()
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [pathname])
+  useEffect(() => {
+    queryClient.setQueryData(['nav-counts'], snapshotNavCounts())
+  }, [pathname, queryClient])
 
   return (
     <div className="shell">

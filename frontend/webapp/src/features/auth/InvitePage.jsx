@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Check, X } from 'lucide-react'
 import { getInvite, getMe } from '@/api/accounts'
+import { snapshotNavCounts } from '@/api/dashboard'
 import { acceptInvite, acceptInviteAsNewUser, declineInvite } from '@/api/shared'
 import { useAuth } from '@/auth/auth-context'
 import { useAction } from '@/hooks/useAction'
@@ -27,7 +28,8 @@ export function InvitePage() {
     mutationFn: () => acceptInviteAsNewUser(token, form),
     onSuccess: async () => {
       signInDirect({ name: form.name, email: invite.email })
-      await queryClient.invalidateQueries()
+      queryClient.setQueryData(['nav-counts'], snapshotNavCounts())
+      await queryClient.invalidateQueries({ refetchType: 'all' })
       navigate('/app')
     },
   })

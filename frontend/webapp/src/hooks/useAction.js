@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { snapshotNavCounts } from '@/api/dashboard'
 import { useToast } from '@/components/ui/toast-context'
 
 /**
@@ -14,7 +15,9 @@ export function useAction(fn, { onSuccess, tone = 'paid', toastMessage } = {}) {
     mutationFn: fn,
     onMutate: () => setFields({}),
     onSuccess: async (data, vars) => {
-      await queryClient.invalidateQueries()
+      // Push counts into the cache synchronously so the shell updates even if invalidate/refetch is delayed or skipped (e.g. query still flagged invalidated).
+      queryClient.setQueryData(['nav-counts'], snapshotNavCounts())
+      await queryClient.invalidateQueries({ refetchType: 'all' })
       const message = typeof toastMessage === 'function' ? toastMessage(data, vars) : toastMessage ?? data?.message
       if (message) toast(message, tone)
       onSuccess?.(data, vars)
