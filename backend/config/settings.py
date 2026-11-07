@@ -19,6 +19,13 @@ REPO_ROOT = BASE_DIR.parent
 load_dotenv(REPO_ROOT / ".env")
 load_dotenv(BASE_DIR / ".env", override=True)
 
+# Pytest bootstraps Django before conftest runs; supply non-secret defaults only for test runs.
+if "pytest" in sys.argv[0] or any(arg == "pytest" or arg.endswith("pytest") for arg in sys.argv):
+    os.environ.setdefault("DEFAULT_FROM_EMAIL", "Ongsho <test@example.com>")
+    os.environ.setdefault("FRONTEND_BASE_URL", "http://localhost:5173")
+    os.environ.setdefault("REFRESH_COOKIE_SECURE", "False")
+    os.environ.setdefault("REFRESH_COOKIE_SAMESITE", "Lax")
+
 
 def _env_bool(name: str) -> bool:
     raw = os.environ.get(name)
@@ -32,6 +39,13 @@ def _env_list(name: str) -> list[str]:
     if raw is None:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _env_str(name: str) -> str:
+    raw = os.environ.get(name)
+    if raw is None:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return raw.strip()
 
 
 def _use_direct_database_url() -> bool:
@@ -149,10 +163,21 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
+    "EXCEPTION_HANDLER": "core.exceptions.ongsho_exception_handler",
 }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 }
+
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = _env_str("DEFAULT_FROM_EMAIL")
+FRONTEND_BASE_URL = _env_str("FRONTEND_BASE_URL").rstrip("/")
+REFRESH_COOKIE_SECURE = _env_bool("REFRESH_COOKIE_SECURE")
+REFRESH_COOKIE_SAMESITE = _env_str("REFRESH_COOKIE_SAMESITE")
+
+EMAIL_VERIFY_MAX_AGE = timedelta(days=3)
+PASSWORD_RESET_TIMEOUT = 3600
