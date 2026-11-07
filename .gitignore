@@ -1,24 +1,93 @@
+# Project docs (local / not for public repo)
 docs/
-venv/
-__pycache__/
-*.pyc
-env
+
+# Secrets and local env
 .env
 .env.*
 !.env.example
+!**/.env.example
+env/
+backend/.env
+
+# Python bytecode and caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+backend/venv/
+
+# pytest / coverage / tox
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# Django local DB and uploads
+*.sqlite3
+db.sqlite3
+backend/db.sqlite3
+staticfiles/
+media/
+backend/staticfiles/
+backend/media/
+*.log
+
+# Backend tests (local pytest layout; keep app code committable)
+backend/tests/
+backend/conftest.py
+backend/pytest.ini
+
+# Python packaging
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Tooling / IDE / AI (local only)
 .impeccable
 .gemini
 .cursor
 .grok
 .claude
-Assets
 .agents/
+Assets
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# frontend (Vite / npm)
+# Frontend (Vite / npm)
 frontend/**/node_modules/
 frontend/**/dist/
 frontend/**/dist-ssr/
+frontend/**/.vite/
 frontend/**/*.local
 frontend/**/logs/
 frontend/**/*.log
@@ -28,4 +97,3 @@ frontend/**/yarn-error.log*
 frontend/**/pnpm-debug.log*
 frontend/**/.eslintcache
 frontend/**/coverage/
-frontend/**/.DS_Store
