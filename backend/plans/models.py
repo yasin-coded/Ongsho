@@ -105,5 +105,13 @@ class ExchangeRate(models.Model):
     usd_to_bdt = models.DecimalField(max_digits=12, decimal_places=4)
     source = models.CharField(max_length=64, default="manual")
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(usd_to_bdt__gt=0),
+                name="plans_exchangerate_positive",
+            ),
+        ]
+
     def __str__(self) -> str:
         return f"{self.rate_date} {self.usd_to_bdt}"
