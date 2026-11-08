@@ -110,6 +110,9 @@ def ongsho_exception_handler(exc, context):
     if isinstance(exc, drf_exc.NotFound):
         return error_response("not_found", _detail_to_fields(exc.detail)[0], {}, 404)
 
+    if isinstance(exc, drf_exc.MethodNotAllowed):
+        return error_response("method_not_allowed", _detail_to_fields(exc.detail)[0], {}, 405)
+
     if isinstance(exc, drf_exc.Throttled):
         retry = exc.wait
         headers = {"Retry-After": str(int(retry))} if retry is not None else {}
