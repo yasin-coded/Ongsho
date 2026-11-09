@@ -12,10 +12,11 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken, UntypedToken
 
+from audit import services as audit_services
 from accounts.constants import DEFAULT_AVATAR_ID
-from accounts.emails import send_password_reset_email, send_verification_email
-from accounts.tokens import load_email_verification_token
-from core.exceptions import Forbidden, Unauthorized, ValidationFailed
+from accounts.emails import send_email_change_verification, send_password_reset_email, send_verification_email
+from accounts.tokens import load_email_change_token, load_email_verification_token
+from core.exceptions import ConflictError, Forbidden, Unauthorized, ValidationFailed
 
 User = get_user_model()
 
@@ -189,3 +190,145 @@ def user_for_password_reset_check(uid: str, token: str):
 def revoke_all_tokens(user) -> None:
     for outstanding in OutstandingToken.objects.filter(user=user):
         BlacklistedToken.objects.get_or_create(token=outstanding)
+
+
+def profile_dict(user) -> dict:
+    return {
+        "id": user.pk,
+        "email": user.email,
+        "name": user.name,
+        "avatar_id": user.avatar_id,
+        "email_verified": user.email_verified,
+        "pending_email": user.pending_email,
+    }
+
+
+@transaction.atomic
+def update_profile(user, validated: dict):
+    user = User.objects.select_for_update().get(pk=user.pk)
+    old_snapshot: dict = {}
+    new_snapshot: dict = {}
+    update_fields: list[str] = []
+
+    if "name" in validated:
+        name = validated["name"]
+        if name != user.name:
+            old_snapshot["name"] = user.name
+            new_snapshot["name"] = name
+            user.name = name
+            update_fields.append("name")
+
+    if "avatar_id" in validated:
+        avatar_id = validated["avatar_id"]
+        if avatar_id != user.avatar_id:
+            old_snapshot["avatar_id"] = user.avatar_id
+            new_snapshot["avatar_id"] = avatar_id
+            user.avatar_id = avatar_id
+            update_fields.append("avatar_id")
+
+    if not update_fields:
+        return user
+
+    user.save(update_fields=update_fields)
+    audit_services.log(user, "profile.updated", "User", user.pk, old_snapshot, new_snapshot)
+    return user
+
+
+@transaction.atomic
+def change_password(user, *, current_password: str, new_password: str) -> None:
+    user = User.objects.select_for_update().get(pk=user.pk)
+    if not user.check_password(current_password):
+        raise ValidationFailed(
+            "The password is not correct.",
+            code="invalid_password",
+            fields={"password": ["The password is not correct."]},
+        )
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    audit_services.log(user, "password.changed", "User", user.pk, None, None)
+    revoke_all_tokens(user)
+
+
+@transaction.atomic
+def request_email_change(user, *, new_email: str, password: str) -> None:
+    user = User.objects.select_for_update().get(pk=user.pk)
+    if not user.check_password(password):
+        raise ValidationFailed(
+            "The password is not correct.",
+            code="invalid_password",
+            fields={"password": ["The password is not correct."]},
+        )
+    previous_pending = user.pending_email or None
+    user.pending_email = new_email
+    user.save(update_fields=["pending_email"])
+    send_email_change_verification(user, new_email)
+    audit_services.log(
+        user,
+        "email_change.requested",
+        "User",
+        user.pk,
+        {"email": user.email, "pending_email": previous_pending},
+        {"pending_email": new_email},
+    )
+    # TODO(notifications): notify the user that an email change was requested.
+
+
+@transaction.atomic
+def verify_email_change(user, token: str) -> User:
+    try:
+        payload = load_email_change_token(token)
+    except Exception:
+        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+
+    token_email = (payload.get("email") or "").lower()
+    if payload.get("user_id") != user.pk:
+        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+
+    user = User.objects.select_for_update().get(pk=user.pk)
+    if user.email == token_email and not user.pending_email:
+        return user
+
+    if not user.pending_email or user.pending_email != token_email:
+        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+
+    if User.objects.filter(email__iexact=token_email).exclude(pk=user.pk).exists():
+        raise ConflictError(
+            "That email address is already in use.",
+            code="email_taken",
+            fields={"new_email": ["That email address is already in use."]},
+        )
+
+    old_email = user.email
+    user.email = token_email
+    user.pending_email = ""
+    user.email_verified = True
+    user.save(update_fields=["email", "pending_email", "email_verified"])
+    audit_services.log(
+        user,
+        "email_change.verified",
+        "User",
+        user.pk,
+        {"email": old_email},
+        {"email": user.email},
+    )
+    revoke_all_tokens(user)
+    # TODO(notifications): notify the user that their email address was changed.
+    return user
+
+
+@transaction.atomic
+def cancel_email_change(user) -> None:
+    user = User.objects.select_for_update().get(pk=user.pk)
+    if not user.pending_email:
+        return
+    pending = user.pending_email
+    user.pending_email = ""
+    user.save(update_fields=["pending_email"])
+    audit_services.log(
+        user,
+        "email_change.cancelled",
+        "User",
+        user.pk,
+        {"pending_email": pending},
+        {"pending_email": None},
+    )

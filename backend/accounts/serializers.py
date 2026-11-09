@@ -3,7 +3,11 @@ from django.contrib.auth.password_validation import validate_password
 from django.core import validators
 from rest_framework import serializers
 
+from accounts.constants import AVATAR_KEY_SET
+
 User = get_user_model()
+
+ME_PATCH_ALLOWED = frozenset({"name", "avatar_id"})
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -70,3 +74,52 @@ def user_public_dict(user) -> dict:
         "name": user.name,
         "avatar_id": user.avatar_id,
     }
+
+
+class MePatchSerializer(serializers.Serializer):
+    name = serializers.CharField(
+        max_length=User._meta.get_field("name").max_length,
+        required=False,
+        trim_whitespace=True,
+    )
+    avatar_id = serializers.CharField(required=False, trim_whitespace=True)
+
+    def validate_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("This field may not be blank.")
+        return value
+
+    def validate_avatar_id(self, value: str) -> str:
+        value = value.strip()
+        if value not in AVATAR_KEY_SET:
+            raise serializers.ValidationError("Select a valid avatar.")
+        return value
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+
+class EmailChangeRequestSerializer(serializers.Serializer):
+    new_email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_new_email(self, value: str) -> str:
+        return value.strip().lower()
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        new_email = attrs["new_email"]
+        if new_email == user.email:
+            raise serializers.ValidationError({"new_email": ["Enter a different email address."]})
+        if User.objects.filter(email__iexact=new_email).exists():
+            raise serializers.ValidationError(
+                {"new_email": ["A user with this email already exists."]}
+            )
+        return attrs
+
+
+class EmailChangeVerifySerializer(serializers.Serializer):
+    token = serializers.CharField(trim_whitespace=True)

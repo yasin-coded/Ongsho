@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.core.mail import send_mail
 
-from accounts.tokens import make_email_verification_token
+from accounts.tokens import make_email_change_token, make_email_verification_token
 
 
 def send_verification_email(user) -> None:
@@ -12,6 +12,18 @@ def send_verification_email(user) -> None:
         message=f"Open this link to verify your email:\n\n{link}\n",
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+
+def send_email_change_verification(user, new_email: str) -> None:
+    token = make_email_change_token(user, new_email)
+    link = f"{settings.FRONTEND_BASE_URL}/verify-email?type=email-change&token={token}"
+    send_mail(
+        subject="Verify your new Ongsho email",
+        message=f"Open this link to confirm your new email address:\n\n{link}\n",
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[new_email],
         fail_silently=False,
     )
 
