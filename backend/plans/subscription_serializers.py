@@ -279,6 +279,10 @@ class PriceChangeSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "currency", "effective_from")
 
 
+class SubscriptionRenewSerializer(serializers.Serializer):
+    end_date = serializers.DateField()
+
+
 class PriceChangeCreateSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     effective_from = serializers.DateField()

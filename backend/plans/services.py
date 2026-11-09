@@ -15,6 +15,32 @@ from plans.models import ExchangeRate, PriceChange, RenewalType, Subscription, S
 from plans.selectors import current_amount_for_subscription, owned_subscription, service_name_for_user
 
 
+def _lock_owned_subscription(user, pk: int) -> Subscription:
+    sub = (
+        Subscription.objects.select_for_update()
+        .filter(owner=user, pk=pk, archived_on__isnull=True)
+        .first()
+    )
+    if sub is None:
+        raise NotFound("Plan not found.")
+    return sub
+
+
+def _status_for_trial_rule(sub: Subscription) -> str:
+    today = today_dhaka()
+    trial_end = sub.trial_end_date
+    if trial_end and today <= trial_end:
+        return SubscriptionStatus.TRIAL
+    return SubscriptionStatus.ACTIVE
+
+
+def _invalid_status_change(sub: Subscription, action: str) -> None:
+    raise ConflictError(
+        f"Cannot {action} a plan that is {sub.status}.",
+        code="invalid_status_change",
+    )
+
+
 def _quantize_rate(value: Decimal) -> Decimal:
     from decimal import ROUND_HALF_UP
 
@@ -211,6 +237,113 @@ def add_price_change(user, pk: int, *, amount: Decimal, effective_from) -> Price
         {"subscription_id": sub.pk, "amount": str(amount), "effective_from": effective_from.isoformat()},
     )
     return pc
+
+
+@transaction.atomic
+def pause_subscription(user, pk: int) -> Subscription:
+    sub = _lock_owned_subscription(user, pk)
+    if sub.status == SubscriptionStatus.PAUSED:
+        _invalid_status_change(sub, "pause")
+    if sub.status not in (SubscriptionStatus.TRIAL, SubscriptionStatus.ACTIVE):
+        _invalid_status_change(sub, "pause")
+    old_status = sub.status
+    sub.status = SubscriptionStatus.PAUSED
+    sub.save(update_fields=["status"])
+    audit_services.log(
+        user,
+        "plan.paused",
+        "Subscription",
+        sub.pk,
+        {"status": old_status},
+        {"status": sub.status},
+    )
+    # TODO(notifications): notify members that the plan was paused.
+    return sub
+
+
+@transaction.atomic
+def resume_subscription(user, pk: int) -> Subscription:
+    sub = _lock_owned_subscription(user, pk)
+    if sub.status != SubscriptionStatus.PAUSED:
+        _invalid_status_change(sub, "resume")
+    old_status = sub.status
+    sub.status = _status_for_trial_rule(sub)
+    sub.save(update_fields=["status"])
+    audit_services.log(
+        user,
+        "plan.resumed",
+        "Subscription",
+        sub.pk,
+        {"status": old_status},
+        {"status": sub.status},
+    )
+    # TODO(notifications): notify members that the plan was resumed.
+    return sub
+
+
+@transaction.atomic
+def cancel_subscription(user, pk: int) -> Subscription:
+    sub = _lock_owned_subscription(user, pk)
+    if sub.status == SubscriptionStatus.CANCELLED:
+        _invalid_status_change(sub, "cancel")
+    if sub.status not in (
+        SubscriptionStatus.TRIAL,
+        SubscriptionStatus.ACTIVE,
+        SubscriptionStatus.PAUSED,
+    ):
+        _invalid_status_change(sub, "cancel")
+    old_status = sub.status
+    sub.status = SubscriptionStatus.CANCELLED
+    sub.save(update_fields=["status"])
+    audit_services.log(
+        user,
+        "plan.cancelled",
+        "Subscription",
+        sub.pk,
+        {"status": old_status},
+        {"status": sub.status},
+    )
+    # TODO(notifications): notify members that the plan was cancelled.
+    return sub
+
+
+@transaction.atomic
+def renew_subscription(user, pk: int, *, end_date) -> Subscription:
+    sub = _lock_owned_subscription(user, pk)
+    if sub.renewal_type != RenewalType.FIXED_TERM:
+        raise ValidationFailed(
+            "Only fixed-term plans can be renewed.",
+            code="not_fixed_term",
+            fields={"renewal_type": ["Only fixed-term plans can be renewed."]},
+        )
+    if sub.status not in (SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED):
+        _invalid_status_change(sub, "renew")
+    today = today_dhaka()
+    if end_date <= today:
+        raise ValidationFailed(
+            "End date must be after today.",
+            fields={"end_date": ["End date must be after today."]},
+        )
+    if sub.end_date and end_date <= sub.end_date:
+        raise ValidationFailed(
+            "End date must be after the current end date.",
+            fields={"end_date": ["End date must be after the current end date."]},
+        )
+    old_status = sub.status
+    old_end = sub.end_date.isoformat() if sub.end_date else None
+    sub.end_date = end_date
+    sub.status = _status_for_trial_rule(sub)
+    sub.save(update_fields=["end_date", "status"])
+    audit_services.log(
+        user,
+        "plan.renewed",
+        "Subscription",
+        sub.pk,
+        {"status": old_status, "end_date": old_end},
+        {"status": sub.status, "end_date": sub.end_date.isoformat()},
+    )
+    # TODO(notifications): notify members that the plan was renewed.
+    return sub
 
 
 def create_exchange_rate(user, *, rate_date, usd_to_bdt: Decimal) -> ExchangeRate:

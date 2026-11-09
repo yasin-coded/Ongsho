@@ -25,6 +25,7 @@ if "pytest" in sys.argv[0] or any(arg == "pytest" or arg.endswith("pytest") for 
     os.environ.setdefault("FRONTEND_BASE_URL", "http://localhost:5173")
     os.environ.setdefault("REFRESH_COOKIE_SECURE", "False")
     os.environ.setdefault("REFRESH_COOKIE_SAMESITE", "Lax")
+    os.environ.setdefault("FRONTEND_ORIGINS", "http://localhost:5173")
 
 
 def _env_bool(name: str) -> bool:
@@ -93,6 +94,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "core",
@@ -112,6 +114,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -183,3 +186,7 @@ REFRESH_COOKIE_SAMESITE = _env_str("REFRESH_COOKIE_SAMESITE")
 
 EMAIL_VERIFY_MAX_AGE = timedelta(days=3)
 PASSWORD_RESET_TIMEOUT = 3600
+
+CORS_URLS_REGEX = r"^/api/.*$"
+CORS_ALLOWED_ORIGINS = _env_list("FRONTEND_ORIGINS")
+CORS_ALLOW_CREDENTIALS = True
