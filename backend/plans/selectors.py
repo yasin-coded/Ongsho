@@ -1,9 +1,10 @@
-from django.db.models import DecimalField, OuterRef, Q, Subquery
+from django.db.models import DecimalField, Exists, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 
 from catalog.selectors import available_service_names
 from core.dates import today_dhaka
 from core.exceptions import NotFound
+from payments.models import Payment, ReviewStatus
 from plans.models import ExchangeRate, PriceChange, Subscription
 
 
@@ -37,6 +38,12 @@ def owned_subscriptions(user, params: dict):
         qs = qs.filter(plan_mode=plan_mode)
     if (rare := params.get("rarely_used")) is not None and rare != "":
         qs = qs.filter(rarely_used=rare)
+    if params.get("needs_review"):
+        pending_payment = Payment.objects.filter(
+            shared_plan__subscription_id=OuterRef("pk"),
+            review_status=ReviewStatus.PENDING,
+        )
+        qs = qs.filter(Exists(pending_payment))
     ordering = params.get("ordering") or "-id"
     qs = qs.order_by(ordering)
 
@@ -81,3 +88,16 @@ def service_name_for_user(user, service_name_id: int):
 
 def exchange_rates_for_user(user):
     return ExchangeRate.objects.filter(user=user).order_by("-rate_date", "-id")
+
+
+def subscription_list_counts(user) -> dict[str, int]:
+    base = Subscription.objects.filter(owner=user)
+    pending_payment = Payment.objects.filter(
+        shared_plan__subscription_id=OuterRef("pk"),
+        review_status=ReviewStatus.PENDING,
+    )
+    return {
+        "all": base.count(),
+        "review": base.filter(Exists(pending_payment)).count(),
+        "rarely": base.filter(rarely_used=True).count(),
+    }

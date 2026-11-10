@@ -44,6 +44,15 @@ def _list_params(request) -> dict:
                 fields={"rarely_used": ["Must be true or false."]},
             )
         rarely = rarely_raw.lower() == "true"
+    needs_review_raw = request.query_params.get("needs_review")
+    needs_review = None
+    if needs_review_raw is not None and needs_review_raw != "":
+        if needs_review_raw.lower() not in ("true", "false"):
+            raise ValidationFailed(
+                "Invalid value.",
+                fields={"needs_review": ["Must be true or false."]},
+            )
+        needs_review = needs_review_raw.lower() == "true"
     status_val = request.query_params.get("status") or None
     if status_val is not None and status_val != "":
         from plans.models import SubscriptionStatus
@@ -76,6 +85,7 @@ def _list_params(request) -> dict:
         "currency": currency or None,
         "plan_mode": plan_mode or None,
         "rarely_used": rarely,
+        "needs_review": needs_review,
         "ordering": ordering,
     }
 
@@ -89,10 +99,11 @@ def subscription_list_create(request):
         except DomainError as exc:
             return _domain_response(exc)
         qs = selectors.owned_subscriptions(request.user, params)
+        counts = selectors.subscription_list_counts(request.user)
         paginator = OngshoPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=None)
         data = SubscriptionListSerializer(page, many=True).data
-        return paginator.get_paginated_response(data)
+        return paginator.get_paginated_response(data, extra={"counts": counts})
     serializer = SubscriptionCreateSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
     try:
@@ -179,12 +190,14 @@ def price_change_list_create(request, pk):
     serializer = PriceChangeCreateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     try:
-        pc = services.add_price_change(
+        pc, created = services.add_price_change(
             request.user,
             pk,
             amount=serializer.validated_data["amount"],
             effective_from=serializer.validated_data["effective_from"],
+            exchange_rate=serializer.validated_data.get("exchange_rate"),
         )
     except DomainError as exc:
         return _domain_response(exc)
-    return Response(PriceChangeSerializer(pc).data, status=status.HTTP_201_CREATED)
+    code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    return Response(PriceChangeSerializer(pc).data, status=code)

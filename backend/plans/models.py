@@ -55,6 +55,10 @@ class Subscription(models.Model):
     recommended_method = models.CharField(max_length=32, choices=PaymentMethod.choices)
     rarely_used = models.BooleanField(default=False)
     archived_on = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    billing_from = models.DateField()
+    paused_on = models.DateField(null=True, blank=True)
+    cancelled_on = models.DateField(null=True, blank=True)
 
     objects = ActiveSubscriptionManager()
     all_with_archived = models.Manager()

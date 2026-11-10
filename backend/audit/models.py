@@ -16,6 +16,9 @@ class AuditLog(models.Model):
     entity_id = models.BigIntegerField()
     old_value = models.JSONField(null=True, blank=True)
     new_value = models.JSONField(null=True, blank=True)
+    plan_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    summary = models.TextField(blank=True, default="")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

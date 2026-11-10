@@ -35,6 +35,15 @@ class SharedPlan(models.Model):
         related_name="shared_plan",
     )
     split_type = models.CharField(max_length=16, choices=SplitType.choices)
+    seats = models.PositiveSmallIntegerField(default=2)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(seats__gte=1, seats__lte=20),
+                name="sharing_sharedplan_seats_range",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"Shared {self.subscription_id}"
@@ -79,6 +88,13 @@ class Invite(models.Model):
     token_hash = models.CharField(max_length=128, unique=True)
     expires_on = models.DateTimeField()
     status = models.CharField(max_length=16, choices=InviteStatus.choices)
+    replaces_member = models.ForeignKey(
+        "sharing.Member",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replacement_invites",
+    )
 
     class Meta:
         constraints = [

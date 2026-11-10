@@ -16,7 +16,9 @@ class ReminderChannel(models.TextChoices):
 class Notification(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
     kind = models.CharField(max_length=64)
+    title = models.CharField(max_length=120, default="")
     message = models.TextField()
+    payload = models.JSONField(default=dict)
     link = models.CharField(max_length=512, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(null=True, blank=True)

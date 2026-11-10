@@ -64,6 +64,8 @@ class SubscriptionDetailSerializer(serializers.ModelSerializer):
     category = serializers.SerializerMethodField()
     amount = serializers.SerializerMethodField()
     amount_bdt_preview = serializers.CharField(required=False, read_only=True)
+    pending_invites = serializers.SerializerMethodField()
+    member_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
@@ -87,6 +89,8 @@ class SubscriptionDetailSerializer(serializers.ModelSerializer):
             "rarely_used",
             "amount",
             "amount_bdt_preview",
+            "pending_invites",
+            "member_count",
         )
 
     def get_service_name(self, obj):
@@ -103,9 +107,41 @@ class SubscriptionDetailSerializer(serializers.ModelSerializer):
         amount = current_amount_for_subscription(obj)
         return str(quantize_money(amount)) if amount is not None else None
 
+    def get_pending_invites(self, obj):
+        from django.core.exceptions import ObjectDoesNotExist
+        from sharing.models import Invite, InviteStatus
+
+        try:
+            shared = obj.shared_plan
+        except ObjectDoesNotExist:
+            return []
+        return list(
+            Invite.objects.filter(shared_plan=shared, status=InviteStatus.PENDING)
+            .order_by("email")
+            .values_list("email", flat=True)
+        )
+
+    def get_member_count(self, obj):
+        from django.core.exceptions import ObjectDoesNotExist
+        from sharing.models import Member, MemberStatus
+
+        try:
+            shared = obj.shared_plan
+        except ObjectDoesNotExist:
+            return 0
+        return Member.objects.filter(
+            shared_plan=shared,
+            status__in=(MemberStatus.ACTIVE, MemberStatus.LEAVE_REQUESTED),
+        ).count()
+
 
 class SubscriptionListSerializer(SubscriptionDetailSerializer):
-    pass
+    class Meta(SubscriptionDetailSerializer.Meta):
+        fields = tuple(
+            f
+            for f in SubscriptionDetailSerializer.Meta.fields
+            if f not in ("pending_invites", "member_count")
+        )
 
 
 class SubscriptionCreateSerializer(serializers.Serializer):
@@ -286,11 +322,24 @@ class SubscriptionRenewSerializer(serializers.Serializer):
 class PriceChangeCreateSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     effective_from = serializers.DateField()
+    exchange_rate = serializers.DecimalField(
+        max_digits=12, decimal_places=4, required=False, allow_null=True
+    )
     currency = serializers.CharField(required=False, write_only=True)
 
     def validate_amount(self, value):
         return _validate_money_amount(value)
 
+    def validate_effective_from(self, value):
+        from core.dates import today_dhaka
+
+        if value < today_dhaka():
+            raise serializers.ValidationError("Effective date cannot be before today.")
+        return value
+
     def validate(self, attrs):
         attrs.pop("currency", None)
+        rate = attrs.get("exchange_rate")
+        if rate is not None:
+            attrs["exchange_rate"] = _validate_exchange_rate(rate)
         return attrs

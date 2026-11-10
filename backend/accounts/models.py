@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from accounts.constants import AVATAR_KEY_SET, DEFAULT_AVATAR_ID
+from accounts.validators import validate_reminder_days
 
 
 class UserManager(BaseUserManager):
@@ -35,6 +36,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     avatar_id = models.CharField(max_length=32, default=DEFAULT_AVATAR_ID)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    email_reminders = models.BooleanField(default=True)
+    reminder_days = models.CharField(max_length=20, default="7,1")
 
     objects = UserManager()
 
@@ -53,6 +56,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         super().clean()
         if self.avatar_id not in AVATAR_KEY_SET:
             raise ValidationError({"avatar_id": "Must be one of avatar_1 through avatar_10."})
+        try:
+            validate_reminder_days(self.reminder_days)
+        except ValidationError as exc:
+            raise ValidationError({"reminder_days": exc.messages}) from exc
 
     def save(self, *args, **kwargs):
         if self.email:

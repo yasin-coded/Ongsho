@@ -29,9 +29,54 @@ def _lock_owned_subscription(user, pk: int) -> Subscription:
 def _status_for_trial_rule(sub: Subscription) -> str:
     today = today_dhaka()
     trial_end = sub.trial_end_date
-    if trial_end and today <= trial_end:
+    if trial_end and today < trial_end:
         return SubscriptionStatus.TRIAL
     return SubscriptionStatus.ACTIVE
+
+
+def _plan_audit(
+    user,
+    action: str,
+    entity_type: str,
+    entity_id: int,
+    old,
+    new,
+    sub: Subscription,
+    summary: str,
+    *,
+    amount: Decimal | None = None,
+) -> None:
+    audit_services.log(
+        user,
+        action,
+        entity_type,
+        entity_id,
+        old,
+        new,
+        plan_id=sub.pk,
+        summary=summary,
+        amount=amount,
+    )
+
+
+def void_upcoming_untouched_charges(subscription: Subscription) -> None:
+    from billing.models import Charge
+    from dues.models import DueStatus
+
+    today = today_dhaka()
+    owner_id = subscription.owner_id
+    charges = (
+        Charge.objects.filter(subscription=subscription, due_date__gt=today)
+        .prefetch_related("dues__member__user")
+        .order_by("id")
+    )
+    for charge in charges:
+        dues = list(charge.dues.all())
+        if dues and not all(
+            due.status == DueStatus.DUE or due.member.user_id == owner_id for due in dues
+        ):
+            continue
+        charge.delete()
 
 
 def _invalid_status_change(sub: Subscription, action: str) -> None:
@@ -67,12 +112,13 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
 
     today = today_dhaka()
     trial_end = validated.get("trial_end_date")
+    start_date = validated["start_date"]
     status = (
         SubscriptionStatus.TRIAL
-        if trial_end and today <= trial_end
+        if trial_end and today < trial_end
         else SubscriptionStatus.ACTIVE
     )
-    start_date = validated["start_date"]
+    anchor_source = trial_end if trial_end else start_date
     sub = Subscription.objects.create(
         owner=user,
         service_name=service_name,
@@ -83,7 +129,7 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
         currency=validated["currency"],
         cycle_unit=validated["cycle_unit"],
         cycle_count=validated["cycle_count"],
-        anchor_day=start_date.day,
+        anchor_day=anchor_source.day,
         start_date=start_date,
         trial_end_date=trial_end,
         renewal_type=validated["renewal_type"],
@@ -91,6 +137,7 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
         status=status,
         recommended_method=validated["recommended_method"],
         rarely_used=validated.get("rarely_used", False),
+        billing_from=today,
     )
     amount = quantize_money(validated["amount"])
     PriceChange.objects.create(
@@ -109,13 +156,15 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
             source="manual",
         )
         amount_bdt_preview = str(to_bdt(amount, rate))
-    audit_services.log(
+    _plan_audit(
         user,
         "plan.created",
         "Subscription",
         sub.pk,
         None,
         {"id": sub.pk, "plan_name": sub.plan_name, "currency": sub.currency},
+        sub,
+        f"You created {sub.plan_name}",
     )
     return sub, amount_bdt_preview
 
@@ -160,7 +209,16 @@ def update_subscription(user, pk: int, validated: dict) -> Subscription:
             setattr(sub, field, validated[field])
     sub.save()
     new_snapshot = _snap(validated.keys())
-    audit_services.log(user, "plan.updated", "Subscription", sub.pk, old_snapshot, new_snapshot)
+    _plan_audit(
+        user,
+        "plan.updated",
+        "Subscription",
+        sub.pk,
+        old_snapshot,
+        new_snapshot,
+        sub,
+        "You edited the plan details",
+    )
     return sub
 
 
@@ -202,41 +260,97 @@ def delete_subscription(user, pk: int, password: str) -> None:
         sub.archived_on = timezone.now()
         sub.save(update_fields=["archived_on"])
         # TODO: notify all members, cancel pending invites and ownership transfers.
-        audit_services.log(user, "plan.archived", "Subscription", entity_id, snapshot, None)
+        audit_services.log(
+            user,
+            "plan.archived",
+            "Subscription",
+            entity_id,
+            snapshot,
+            None,
+            plan_id=entity_id,
+            summary=f"You archived {sub.plan_name}",
+        )
     else:
+        plan_id = entity_id
+        audit_services.log(
+            user,
+            "plan.deleted",
+            "Subscription",
+            entity_id,
+            snapshot,
+            None,
+            plan_id=plan_id,
+            summary=f"You deleted {sub.plan_name}",
+        )
         sub.delete()
-        audit_services.log(user, "plan.deleted", "Subscription", entity_id, snapshot, None)
 
 
 @transaction.atomic
-def add_price_change(user, pk: int, *, amount: Decimal, effective_from) -> PriceChange:
+def add_price_change(
+    user,
+    pk: int,
+    *,
+    amount: Decimal,
+    effective_from,
+    exchange_rate: Decimal | None = None,
+) -> tuple[PriceChange, bool]:
     sub = owned_subscription(user, pk)
-    if effective_from < sub.start_date:
+    today = today_dhaka()
+    if effective_from < today:
         raise ValidationFailed(
-            "Effective date cannot be before the plan start date.",
-            fields={"effective_from": ["Effective date cannot be before the plan start date."]},
+            "Effective date cannot be before today.",
+            fields={"effective_from": ["Effective date cannot be before today."]},
         )
     amount = quantize_money(amount)
-    if PriceChange.objects.filter(subscription=sub, effective_from=effective_from).exists():
-        raise ConflictError(
-            "A price change already exists for this date.",
-            code="price_change_exists",
+    if sub.currency == "BDT" and exchange_rate is not None:
+        raise ValidationFailed(
+            "Exchange rate must not be sent for BDT plans.",
+            fields={"exchange_rate": ["Exchange rate must not be sent for BDT plans."]},
         )
-    pc = PriceChange.objects.create(
-        subscription=sub,
-        amount=amount,
-        currency=sub.currency,
-        effective_from=effective_from,
-    )
-    audit_services.log(
+    if sub.currency == "USD" and exchange_rate is not None:
+        rate = _quantize_rate(exchange_rate)
+        ExchangeRate.objects.create(
+            user=user,
+            rate_date=today,
+            usd_to_bdt=rate,
+            source="manual",
+        )
+
+    existing = PriceChange.objects.filter(subscription=sub, effective_from=effective_from).first()
+    created = existing is None
+    if existing:
+        old_amount = existing.amount
+        existing.amount = amount
+        existing.save(update_fields=["amount"])
+        pc = existing
+        old_val = {"amount": str(old_amount), "effective_from": effective_from.isoformat()}
+        new_val = {"amount": str(amount), "effective_from": effective_from.isoformat()}
+    else:
+        pc = PriceChange.objects.create(
+            subscription=sub,
+            amount=amount,
+            currency=sub.currency,
+            effective_from=effective_from,
+        )
+        old_val = None
+        new_val = {
+            "subscription_id": sub.pk,
+            "amount": str(amount),
+            "effective_from": effective_from.isoformat(),
+        }
+
+    _plan_audit(
         user,
         "price_change.created",
         "PriceChange",
         pc.pk,
-        None,
-        {"subscription_id": sub.pk, "amount": str(amount), "effective_from": effective_from.isoformat()},
+        old_val,
+        new_val,
+        sub,
+        f"Price changes from {effective_from.isoformat()}",
+        amount=amount,
     )
-    return pc
+    return pc, created
 
 
 @transaction.atomic
@@ -246,16 +360,21 @@ def pause_subscription(user, pk: int) -> Subscription:
         _invalid_status_change(sub, "pause")
     if sub.status not in (SubscriptionStatus.TRIAL, SubscriptionStatus.ACTIVE):
         _invalid_status_change(sub, "pause")
+    today = today_dhaka()
     old_status = sub.status
     sub.status = SubscriptionStatus.PAUSED
-    sub.save(update_fields=["status"])
-    audit_services.log(
+    sub.paused_on = today
+    void_upcoming_untouched_charges(sub)
+    sub.save(update_fields=["status", "paused_on"])
+    _plan_audit(
         user,
         "plan.paused",
         "Subscription",
         sub.pk,
         {"status": old_status},
         {"status": sub.status},
+        sub,
+        "You paused the plan. No new charges until you resume.",
     )
     # TODO(notifications): notify members that the plan was paused.
     return sub
@@ -266,16 +385,21 @@ def resume_subscription(user, pk: int) -> Subscription:
     sub = _lock_owned_subscription(user, pk)
     if sub.status != SubscriptionStatus.PAUSED:
         _invalid_status_change(sub, "resume")
+    today = today_dhaka()
     old_status = sub.status
+    sub.paused_on = None
+    sub.billing_from = today
     sub.status = _status_for_trial_rule(sub)
-    sub.save(update_fields=["status"])
-    audit_services.log(
+    sub.save(update_fields=["status", "paused_on", "billing_from"])
+    _plan_audit(
         user,
         "plan.resumed",
         "Subscription",
         sub.pk,
         {"status": old_status},
         {"status": sub.status},
+        sub,
+        "You resumed the plan.",
     )
     # TODO(notifications): notify members that the plan was resumed.
     return sub
@@ -292,16 +416,20 @@ def cancel_subscription(user, pk: int) -> Subscription:
         SubscriptionStatus.PAUSED,
     ):
         _invalid_status_change(sub, "cancel")
+    today = today_dhaka()
     old_status = sub.status
     sub.status = SubscriptionStatus.CANCELLED
-    sub.save(update_fields=["status"])
-    audit_services.log(
+    sub.cancelled_on = today
+    sub.save(update_fields=["status", "cancelled_on"])
+    _plan_audit(
         user,
         "plan.cancelled",
         "Subscription",
         sub.pk,
         {"status": old_status},
         {"status": sub.status},
+        sub,
+        "You cancelled the plan.",
     )
     # TODO(notifications): notify members that the plan was cancelled.
     return sub
@@ -334,13 +462,15 @@ def renew_subscription(user, pk: int, *, end_date) -> Subscription:
     sub.end_date = end_date
     sub.status = _status_for_trial_rule(sub)
     sub.save(update_fields=["end_date", "status"])
-    audit_services.log(
+    _plan_audit(
         user,
         "plan.renewed",
         "Subscription",
         sub.pk,
         {"status": old_status, "end_date": old_end},
         {"status": sub.status, "end_date": sub.end_date.isoformat()},
+        sub,
+        f"You renewed the plan until {sub.end_date.isoformat()}",
     )
     # TODO(notifications): notify members that the plan was renewed.
     return sub
