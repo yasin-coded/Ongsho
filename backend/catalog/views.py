@@ -67,3 +67,31 @@ def service_name_list_create(request):
         return _domain_response(exc)
     row = selectors.available_service_names(request.user).filter(pk=row.pk).first()
     return Response(ServiceNameSerializer(row).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["DELETE", "GET", "POST", "PUT", "PATCH"])
+@permission_classes([IsAuthenticated])
+def category_detail(request, pk):
+    if request.method != "DELETE":
+        from core.exceptions import error_response
+
+        return error_response("method_not_allowed", "Method not allowed.", {}, 405)
+    try:
+        services.delete_category(request.user, pk)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["DELETE", "GET", "POST", "PUT", "PATCH"])
+@permission_classes([IsAuthenticated])
+def service_name_detail(request, pk):
+    if request.method != "DELETE":
+        from core.exceptions import error_response
+
+        return error_response("method_not_allowed", "Method not allowed.", {}, 405)
+    try:
+        services.delete_service_name(request.user, pk)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(status=status.HTTP_204_NO_CONTENT)

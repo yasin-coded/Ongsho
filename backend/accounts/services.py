@@ -193,6 +193,8 @@ def revoke_all_tokens(user) -> None:
 
 
 def profile_dict(user) -> dict:
+    from accounts import selectors as account_selectors
+
     return {
         "id": user.pk,
         "email": user.email,
@@ -200,7 +202,56 @@ def profile_dict(user) -> dict:
         "avatar_id": user.avatar_id,
         "email_verified": user.email_verified,
         "pending_email": user.pending_email,
+        "plans_owned": account_selectors.plans_owned_count(user),
+        "plans_joined": account_selectors.plans_joined_count(user),
     }
+
+
+RESEND_EMAIL_CHANGE_COOLDOWN_SECONDS = 60
+_RESEND_EMAIL_CHANGE_CACHE_PREFIX = "accounts:resend-email-change:"
+
+
+def _resend_email_change_cache_key(user_id: int) -> str:
+    return f"{_RESEND_EMAIL_CHANGE_CACHE_PREFIX}{user_id}"
+
+
+def resend_pending_email_change(user) -> None:
+    if not user.pending_email:
+        raise ValidationFailed(
+            "No pending email change.",
+            code="nothing_pending",
+        )
+    cache_key = _resend_email_change_cache_key(user.pk)
+    if cache.get(cache_key):
+        return
+    send_email_change_verification(user, user.pending_email)
+    cache.set(cache_key, True, timeout=RESEND_EMAIL_CHANGE_COOLDOWN_SECONDS)
+
+
+def reminder_settings_dict(user) -> dict:
+    from accounts.validators import parse_reminder_days
+
+    return {
+        "days_before": parse_reminder_days(user.reminder_days),
+        "email": user.email_reminders,
+    }
+
+
+@transaction.atomic
+def update_reminder_settings(user, *, days_before=None, email=None) -> None:
+    from accounts.validators import format_reminder_days
+
+    user = User.objects.select_for_update().get(pk=user.pk)
+    update_fields: list[str] = []
+    if days_before is not None:
+        user.reminder_days = format_reminder_days(days_before)
+        update_fields.append("reminder_days")
+    if email is not None:
+        user.email_reminders = email
+        update_fields.append("email_reminders")
+    if update_fields:
+        user.full_clean()
+        user.save(update_fields=update_fields)
 
 
 @transaction.atomic

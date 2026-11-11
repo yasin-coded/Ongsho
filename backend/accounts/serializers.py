@@ -123,3 +123,22 @@ class EmailChangeRequestSerializer(serializers.Serializer):
 
 class EmailChangeVerifySerializer(serializers.Serializer):
     token = serializers.CharField(trim_whitespace=True)
+
+
+class ReminderSettingsPatchSerializer(serializers.Serializer):
+    days_before = serializers.ListField(
+        child=serializers.IntegerField(min_value=1, max_value=14),
+        required=False,
+        allow_empty=False,
+    )
+    email = serializers.BooleanField(required=False)
+
+    def validate_days_before(self, value):
+        from accounts.validators import validate_reminder_days_value_list
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        try:
+            validate_reminder_days_value_list(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages[0])
+        return value

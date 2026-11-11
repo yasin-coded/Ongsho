@@ -4,9 +4,11 @@ from catalog.models import Category, ServiceName
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    in_use = serializers.BooleanField(read_only=True, default=False)
+
     class Meta:
         model = Category
-        fields = ("id", "name", "is_preset")
+        fields = ("id", "name", "is_preset", "in_use")
         read_only_fields = fields
 
 
@@ -16,10 +18,11 @@ class CategoryCreateSerializer(serializers.Serializer):
 
 class ServiceNameSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
+    in_use = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = ServiceName
-        fields = ("id", "name", "category", "category_name", "is_preset")
+        fields = ("id", "name", "category", "category_name", "is_preset", "in_use")
         read_only_fields = fields
 
 

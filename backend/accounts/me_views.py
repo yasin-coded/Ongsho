@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts import services
+from accounts import selectors, services
 from accounts.cookies import clear_refresh_cookie
 from accounts.serializers import (
     EmailChangeRequestSerializer,
@@ -136,3 +136,24 @@ def me_email_verify(request):
     )
     clear_refresh_cookie(response)
     return response
+
+
+@api_view(["POST", "GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def me_email_resend(request):
+    if request.method != "POST":
+        return _method_not_allowed()
+    try:
+        services.resend_pending_email_change(request.user)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(
+        {"message": "If a pending change exists, a verification email was sent to that address."},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def me_nav_counts(request):
+    return Response(selectors.nav_counts(request.user))
