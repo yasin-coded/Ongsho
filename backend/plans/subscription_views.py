@@ -103,7 +103,8 @@ def subscription_list_create(request):
         paginator = OngshoPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=None)
         data = SubscriptionListSerializer(page, many=True).data
-        return paginator.get_paginated_response(data, extra={"counts": counts})
+        totals = selectors.subscription_list_totals(request.user)
+        return paginator.get_paginated_response(data, extra={"counts": counts, "totals": totals})
     serializer = SubscriptionCreateSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
     try:

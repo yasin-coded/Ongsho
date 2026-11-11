@@ -66,6 +66,12 @@ class SubscriptionDetailSerializer(serializers.ModelSerializer):
     amount_bdt_preview = serializers.CharField(required=False, read_only=True)
     pending_invites = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
+    next_renewal = serializers.SerializerMethodField()
+    ends_on = serializers.DateField(source="cancelled_on", read_only=True)
+    paused_on = serializers.DateField(read_only=True)
+    trial_end_date = serializers.DateField(read_only=True)
+    price_now = serializers.SerializerMethodField()
+    monthly_cost = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
@@ -91,6 +97,11 @@ class SubscriptionDetailSerializer(serializers.ModelSerializer):
             "amount_bdt_preview",
             "pending_invites",
             "member_count",
+            "next_renewal",
+            "ends_on",
+            "paused_on",
+            "price_now",
+            "monthly_cost",
         )
 
     def get_service_name(self, obj):
@@ -134,6 +145,33 @@ class SubscriptionDetailSerializer(serializers.ModelSerializer):
             status__in=(MemberStatus.ACTIVE, MemberStatus.LEAVE_REQUESTED),
         ).count()
 
+    def _price_block(self, obj):
+        cache = getattr(obj, "_price_block_cache", None)
+        if cache is not None:
+            return cache
+        from plans import selectors as plan_selectors
+
+        cache = plan_selectors.price_now_dict(obj)
+        obj._price_block_cache = cache
+        return cache
+
+    def get_next_renewal(self, obj):
+        from plans import selectors as plan_selectors
+
+        return plan_selectors.display_next_renewal(obj)
+
+    def get_price_now(self, obj):
+        data = self._price_block(obj)
+        if data is None:
+            return None
+        return {k: data[k] for k in ("amount", "currency", "rate", "amount_bdt")}
+
+    def get_monthly_cost(self, obj):
+        data = self._price_block(obj)
+        if data is None:
+            return None
+        return data.get("monthly_cost_bdt")
+
 
 class SubscriptionListSerializer(SubscriptionDetailSerializer):
     class Meta(SubscriptionDetailSerializer.Meta):
@@ -163,10 +201,18 @@ class SubscriptionCreateSerializer(serializers.Serializer):
     end_date = serializers.DateField(required=False, allow_null=True)
     recommended_method = serializers.ChoiceField(choices=PaymentMethod.choices)
     rarely_used = serializers.BooleanField(default=False)
+    next_renewal_date = serializers.DateField(required=False, allow_null=True, write_only=True)
     owner = serializers.IntegerField(required=False, write_only=True)
     status = serializers.CharField(required=False, write_only=True)
     anchor_day = serializers.IntegerField(required=False, write_only=True)
     archived_on = serializers.DateTimeField(required=False, write_only=True)
+
+    def validate_next_renewal_date(self, value):
+        if value is None:
+            return value
+        if value <= today_dhaka():
+            return value
+        raise serializers.ValidationError("Next renewal date must be today or earlier.")
 
     def validate_plan_name(self, value):
         trimmed = value.strip()
@@ -261,6 +307,7 @@ class SubscriptionPatchSerializer(serializers.Serializer):
     archived_on = serializers.DateTimeField(required=False)
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     exchange_rate = serializers.DecimalField(max_digits=12, decimal_places=4, required=False)
+    next_renewal_date = serializers.DateField(required=False)
 
     def validate(self, attrs):
         user = self.context["request"].user

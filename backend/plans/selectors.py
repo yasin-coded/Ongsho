@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db.models import DecimalField, Exists, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 
@@ -5,7 +7,10 @@ from catalog.selectors import available_service_names
 from core.dates import today_dhaka
 from core.exceptions import NotFound
 from payments.models import Payment, ReviewStatus
-from plans.models import ExchangeRate, PriceChange, Subscription
+from core.money import quantize_money, to_bdt
+from core.schedule import monthly_equivalent, next_due_date
+from billing.selectors import schedule_for_subscription
+from plans.models import ExchangeRate, PriceChange, Subscription, SubscriptionStatus
 
 
 def owned_subscription(user, pk: int) -> Subscription:
@@ -56,12 +61,18 @@ def owned_subscriptions(user, params: dict):
     earliest_amount = Subquery(
         PriceChange.objects.filter(subscription_id=OuterRef("pk")).order_by("effective_from").values("amount")[:1]
     )
+    latest_rate = Subquery(
+        ExchangeRate.objects.filter(user_id=OuterRef("owner_id"), rate_date__lte=today)
+        .order_by("-rate_date", "-id")
+        .values("usd_to_bdt")[:1]
+    )
     return qs.annotate(
         current_amount=Coalesce(
             current_amount,
             earliest_amount,
             output_field=DecimalField(max_digits=12, decimal_places=2),
-        )
+        ),
+        latest_usd_rate=latest_rate,
     )
 
 
@@ -88,6 +99,71 @@ def service_name_for_user(user, service_name_id: int):
 
 def exchange_rates_for_user(user):
     return ExchangeRate.objects.filter(user=user).order_by("-rate_date", "-id")
+
+
+def _latest_rate(user, today):
+    return (
+        ExchangeRate.objects.filter(user=user, rate_date__lte=today)
+        .order_by("-rate_date", "-id")
+        .first()
+    )
+
+
+def display_next_renewal(sub: Subscription):
+    if sub.status == SubscriptionStatus.TRIAL and sub.trial_end_date:
+        return sub.trial_end_date.isoformat()
+    if sub.status in (
+        SubscriptionStatus.PAUSED,
+        SubscriptionStatus.CANCELLED,
+        SubscriptionStatus.EXPIRED,
+    ):
+        return None
+    today = today_dhaka()
+    nxt = next_due_date(schedule_for_subscription(sub), today)
+    return nxt.isoformat() if nxt else None
+
+
+def price_now_dict(sub: Subscription) -> dict | None:
+    if hasattr(sub, "current_amount"):
+        amount = sub.current_amount
+    else:
+        amount = current_amount_for_subscription(sub)
+    if amount is None:
+        return None
+    rate = None
+    amount_bdt = quantize_money(amount)
+    if sub.currency == "USD":
+        usd_rate = getattr(sub, "latest_usd_rate", None)
+        if usd_rate is None:
+            row = _latest_rate(sub.owner, today_dhaka())
+            if row is None:
+                return None
+            usd_rate = row.usd_to_bdt
+        rate = str(usd_rate)
+        amount_bdt = to_bdt(amount, usd_rate)
+    monthly_bdt = monthly_equivalent(amount_bdt, sub.cycle_unit, sub.cycle_count)
+    return {
+        "amount": str(quantize_money(amount)),
+        "currency": sub.currency,
+        "rate": rate,
+        "amount_bdt": str(amount_bdt),
+        "monthly_cost_bdt": str(monthly_bdt),
+    }
+
+
+def subscription_list_totals(user) -> dict:
+    qs = owned_subscriptions(user, {}).filter(
+        status__in=(SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL),
+    )
+    total = Decimal("0")
+    count = 0
+    for sub in qs:
+        data = price_now_dict(sub)
+        if data is None:
+            continue
+        count += 1
+        total += Decimal(data["monthly_cost_bdt"])
+    return {"count": count, "to_providers": str(quantize_money(total))}
 
 
 def subscription_list_counts(user) -> dict[str, int]:

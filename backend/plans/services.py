@@ -59,14 +59,13 @@ def _plan_audit(
     )
 
 
-def void_upcoming_untouched_charges(subscription: Subscription) -> None:
+def void_untouched_charges_on_or_after(subscription: Subscription, from_date) -> None:
     from billing.models import Charge
     from dues.models import DueStatus
 
-    today = today_dhaka()
     owner_id = subscription.owner_id
     charges = (
-        Charge.objects.filter(subscription=subscription, due_date__gt=today)
+        Charge.objects.filter(subscription=subscription, due_date__gte=from_date)
         .prefetch_related("dues__member__user")
         .order_by("id")
     )
@@ -77,6 +76,28 @@ def void_upcoming_untouched_charges(subscription: Subscription) -> None:
         ):
             continue
         charge.delete()
+
+
+def void_upcoming_untouched_charges(subscription: Subscription) -> None:
+    void_untouched_charges_on_or_after(subscription, today_dhaka() + __import__("datetime").timedelta(days=1))
+
+
+def _schedule_for(sub: Subscription):
+    from billing.selectors import schedule_for_subscription
+
+    return schedule_for_subscription(sub)
+
+
+def _emit_status_changed(sub: Subscription) -> None:
+    from core.signals import plan_status_changed
+
+    plan_status_changed.send(sender=type(sub), plan=sub)
+
+
+def _emit_prices_changed(sub: Subscription) -> None:
+    from core.signals import plan_prices_changed
+
+    plan_prices_changed.send(sender=type(sub), plan=sub)
 
 
 def _invalid_status_change(sub: Subscription, action: str) -> None:
@@ -113,12 +134,42 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
     today = today_dhaka()
     trial_end = validated.get("trial_end_date")
     start_date = validated["start_date"]
+    next_renewal = validated.get("next_renewal_date")
+    if next_renewal is not None:
+        if trial_end or start_date > today:
+            raise ValidationFailed(
+                "Next renewal date is not allowed for future-start or trial plans.",
+                fields={"next_renewal_date": ["Not allowed with a future start date or trial."]},
+            )
+        from core.schedule import Schedule, validate_next_renewal
+
+        draft = Schedule(
+            start_date=start_date,
+            trial_end_date=trial_end,
+            anchor_day=start_date.day,
+            cycle_unit=validated["cycle_unit"],
+            cycle_count=validated["cycle_count"],
+            renewal_type=validated["renewal_type"],
+            end_date=validated.get("end_date"),
+        )
+        if not validate_next_renewal(draft, next_renewal, today):
+            raise ValidationFailed(
+                "Next renewal date does not match the billing schedule.",
+                code="next_renewal_mismatch",
+                fields={"next_renewal_date": ["Next renewal date does not match the billing schedule."]},
+            )
+        billing_from = next_renewal
+        anchor_day = next_renewal.day
+    else:
+        from core.schedule import first_bill_date
+
+        billing_from = first_bill_date(start_date, trial_end)
+        anchor_day = billing_from.day
     status = (
         SubscriptionStatus.TRIAL
         if trial_end and today < trial_end
         else SubscriptionStatus.ACTIVE
     )
-    anchor_source = trial_end if trial_end else start_date
     sub = Subscription.objects.create(
         owner=user,
         service_name=service_name,
@@ -129,7 +180,7 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
         currency=validated["currency"],
         cycle_unit=validated["cycle_unit"],
         cycle_count=validated["cycle_count"],
-        anchor_day=anchor_source.day,
+        anchor_day=anchor_day,
         start_date=start_date,
         trial_end_date=trial_end,
         renewal_type=validated["renewal_type"],
@@ -137,7 +188,7 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
         status=status,
         recommended_method=validated["recommended_method"],
         rarely_used=validated.get("rarely_used", False),
-        billing_from=today,
+        billing_from=billing_from,
     )
     amount = quantize_money(validated["amount"])
     PriceChange.objects.create(
@@ -166,7 +217,43 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
         sub,
         f"You created {sub.plan_name}",
     )
+    _emit_status_changed(sub)
     return sub, amount_bdt_preview
+
+
+@transaction.atomic
+def apply_next_renewal_date(user, pk: int, target) -> Subscription:
+    from core.schedule import validate_next_renewal
+
+    sub = _lock_owned_subscription(user, pk)
+    if sub.status != SubscriptionStatus.ACTIVE:
+        raise ConflictError(
+            "Next renewal date can only be set on active plans.",
+            code="invalid_status_change",
+        )
+    today = today_dhaka()
+    if not validate_next_renewal(_schedule_for(sub), target, today):
+        raise ValidationFailed(
+            "Next renewal date does not match the billing schedule.",
+            code="next_renewal_mismatch",
+            fields={"next_renewal_date": ["Next renewal date does not match the billing schedule."]},
+        )
+    old = {"anchor_day": sub.anchor_day, "billing_from": sub.billing_from.isoformat()}
+    sub.anchor_day = target.day
+    sub.billing_from = target
+    void_untouched_charges_on_or_after(sub, target)
+    sub.save(update_fields=["anchor_day", "billing_from"])
+    _plan_audit(
+        user,
+        "plan.next_renewal",
+        "Subscription",
+        sub.pk,
+        old,
+        {"anchor_day": sub.anchor_day, "billing_from": sub.billing_from.isoformat()},
+        sub,
+        f"You changed the next renewal date to {target.isoformat()}",
+    )
+    return sub
 
 
 @transaction.atomic
@@ -185,6 +272,8 @@ def update_subscription(user, pk: int, validated: dict) -> Subscription:
                 out[k] = val
         return out
 
+    if "next_renewal_date" in validated:
+        return apply_next_renewal_date(user, pk, validated.pop("next_renewal_date"))
     old_snapshot = _snap(validated.keys())
     if "service_name" in validated:
         sn = service_name_for_user(user, validated["service_name"].pk)
@@ -339,6 +428,7 @@ def add_price_change(
             "effective_from": effective_from.isoformat(),
         }
 
+    _emit_prices_changed(sub)
     _plan_audit(
         user,
         "price_change.created",
@@ -366,6 +456,7 @@ def pause_subscription(user, pk: int) -> Subscription:
     sub.paused_on = today
     void_upcoming_untouched_charges(sub)
     sub.save(update_fields=["status", "paused_on"])
+    _emit_status_changed(sub)
     _plan_audit(
         user,
         "plan.paused",
@@ -391,6 +482,7 @@ def resume_subscription(user, pk: int) -> Subscription:
     sub.billing_from = today
     sub.status = _status_for_trial_rule(sub)
     sub.save(update_fields=["status", "paused_on", "billing_from"])
+    _emit_status_changed(sub)
     _plan_audit(
         user,
         "plan.resumed",
@@ -416,11 +508,17 @@ def cancel_subscription(user, pk: int) -> Subscription:
         SubscriptionStatus.PAUSED,
     ):
         _invalid_status_change(sub, "cancel")
+    from core.schedule import next_due_date
+
     today = today_dhaka()
     old_status = sub.status
     sub.status = SubscriptionStatus.CANCELLED
-    sub.cancelled_on = today
+    cancelled_on = next_due_date(_schedule_for(sub), today)
+    sub.cancelled_on = cancelled_on
+    if cancelled_on is not None:
+        void_untouched_charges_on_or_after(sub, cancelled_on)
     sub.save(update_fields=["status", "cancelled_on"])
+    _emit_status_changed(sub)
     _plan_audit(
         user,
         "plan.cancelled",
@@ -462,6 +560,7 @@ def renew_subscription(user, pk: int, *, end_date) -> Subscription:
     sub.end_date = end_date
     sub.status = _status_for_trial_rule(sub)
     sub.save(update_fields=["end_date", "status"])
+    _emit_status_changed(sub)
     _plan_audit(
         user,
         "plan.renewed",

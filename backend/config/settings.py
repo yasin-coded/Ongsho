@@ -49,10 +49,20 @@ def _env_str(name: str) -> str:
     return raw.strip()
 
 
-def _use_direct_database_url() -> bool:
+def _running_pytest() -> bool:
     if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
         return True
     if sys.argv and "pytest" in Path(sys.argv[0]).name:
+        return True
+    return False
+
+
+if _running_pytest():
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+
+def _use_direct_database_url() -> bool:
+    if _running_pytest():
         return True
     management_cmds = {
         "migrate",
@@ -68,6 +78,10 @@ def _use_direct_database_url() -> bool:
 
 
 def _database_config() -> dict:
+    if _running_pytest():
+        test_url = os.environ.get("TEST_DATABASE_URL")
+        if test_url:
+            return dj_database_url.parse(test_url, conn_max_age=0)
     if _use_direct_database_url():
         url_var = "DATABASE_URL"
     else:
@@ -101,7 +115,7 @@ INSTALLED_APPS = [
     "accounts",
     "catalog",
     "plans",
-    "billing",
+    "billing.apps.BillingConfig",
     "sharing",
     "dues",
     "payments",
