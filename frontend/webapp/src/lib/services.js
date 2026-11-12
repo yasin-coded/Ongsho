@@ -29,11 +29,28 @@ export const SERVICES = {
   chatgpt: { name: 'ChatGPT', Logo: ChatgptLogo, color: '#10a37f' },
   cursor: { name: 'Cursor', Logo: CursorLogo, color: '#1a1a1a' },
   google: { name: 'Google One', Logo: GoogleLogo, color: '#4285f4' },
-  prime: { name: 'Amazon Prime', Logo: PrimeLogo, color: '#00a8e1' },
+  prime: {
+    name: 'Amazon Prime Video',
+    aliases: ['Amazon Prime'],
+    Logo: PrimeLogo,
+    color: '#00a8e1',
+  },
   hotstar: { name: 'Disney+ Hotstar', Logo: HotstarLogo, color: '#1f3fbf' },
   canva: { name: 'Canva', Logo: CanvaLogo, color: '#1e88e5' },
 }
 
 export function serviceInfo(key) {
   return SERVICES[key] ?? null
+}
+
+/** Map catalog / API service name to preset `serviceKey` (logo + color). */
+export function lookupServiceKey(name) {
+  const raw = String(name ?? '').trim().toLowerCase()
+  if (!raw) return null
+  for (const [key, spec] of Object.entries(SERVICES)) {
+    const labels = [spec.name, ...(spec.aliases ?? [])].map((n) => n.toLowerCase())
+    if (labels.includes(raw)) return key
+  }
+  if (raw.includes('amazon prime')) return 'prime'
+  return null
 }

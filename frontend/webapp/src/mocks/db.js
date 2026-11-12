@@ -57,7 +57,7 @@ function seed() {
     { id: 's-claude', name: 'Claude', serviceKey: 'claude', categoryId: 'c-ai', ownerId: null },
     { id: 's-cursor', name: 'Cursor', serviceKey: 'cursor', categoryId: 'c-ai', ownerId: null },
     { id: 's-google', name: 'Google One', serviceKey: 'google', categoryId: 'c-software', ownerId: null },
-    { id: 's-prime', name: 'Amazon Prime', serviceKey: 'prime', categoryId: 'c-streaming', ownerId: null },
+    { id: 's-prime', name: 'Amazon Prime Video', serviceKey: 'prime', categoryId: 'c-streaming', ownerId: null },
     { id: 's-hotstar', name: 'Disney+ Hotstar', serviceKey: 'hotstar', categoryId: 'c-streaming', ownerId: null },
     { id: 's-canva', name: 'Canva', serviceKey: 'canva', categoryId: 'c-software', ownerId: null },
     { id: 's-coursera', name: 'Coursera Plus', serviceKey: null, categoryId: 'c-learning', ownerId: ME },

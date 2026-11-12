@@ -1,12 +1,7 @@
-import { SERVICES } from '@/lib/services'
+import { lookupServiceKey } from '@/lib/services'
 import { categoryColor } from '@/lib/colors'
 import { idStr, moneyFromApi, moneyToApi, rateFromApi, rateToApi, paginatedBody } from './common'
 import { avatarColorFromId } from './me'
-
-function serviceKeyFromName(name) {
-  const key = Object.entries(SERVICES).find(([, v]) => v.name.toLowerCase() === String(name ?? '').toLowerCase())?.[0]
-  return key ?? null
-}
 
 function cycleFromApi(unit, count) {
   if (count > 1) return { unit, count }
@@ -74,7 +69,7 @@ export function mapSubscriptionSummary(sub, members = [], meUserId = null) {
     id: idStr(sub.id),
     planName: sub.plan_name,
     serviceName,
-    serviceKey: serviceKeyFromName(serviceName),
+    serviceKey: lookupServiceKey(serviceName),
     mode: sub.plan_mode,
     status: sub.status,
     cycle: cycleFromApi(sub.cycle_unit, sub.cycle_count),

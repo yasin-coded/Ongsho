@@ -1,11 +1,6 @@
-import { SERVICES } from '@/lib/services'
+import { lookupServiceKey } from '@/lib/services'
 import { apiRequest } from '../http'
 import { idStr } from '../adapters/common'
-
-function serviceKeyFromName(name) {
-  const key = Object.entries(SERVICES).find(([, v]) => v.name.toLowerCase() === String(name ?? '').toLowerCase())?.[0]
-  return key ?? null
-}
 
 function mapCategory(row) {
   return {
@@ -23,7 +18,7 @@ function mapServiceName(row, categories) {
   return {
     id: idStr(row.id),
     name: row.name,
-    serviceKey: serviceKeyFromName(row.name),
+    serviceKey: lookupServiceKey(row.name),
     categoryId: categoryId ?? fallbackCategory?.id ?? null,
     ownerId: row.owner ? idStr(row.owner) : null,
     inUse: row.in_use,

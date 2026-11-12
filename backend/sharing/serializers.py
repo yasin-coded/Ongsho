@@ -23,9 +23,8 @@ def invite_row(invite: Invite) -> dict:
     }
 
 
-def member_row(member: Member) -> dict:
-    sub = member.shared_plan.subscription
-    return {
+def member_row(member: Member, *, due_ctx: dict | None = None) -> dict:
+    row = {
         "id": member.pk,
         "user_id": member.user_id,
         "name": member.user.name,
@@ -45,14 +44,17 @@ def member_row(member: Member) -> dict:
         "last_payment": None,
         "pending_payment_id": None,
     }
+    if due_ctx:
+        row.update(due_ctx)
+    return row
 
 
-def member_detail_row(member: Member) -> dict:
-    data = member_row(member)
+def member_detail_row(member: Member, *, due_ctx: dict | None = None, rows: list | None = None) -> dict:
+    data = member_row(member, due_ctx=due_ctx)
     sub = member.shared_plan.subscription
     data["plan_id"] = sub.pk
     data["plan_name"] = sub.plan_name
-    data["rows"] = []
+    data["rows"] = rows if rows is not None else []
     return data
 
 

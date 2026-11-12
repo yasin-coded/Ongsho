@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from accounts.cookies import set_refresh_cookie
 from accounts.serializers import user_public_dict
 from core.dates import today_dhaka
+from dues import selectors as dues_selectors
 from core.exceptions import DomainError
 from sharing import selectors, serializers as sharing_serializers, services
 from sharing.models import SplitType
@@ -244,8 +245,20 @@ def shared_plan_members(request, pk: int):
         return _method_not_allowed()
     shared = selectors.shared_plan_for_owner(request.user, pk)
     include_left = request.query_params.get("include") == "left"
-    members = selectors.members_queryset(shared, include_left=include_left)
-    return Response([sharing_serializers.member_row(m) for m in members])
+    members = list(selectors.members_queryset(shared, include_left=include_left))
+    today = today_dhaka()
+    ctx = dues_selectors.prefetch_member_payment_ctx(shared, members, today)
+    return Response([sharing_serializers.member_row(m, due_ctx=ctx.get(m.pk)) for m in members])
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def member_balance(request, pk: int):
+    try:
+        member = selectors.member_for_owner(request.user, pk)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(dues_selectors.member_balance(member))
 
 
 @api_view(["GET", "PATCH", "POST"])
@@ -254,7 +267,12 @@ def member_detail(request, pk: int):
     if request.method != "GET":
         return _method_not_allowed()
     member = selectors.member_for_owner(request.user, pk)
-    return Response(sharing_serializers.member_detail_row(member))
+    today = today_dhaka()
+    ctx = dues_selectors.prefetch_member_payment_ctx(member.shared_plan, [member], today)
+    rows = dues_selectors.member_history_rows(member)
+    return Response(
+        sharing_serializers.member_detail_row(member, due_ctx=ctx.get(member.pk), rows=rows)
+    )
 
 
 @api_view(["POST", "DELETE"])

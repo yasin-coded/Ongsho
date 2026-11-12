@@ -1,11 +1,6 @@
-import { SERVICES } from '@/lib/services'
+import { lookupServiceKey } from '@/lib/services'
 import { toPaisa } from '@/lib/money'
 import { idStr } from './common'
-
-function serviceKeyFromName(name) {
-  const key = Object.entries(SERVICES).find(([, v]) => v.name.toLowerCase() === String(name ?? '').toLowerCase())?.[0]
-  return key ?? null
-}
 
 export function mapPublicInvite(data, token) {
   return {
@@ -17,7 +12,7 @@ export function mapPublicInvite(data, token) {
     expired: data.expired,
     planId: String(data.plan_id),
     planName: data.plan_name,
-    serviceKey: serviceKeyFromName(data.plan_name),
+    serviceKey: lookupServiceKey(data.plan_name),
     seats: data.seats,
     from: data.from,
     share: data.share ? toPaisa(data.share) : 0,

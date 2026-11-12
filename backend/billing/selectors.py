@@ -157,16 +157,18 @@ def _member_schedule_events(
         to_date = min(to_date, member.left_on)
     prices = list(PriceChange.objects.filter(subscription=sub).order_by("effective_from", "id"))
     dates = due_dates_between(schedule, member.joined_on, to_date)
-    dues_by_charge_date = {}
+    from dues.selectors import calendar_member_amount
+
+    dues_by_period = {}
     for due in Due.objects.filter(member=member).select_related("charge"):
-        dues_by_charge_date[due.charge.due_date] = due
+        dues_by_period[due.charge.period_start] = due
     out: list[dict] = []
     for due in dates:
         if due < from_date or due > to_date:
             continue
         if due < range_start or due > range_end:
             continue
-        row = dues_by_charge_date.get(due)
+        amount, status = calendar_member_amount(member, due, prices, dues_by_period)
         out.append(
             {
                 "id": f"m-{member.pk}-{due.isoformat()}",
@@ -175,8 +177,8 @@ def _member_schedule_events(
                 "plan_name": sub.plan_name,
                 "role": "member",
                 "kind": "due",
-                "amount": str(row.amount_bdt) if row else None,
-                "status": row.status if row else "due",
+                "amount": amount,
+                "status": status,
             }
         )
     return out
