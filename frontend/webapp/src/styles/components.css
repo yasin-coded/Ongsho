@@ -8,6 +8,59 @@
   .t-mid { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem); line-height: 1.05; font-variant-numeric: tabular-nums; }
   .t-meta { font-size: 0.875rem; line-height: 1.45; }
   .t-label { font-weight: 700; font-size: 0.95rem; }
+
+  .catalog-panel__title {
+    font-size: 1.2375rem;
+    line-height: 1.2;
+  }
+  .catalog-panel__body {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 0.75rem;
+  }
+  .catalog-panel__add {
+    margin-top: 1.25rem;
+  }
+  .catalog-built-in {
+    display: grid;
+    gap: 0.125rem;
+  }
+  .catalog-built-in__toggle {
+    margin-top: -0.2rem;
+  }
+  .catalog-built-in--expanded {
+    gap: 0.65rem;
+  }
+  .catalog-built-in--expanded .catalog-built-in__toggle {
+    margin-top: 0;
+  }
+  .catalog-built-in__wrap {
+    position: relative;
+    overflow: hidden;
+    max-height: 9rem;
+    transition: max-height 0.45s cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  .catalog-built-in__wrap--expanded {
+    max-height: var(--built-in-height, 80rem);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .catalog-built-in__wrap {
+      transition: none;
+    }
+  }
+  .catalog-built-in__list {
+    align-content: flex-start;
+  }
+  .catalog-built-in__fade {
+    position: absolute;
+    inset: auto 0 0;
+    height: 3.25rem;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgb(255 255 255 / 0) 0%, rgb(255 255 255 / 0.55) 35%, rgb(255 255 255 / 0.95) 72%, #fff 100%);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
+  }
   .t-muted { color: var(--color-muted); }
   .t-num { font-variant-numeric: tabular-nums; }
   .t-measure { max-width: 65ch; }

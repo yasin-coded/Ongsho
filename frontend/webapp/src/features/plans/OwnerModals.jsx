@@ -2,9 +2,20 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowRightLeft, Check, Mail, Trash2, UserPlus, X } from 'lucide-react'
 import * as plans from '@/api/plans'
-import { MOCK_TODAY, fmtShort } from '@/lib/dates'
+import { todayDhaka, fmtShort } from '@/lib/dates'
 import { formatBDT, formatRate, formatUSD, parseTaka, splitExact } from '@/lib/money'
+import {
+  validateAmount,
+  validateDateNotBeforeToday,
+  validateEmail,
+  validateLeaveDate,
+  validateMemberId,
+  validateRate,
+  validateRequiredPassword,
+} from '@/lib/validation'
 import { useAction } from '@/hooks/useAction'
+import { useValidatedAction } from '@/hooks/useValidatedAction'
+import { focusFirstInvalid } from '@/lib/formFocus'
 import { Button } from '@/components/ui/Button'
 import { Input, PasswordInput, Select } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
@@ -57,18 +68,39 @@ export function ConfirmModal({ title, body, confirmLabel, variant = 'accept', ic
 }
 
 export function RenewModal({ plan, onClose }) {
+  const today = todayDhaka()
   const [endDate, setEndDate] = useState(plan.endDate ?? '')
-  const act = useAction(() => plans.renewPlan(plan.id, { endDate }), { onSuccess: onClose, toastMessage: 'Renewed. New charges follow the same rules.' })
+  const act = useValidatedAction(() => plans.renewPlan(plan.id, { endDate }), {
+    validate: () => {
+      const fields = {}
+      if (!endDate) fields.endDate = 'Pick the new end date.'
+      else if (plan.startDate && endDate <= plan.startDate) fields.endDate = 'The end date must be after the start date.'
+      else {
+        const nb = validateDateNotBeforeToday(endDate, 'End date')
+        if (nb) fields.endDate = nb
+      }
+      return fields
+    },
+    knownFieldKeys: ['endDate'],
+    onSuccess: onClose,
+    toastMessage: 'Renewed. New charges follow the same rules.',
+  })
   return (
     <FormModal title="Renew this plan" subtitle="Fixed-term plans stop at their end date. Pick the new one." onClose={onClose} onSubmit={() => act.run()} submit={<Button type="submit" variant="accept" icon={Check} busy={act.busy}>Renew</Button>}>
-      <Input label="New end date" type="date" min={MOCK_TODAY} value={endDate} onChange={(e) => setEndDate(e.target.value)} error={act.fields.endDate} />
+      <Input label="New end date" type="date" min={today} value={endDate} onChange={(e) => setEndDate(e.target.value)} error={act.fields.endDate} />
+      {act.formAlert && (
+        <p role="alert" className="field__error">
+          {act.formAlert}
+        </p>
+      )}
     </FormModal>
   )
 }
 
 /** Approve a leave request, or remove a member (same fields). */
 export function LeaveModal({ plan, member, mode = 'leave', onClose }) {
-  const [leaveDate, setLeaveDate] = useState(MOCK_TODAY)
+  const [leaveDate, setLeaveDate] = useState(todayDhaka())
+  const [leaveError, setLeaveError] = useState(null)
   const [unpaid, setUnpaid] = useState('keep')
   const approve = useAction(() => plans.decideLeave(member.id, { approve: true, leaveDate, unpaid }), {
     onSuccess: onClose,
@@ -95,14 +127,28 @@ export function LeaveModal({ plan, member, mode = 'leave', onClose }) {
               Cancel
             </Button>
           )}
-          <Button variant={mode === 'remove' ? 'reject' : 'accept'} icon={Check} busy={approve.busy} onClick={() => approve.run()}>
+          <Button
+            variant={mode === 'remove' ? 'reject' : 'accept'}
+            icon={Check}
+            busy={approve.busy}
+            onClick={() => {
+              const err = validateLeaveDate(leaveDate)
+              if (err) {
+                setLeaveError(err)
+                focusFirstInvalid()
+                return
+              }
+              setLeaveError(null)
+              approve.run()
+            }}
+          >
             {mode === 'remove' ? 'Remove' : 'Approve'}
           </Button>
         </>
       }
     >
       <div className="grid gap-5">
-        <Input label="Leave date" type="date" min={MOCK_TODAY} value={leaveDate} onChange={(e) => setLeaveDate(e.target.value)} help="No new dues are created for them from this date." />
+        <Input label="Leave date" type="date" min={todayDhaka()} value={leaveDate} onChange={(e) => setLeaveDate(e.target.value)} onBlur={() => setLeaveError(validateLeaveDate(leaveDate))} error={leaveError ?? approve.fields.leaveDate} help="No new dues are created for them from this date." />
         <fieldset className="grid gap-2">
           <legend className="field__label mb-2">Their unpaid dues</legend>
           {[
@@ -132,17 +178,38 @@ export function LeaveModal({ plan, member, mode = 'leave', onClose }) {
 
 export function ReplaceModal({ member, onClose }) {
   const [email, setEmail] = useState('')
-  const act = useAction(() => plans.replaceMember(member.id, { email }), { onSuccess: onClose, toastMessage: `Invite sent. ${member.firstName} leaves when the new person joins.` })
+  const act = useValidatedAction(() => plans.replaceMember(member.id, { email }), {
+    validate: () => {
+      const em = validateEmail(email)
+      return em ? { email: em } : {}
+    },
+    knownFieldKeys: ['email'],
+    onSuccess: onClose,
+    toastMessage: `Invite sent. ${member.firstName} leaves when the new person joins.`,
+  })
   return (
     <FormModal title={`Replace ${member.firstName}`} subtitle="Nobody else's share changes." onClose={onClose} onSubmit={() => act.run()} submit={<Button type="submit" variant="accept" icon={Mail} busy={act.busy}>Send invite</Button>}>
-      <Input label="Email of the new person" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={act.fields.email} />
+      <Input label="Email of the new person" type="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} error={act.fields.email} />
+      {act.formAlert && (
+        <p role="alert" className="field__error">
+          {act.formAlert}
+        </p>
+      )}
     </FormModal>
   )
 }
 
 export function InviteModal({ plan, onClose }) {
   const [email, setEmail] = useState('')
-  const act = useAction(() => plans.createInvite(plan.id, { email }), { onSuccess: onClose, toastMessage: (inv) => `Invite sent to ${inv.email}. It expires on ${fmtShort(inv.expiresOn)}.` })
+  const act = useValidatedAction(() => plans.createInvite(plan.id, { email }), {
+    validate: () => {
+      const em = validateEmail(email)
+      return em ? { email: em } : {}
+    },
+    knownFieldKeys: ['email'],
+    onSuccess: onClose,
+    toastMessage: (inv) => `Invite sent to ${inv.email}. It expires on ${fmtShort(inv.expiresOn)}.`,
+  })
   return (
     <FormModal
       title="Invite by email"
@@ -151,7 +218,12 @@ export function InviteModal({ plan, onClose }) {
       onSubmit={() => act.run()}
       submit={<Button type="submit" variant="primary-orange" icon={UserPlus} busy={act.busy}>Send invite</Button>}
     >
-      <Input label="Email" type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} error={act.fields.email} help="People who do not have an Ongsho account get a sign-up page from the invite." />
+      <Input label="Email" type="email" autoComplete="off" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} error={act.fields.email} help="People who do not have an Ongsho account get a sign-up page from the invite." />
+      {act.formAlert && (
+        <p role="alert" className="field__error">
+          {act.formAlert}
+        </p>
+      )}
     </FormModal>
   )
 }
@@ -160,14 +232,32 @@ export function TransferModal({ plan, onClose }) {
   const candidates = plan.members.filter((m) => !m.isOwnerSeat && m.status !== 'left')
   const [memberId, setMemberId] = useState('')
   const [password, setPassword] = useState('')
-  const act = useAction(() => plans.startTransfer(plan.id, { memberId, password }), { onSuccess: onClose, tone: 'pending', toastMessage: 'Request sent. Nothing changes until they accept.' })
+  const act = useValidatedAction(() => plans.startTransfer(plan.id, { memberId, password }), {
+    validate: () => {
+      const fields = {}
+      const mid = validateMemberId(memberId)
+      if (mid) fields.memberId = mid
+      const pw = validateRequiredPassword(password)
+      if (pw) fields.password = pw
+      return fields
+    },
+    knownFieldKeys: ['memberId', 'password'],
+    onSuccess: onClose,
+    tone: 'pending',
+    toastMessage: 'Request sent. Nothing changes until they accept.',
+  })
   return (
     <FormModal title="Transfer ownership" subtitle="The new owner must accept. Until then nothing changes." onClose={onClose} onSubmit={() => act.run()} submit={<Button type="submit" variant="accept" icon={ArrowRightLeft} busy={act.busy} disabled={!candidates.length}>Send request</Button>}>
       {candidates.length ? (
         <>
           <Select label="New owner" value={memberId} placeholder="Pick a member" onChange={(e) => setMemberId(e.target.value)} options={candidates.map((m) => ({ value: m.id, label: m.name }))} error={act.fields.memberId} />
-          <PasswordInput label="Your password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} error={act.fields.password} />
+          <PasswordInput label="Your password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} error={act.fields.password} />
           <p className="t-meta">You become a member with a seat, and all history stays with the plan.</p>
+          {act.formAlert && (
+            <p role="alert" className="field__error">
+              {act.formAlert}
+            </p>
+          )}
         </>
       ) : (
         <p>Nobody else is in this plan yet. Invite someone first.</p>
@@ -179,7 +269,12 @@ export function TransferModal({ plan, onClose }) {
 export function DeletePlanModal({ plan, onClose }) {
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
-  const act = useAction(() => plans.deletePlan(plan.id, { password }), {
+  const act = useValidatedAction(() => plans.deletePlan(plan.id, { password }), {
+    validate: () => {
+      const pw = validateRequiredPassword(password)
+      return pw ? { password: pw } : {}
+    },
+    knownFieldKeys: ['password'],
     tone: 'due',
     toastMessage: (r) => (r.archived ? `${plan.planName} is archived. Members are told, and confirmed payments stay on record.` : `${plan.planName} is deleted. Members are told.`),
     onSuccess: () => navigate('/app/plans', { replace: true }),
@@ -193,20 +288,45 @@ export function DeletePlanModal({ plan, onClose }) {
       submit={<Button type="submit" variant="reject" icon={Trash2} busy={act.busy}>Delete plan</Button>}
     >
       <p>Archived plans are hidden everywhere but keep their payment history for statements. A plan with no confirmed member payments is erased.</p>
-      <PasswordInput label="Your password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} error={act.fields.password} />
+      <PasswordInput label="Your password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} error={act.fields.password} />
+      {act.formAlert && (
+        <p role="alert" className="field__error">
+          {act.formAlert}
+        </p>
+      )}
     </FormModal>
   )
 }
 
 export function PriceChangeModal({ plan, onClose }) {
   const usd = plan.currency === 'USD'
-  const [form, setForm] = useState({ amount: '', usd: '', rate: usd ? String(plan.price.rate / 100) : '', effectiveFrom: plan.nextRenewal ?? MOCK_TODAY })
+  const today = todayDhaka()
+  const [form, setForm] = useState({ amount: '', usd: '', rate: usd ? String(plan.price.rate / 100) : '', effectiveFrom: plan.nextRenewal ?? today })
   const amountPaisa = parseTaka(form.amount)
   const usdCents = parseTaka(form.usd)
   const ratePaisa = parseTaka(form.rate)
-  const act = useAction(
+  const act = useValidatedAction(
     () => plans.addPriceChange(plan.id, usd ? { usd: (usdCents ?? 0) / 100, rate: (ratePaisa ?? 0) / 100, effectiveFrom: form.effectiveFrom } : { amount: (amountPaisa ?? 0) / 100, effectiveFrom: form.effectiveFrom }),
-    { onSuccess: onClose, toastMessage: `Price change saved. Charges from ${fmtShort(form.effectiveFrom)} use it; older ones keep the old price.` },
+    {
+      validate: () => {
+        const fields = {}
+        if (usd) {
+          const u = validateAmount(form.usd)
+          if (u) fields.usd = u
+          const r = validateRate(form.rate)
+          if (r) fields.rate = r
+        } else {
+          const a = validateAmount(form.amount)
+          if (a) fields.amount = a
+        }
+        const eff = validateDateNotBeforeToday(form.effectiveFrom, 'Effective date')
+        if (eff) fields.effectiveFrom = eff
+        return fields
+      },
+      knownFieldKeys: ['amount', 'usd', 'rate', 'effectiveFrom'],
+      onSuccess: onClose,
+      toastMessage: `Price change saved. Charges from ${fmtShort(form.effectiveFrom)} use it; older ones keep the old price.`,
+    },
   )
   return (
     <FormModal title="Add a price change" subtitle="Charges before the date keep the old price." onClose={onClose} onSubmit={() => act.run()} submit={<Button type="submit" variant="accept" icon={Check} busy={act.busy}>Save change</Button>}>
@@ -223,7 +343,12 @@ export function PriceChangeModal({ plan, onClose }) {
       ) : (
         <Input label="New price (৳)" inputMode="decimal" numeric value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} error={act.fields.amount} />
       )}
-      <Input label="Starts from" type="date" min={MOCK_TODAY} value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} error={act.fields.effectiveFrom} />
+      <Input label="Starts from" type="date" min={today} value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} error={act.fields.effectiveFrom} />
+      {act.formAlert && (
+        <p role="alert" className="field__error">
+          {act.formAlert}
+        </p>
+      )}
     </FormModal>
   )
 }
@@ -231,7 +356,15 @@ export function PriceChangeModal({ plan, onClose }) {
 export function EditRateModal({ charge, onClose }) {
   const [rate, setRate] = useState(String(charge.rate / 100))
   const ratePaisa = parseTaka(rate)
-  const act = useAction(() => plans.correctRate(charge.id, { rate: (ratePaisa ?? 0) / 100 }), { onSuccess: onClose, toastMessage: 'Rate corrected. The shares were recalculated.' })
+  const act = useValidatedAction(() => plans.correctRate(charge.id, { rate: (ratePaisa ?? 0) / 100 }), {
+    validate: () => {
+      const r = validateRate(rate)
+      return r ? { rate: r } : {}
+    },
+    knownFieldKeys: ['rate'],
+    onSuccess: onClose,
+    toastMessage: 'Rate corrected. The shares were recalculated.',
+  })
   return (
     <FormModal title={`Edit rate for ${charge.monthLabel}`} subtitle="Use the rate your card was actually charged. Possible until a member sends a payment." onClose={onClose} onSubmit={() => act.run()} submit={<Button type="submit" variant="accept" icon={Check} busy={act.busy}>Save rate</Button>}>
       <Input label="Rate (৳ for $1)" inputMode="decimal" numeric value={rate} onChange={(e) => setRate(e.target.value)} error={act.fields.rate} />

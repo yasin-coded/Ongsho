@@ -1,47 +1,50 @@
 from django.core.exceptions import ValidationError
 
+ALLOWED_REMINDER_DAYS = frozenset({0, 1, 3, 7})
+
 
 def validate_reminder_days(value: str) -> None:
-    if value is None or value == "":
-        raise ValidationError("Reminder days cannot be empty.")
+    if value is None:
+        raise ValidationError("Reminder days cannot be null.")
+    if value.strip() == "":
+        return
     parts = [p.strip() for p in value.split(",") if p.strip()]
-    if not parts:
-        raise ValidationError("Enter at least one reminder day.")
-    if len(parts) > 3:
-        raise ValidationError("At most three reminder days.")
     seen: set[int] = set()
     for part in parts:
-        if not part.isdigit():
-            raise ValidationError("Each reminder day must be a whole number.")
-        day = int(part)
-        if day < 1 or day > 14:
-            raise ValidationError("Each reminder day must be between 1 and 14.")
+        try:
+            day = int(part)
+        except ValueError:
+            raise ValidationError("Each reminder day must be one of 0, 1, 3, or 7.")
+        if day not in ALLOWED_REMINDER_DAYS:
+            raise ValidationError("Each reminder day must be one of 0, 1, 3, or 7.")
         if day in seen:
             raise ValidationError("Reminder days must not repeat.")
         seen.add(day)
 
 
 def parse_reminder_days(value: str) -> list[int]:
+    if value is None or value.strip() == "":
+        return []
     validate_reminder_days(value)
     return sorted((int(p.strip()) for p in value.split(",") if p.strip()), reverse=True)
 
 
 def format_reminder_days(days: list[int]) -> str:
     validate_reminder_days_value_list(days)
-    return ",".join(str(d) for d in days)
+    if not days:
+        return ""
+    return ",".join(str(d) for d in sorted(days, reverse=True))
 
 
-def validate_reminder_days_value_list(days: list) -> None:
-    if not isinstance(days, list) or not days:
-        raise ValidationError("Enter at least one reminder day.")
-    if len(days) > 3:
-        raise ValidationError("At most three reminder days.")
+def validate_reminder_days_value_list(days) -> None:
+    if not isinstance(days, list):
+        raise ValidationError("days_before must be a list.")
     seen: set[int] = set()
     for day in days:
         if not isinstance(day, int) or isinstance(day, bool):
-            raise ValidationError("Each reminder day must be a whole number.")
-        if day < 1 or day > 14:
-            raise ValidationError("Each reminder day must be between 1 and 14.")
+            raise ValidationError("Each reminder day must be one of 0, 1, 3, or 7.")
+        if day not in ALLOWED_REMINDER_DAYS:
+            raise ValidationError("Each reminder day must be one of 0, 1, 3, or 7.")
         if day in seen:
             raise ValidationError("Reminder days must not repeat.")
         seen.add(day)

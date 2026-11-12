@@ -1,5 +1,6 @@
-// Mock transport. Every API module resolves through here so swapping in axios later
-// changes this file only, never a component.
+// Mock transport. Live calls use src/api/http.js instead.
+
+import { ApiError } from './errors'
 
 const initialMode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('mock') : null
 
@@ -9,14 +10,7 @@ export function mockMode() {
   return new URLSearchParams(window.location.search).get('mock') ?? initialMode
 }
 
-export class ApiError extends Error {
-  constructor(message, { status = 400, fields = {} } = {}) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.fields = fields
-  }
-}
+export { ApiError } from './errors'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const latency = () => (mockMode() === 'slow' ? 2600 : 300 + Math.floor(Math.random() * 300))

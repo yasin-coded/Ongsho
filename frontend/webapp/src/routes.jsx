@@ -1,5 +1,6 @@
-import { createBrowserRouter } from 'react-router'
-import { RequireAuth } from '@/auth/AuthProvider'
+import { createBrowserRouter, Outlet } from 'react-router'
+import { AuthProvider, GuestOnly, RequireAuth } from '@/auth/AuthProvider'
+import { HttpProvider } from '@/providers/HttpProvider'
 import { AppShell } from '@/components/layout/AppShell'
 import { LandingPage } from '@/features/landing/LandingPage'
 import { LoginPage, RegisterPage, VerifyEmailPage, ResetPasswordPage } from '@/features/auth/AuthPages'
@@ -17,10 +18,23 @@ import { ProfilePage } from '@/features/profile/ProfilePage'
 import { KitPage } from '@/features/kit/KitPage'
 import { NotFoundPage } from '@/features/NotFoundPage'
 
+function AppRoot() {
+  return (
+    <AuthProvider>
+      <HttpProvider>
+        <Outlet />
+      </HttpProvider>
+    </AuthProvider>
+  )
+}
+
 export const router = createBrowserRouter([
+  {
+    element: <AppRoot />,
+    children: [
   { path: '/', element: <LandingPage /> },
-  { path: '/login', element: <LoginPage /> },
-  { path: '/register', element: <RegisterPage /> },
+  { path: '/login', element: <GuestOnly><LoginPage /></GuestOnly> },
+  { path: '/register', element: <GuestOnly><RegisterPage /></GuestOnly> },
   { path: '/verify-email', element: <VerifyEmailPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/invite/:token', element: <InvitePage /> },
@@ -48,4 +62,6 @@ export const router = createBrowserRouter([
     ],
   },
   { path: '*', element: <NotFoundPage /> },
+    ],
+  },
 ])

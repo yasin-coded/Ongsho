@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { getCalendar } from '@/api/dashboard'
 import { SERVICES } from '@/lib/services'
 import { CUSTOM_PALETTE, hashIndex } from '@/lib/colors'
-import { MOCK_TODAY, addDays, addMonthsToKey, dayOfMonth, fmtFull, fmtMonthYearLong, monthKey, weekday, weekdayName } from '@/lib/dates'
+import { addDays, addMonthsToKey, dayOfMonth, fmtFull, fmtMonthYearLong, monthKey, todayDhaka, weekday, weekdayName } from '@/lib/dates'
 import { formatBDT } from '@/lib/money'
 import { TopBar } from '@/components/layout/TopBar'
 import { Box, BoxHead, cx } from '@/components/ui/Box'
@@ -51,8 +51,8 @@ function useWideCells(ref) {
   return wide
 }
 
-function DayCell({ date, inMonth, events, selected, wide, onSelect, focusRef }) {
-  const isToday = date === MOCK_TODAY
+function DayCell({ date, today, inMonth, events, selected, wide, onSelect, focusRef }) {
+  const isToday = date === today
   const shown = events.slice(0, 3)
   const extra = events.length - shown.length
   const label = `${WEEK_LONG[weekday(date)]}, ${fmtFull(date)}${isToday ? ', today' : ''}. ${events.length ? events.map((e) => `${e.planName} ${eventWord(e)}`).join(', ') : 'Nothing on this day'}.`
@@ -97,8 +97,9 @@ function DayCell({ date, inMonth, events, selected, wide, onSelect, focusRef }) 
 }
 
 export function CalendarPage() {
-  const [key, setKey] = useState(monthKey(MOCK_TODAY))
-  const [selected, setSelected] = useState(MOCK_TODAY)
+  const today = todayDhaka()
+  const [key, setKey] = useState(() => monthKey(todayDhaka()))
+  const [selected, setSelected] = useState(() => todayDhaka())
   const query = useQuery({ queryKey: ['calendar', key], queryFn: () => getCalendar(key), placeholderData: keepPreviousData })
   const tableRef = useRef(null)
   const focusRef = useRef(null)
@@ -142,7 +143,7 @@ export function CalendarPage() {
   const changeMonth = (n) => {
     const next = addMonthsToKey(key, n)
     setKey(next)
-    setSelected(monthKey(MOCK_TODAY) === next ? MOCK_TODAY : `${next}-01`)
+    setSelected(monthKey(today) === next ? today : `${next}-01`)
   }
 
   const dayEvents = monthKey(selected) === key ? byDay.get(selected) ?? [] : []
@@ -160,7 +161,7 @@ export function CalendarPage() {
               <button type="button" className="icon-btn" onClick={() => changeMonth(-1)} aria-label="Previous month">
                 <ChevronLeft aria-hidden="true" className="size-5" />
               </button>
-              <Button variant="yellow" size="sm" onClick={() => select(MOCK_TODAY)}>
+              <Button variant="yellow" size="sm" onClick={() => select(today)}>
                 Today
               </Button>
               <button type="button" className="icon-btn" onClick={() => changeMonth(1)} aria-label="Next month">
@@ -185,7 +186,7 @@ export function CalendarPage() {
                 {weeks.map((week) => (
                   <tr key={week[0]}>
                     {week.map((date) => (
-                      <DayCell key={date} date={date} inMonth={monthKey(date) === key} events={monthKey(date) === key ? byDay.get(date) ?? [] : []} selected={date === selected} wide={wide} onSelect={(d) => select(d)} focusRef={focusRef} />
+                      <DayCell key={date} date={date} today={today} inMonth={monthKey(date) === key} events={monthKey(date) === key ? byDay.get(date) ?? [] : []} selected={date === selected} wide={wide} onSelect={(d) => select(d)} focusRef={focusRef} />
                     ))}
                   </tr>
                 ))}

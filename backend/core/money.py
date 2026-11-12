@@ -10,3 +10,12 @@ def quantize_money(value: Decimal) -> Decimal:
 
 def to_bdt(amount: Decimal, rate: Decimal) -> Decimal:
     return quantize_money(Decimal(amount) * Decimal(rate))
+
+
+def format_bdt(value: Decimal) -> str:
+    """Format a BDT amount as ৳1,200.00 (Unicode minus for negatives)."""
+    amount = quantize_money(Decimal(value))
+    if amount < 0:
+        body = f"{abs(amount):,.2f}"
+        return f"৳−{body}"
+    return f"৳{amount:,.2f}"

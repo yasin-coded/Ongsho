@@ -37,7 +37,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     email_reminders = models.BooleanField(default=True)
-    reminder_days = models.CharField(max_length=20, default="7,1")
+    reminder_days = models.CharField(max_length=20, default="7,1", blank=True)
 
     objects = UserManager()
 

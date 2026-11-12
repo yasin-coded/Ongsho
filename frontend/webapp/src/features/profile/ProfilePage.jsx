@@ -1,5 +1,15 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { focusFirstInvalid } from '@/lib/formFocus'
+import {
+  validateCategoryName,
+  validateEmail,
+  validateName,
+  validatePassword,
+  validatePasswordRepeat,
+  validateRequiredPassword,
+  validateServiceName,
+} from '@/lib/validation'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Lock, LogOut, Plus, X } from 'lucide-react'
 import * as accounts from '@/api/accounts'
@@ -53,6 +63,7 @@ function AvatarPicker({ me }) {
 
 function ChangeEmailModal({ email, onClose }) {
   const [password, setPassword] = useState('')
+  const [clientFields, setClientFields] = useState({})
   const act = useAction(() => accounts.changeEmail({ email, password }), { onSuccess: onClose, tone: 'pending', toastMessage: `We sent a link to ${email}. Open it to confirm.` })
   return (
     <Modal open onClose={onClose} title="Change your email?" subtitle={`To ${email}. Enter your current password to continue.`}>
@@ -61,10 +72,17 @@ function ChangeEmailModal({ email, onClose }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
+          const pw = validateRequiredPassword(password)
+          if (pw) {
+            setClientFields({ password: pw })
+            focusFirstInvalid()
+            return
+          }
+          setClientFields({})
           act.run()
         }}
       >
-        <PasswordInput label="Current password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} error={act.fields.password ?? act.fields.email} />
+        <PasswordInput label="Current password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} error={clientFields.password ?? act.fields.password ?? act.fields.email} />
         <div className="row justify-end">
           <Button variant="ghost" onClick={onClose}>
             Cancel
@@ -82,6 +100,7 @@ function AccountDetails({ me }) {
   const [name, setName] = useState(me.name)
   const [email, setEmail] = useState(me.email)
   const [confirming, setConfirming] = useState(false)
+  const [clientFields, setClientFields] = useState({})
   const saveName = useAction(() => accounts.updateMe({ name }), { toastMessage: 'Name saved.' })
   const resend = useAction(accounts.resendEmailChange, { toastMessage: `Sent again to ${me.pendingEmail}.` })
   const cancel = useAction(accounts.cancelEmailChange, { toastMessage: 'Email change cancelled. Nothing changed.', tone: 'waived' })
@@ -95,12 +114,60 @@ function AccountDetails({ me }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
+          const fields = {}
+          const nm = validateName(name)
+          if (nm) fields.name = nm
+          if (emailChanged) {
+            const em = validateEmail(email)
+            if (em) fields.email = em
+          }
+          if (Object.keys(fields).length) {
+            setClientFields(fields)
+            focusFirstInvalid()
+            return
+          }
+          setClientFields({})
           if (name.trim() !== me.name) saveName.run()
           if (emailChanged) setConfirming(true)
         }}
       >
-        <Input label="Name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} error={saveName.fields.name} />
-        <Input label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} help="Changing it asks for your current password." />
+        <Input
+          label="Name"
+          autoComplete="name"
+          maxLength={255}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => {
+            const nm = validateName(name)
+            setClientFields((p) => {
+              const next = { ...p }
+              if (nm) next.name = nm
+              else delete next.name
+              return next
+            })
+          }}
+          error={clientFields.name ?? saveName.fields.name}
+        />
+        <Input
+          label="Email"
+          type="email"
+          autoComplete="email"
+          maxLength={254}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onBlur={() => {
+            if (!emailChanged) return
+            const em = validateEmail(email)
+            setClientFields((p) => {
+              const next = { ...p }
+              if (em) next.email = em
+              else delete next.email
+              return next
+            })
+          }}
+          error={clientFields.email ?? saveName.fields.email}
+          help="Changing it asks for your current password."
+        />
         {me.pendingEmail && (
           <div className="neo-box neo-box--flat grid gap-3 !bg-[#fff200] !p-4" role="status">
             <p className="font-bold">Waiting to verify {me.pendingEmail}</p>
@@ -127,9 +194,26 @@ function AccountDetails({ me }) {
 }
 
 function PasswordCard() {
+  const navigate = useNavigate()
+  const { logout } = useAuth()
   const empty = { oldPassword: '', newPassword: '', repeat: '' }
   const [form, setForm] = useState(empty)
-  const act = useAction(() => accounts.changePassword(form), { toastMessage: 'Password changed. Other sessions were signed out.', onSuccess: () => setForm(empty) })
+  const [clientFields, setClientFields] = useState({})
+  const act = useAction(() => accounts.changePassword(form), {
+    invalidate: ['me'],
+    onSuccess: async (data) => {
+      setForm(empty)
+      if (data?.revoked) {
+        try {
+          sessionStorage.setItem('ongsho:authMessage', 'Password updated. Sign in with your new password.')
+        } catch {
+          /* ignore */
+        }
+        await logout()
+        navigate('/login', { replace: true, state: { from: '/app/profile' } })
+      }
+    },
+  })
   return (
     <Box>
       <BoxHead title="Password" />
@@ -138,14 +222,26 @@ function PasswordCard() {
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
+          const fields = {}
+          if (!form.oldPassword) fields.oldPassword = 'Enter your current password.'
+          const np = validatePassword(form.newPassword)
+          if (np) fields.newPassword = np
+          const rp = validatePasswordRepeat(form.newPassword, form.repeat)
+          if (rp) fields.repeat = rp
+          if (Object.keys(fields).length) {
+            setClientFields(fields)
+            focusFirstInvalid()
+            return
+          }
+          setClientFields({})
           act.run()
         }}
       >
-        <PasswordInput label="Old password" autoComplete="current-password" value={form.oldPassword} onChange={(e) => setForm({ ...form, oldPassword: e.target.value })} error={act.fields.oldPassword} />
-        <PasswordInput label="New password" autoComplete="new-password" value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} error={act.fields.newPassword} help="At least 8 characters, with a letter." />
-        <PasswordInput label="New password (again)" autoComplete="new-password" value={form.repeat} onChange={(e) => setForm({ ...form, repeat: e.target.value })} error={act.fields.repeat} />
+        <PasswordInput label="Old password" autoComplete="current-password" maxLength={128} value={form.oldPassword} onChange={(e) => setForm({ ...form, oldPassword: e.target.value })} error={clientFields.oldPassword ?? act.fields.oldPassword} />
+        <PasswordInput label="New password" autoComplete="new-password" maxLength={128} value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} error={clientFields.newPassword ?? act.fields.newPassword} help="At least 8 characters, with a letter." />
+        <PasswordInput label="New password (again)" autoComplete="new-password" maxLength={128} value={form.repeat} onChange={(e) => setForm({ ...form, repeat: e.target.value })} error={clientFields.repeat ?? act.fields.repeat} />
         <div className="row justify-end">
-          <Button type="submit" variant="accept" busy={act.busy}>
+          <Button type="submit" variant="accept" busy={act.busy} disabled={act.busy}>
             Save
           </Button>
         </div>
@@ -196,54 +292,116 @@ function RemindersCard() {
   )
 }
 
-function CatalogGroup({ title, items, onAdd, onDelete, addLabel, fieldError, busy, colorize }) {
-  const [text, setText] = useState('')
-  const builtIn = items.filter((i) => i.preset)
-  const mine = items.filter((i) => !i.preset)
+function BuiltInList({ items, colorize }) {
+  const [expanded, setExpanded] = useState(false)
+  const listRef = useRef(null)
+  const [fullHeight, setFullHeight] = useState(null)
+  const [truncated, setTruncated] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const measure = () => {
+      const natural = el.scrollHeight
+      setFullHeight(natural)
+      if (!expanded) {
+        const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+        setTruncated(natural > 9 * rootPx + 2)
+      }
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [items, expanded])
+
+  if (!items.length) return <p className="t-meta">None.</p>
+
   return (
-    <div className="grid gap-5">
-      <h3 className="t-sub">{title}</h3>
-      <div className="grid gap-2">
-        <p className="t-label">Built in</p>
-        <div className="row gap-2">
-          {builtIn.map((i) => (
+    <div className={cx('catalog-built-in', expanded && 'catalog-built-in--expanded')}>
+      <div
+        className={cx('catalog-built-in__wrap', expanded && 'catalog-built-in__wrap--expanded')}
+        style={fullHeight != null ? { '--built-in-height': `${fullHeight}px` } : undefined}
+      >
+        <div ref={listRef} className="catalog-built-in__list row gap-2">
+          {items.map((i) => (
             <Pill key={i.id} small fill={colorize ? categoryColor(i.name) : '#ffffff'}>
               {i.name}
             </Pill>
           ))}
         </div>
+        {!expanded && truncated && <div className="catalog-built-in__fade" aria-hidden="true" />}
       </div>
-      <div className="grid gap-2">
-        <p className="row t-label gap-2">
-          Yours
-          <span className="row t-meta gap-1 font-normal">
-            <Lock aria-hidden="true" className="size-3.5" /> Only you can see these
-          </span>
-        </p>
-        {mine.length ? (
-          <div className="row gap-2">
-            {mine.map((i) => (
-              <span key={i.id} className="neo-pill neo-pill--sm gap-1.5 !pr-1.5" style={{ background: colorize ? categoryColor(i.name) : '#fff', color: colorize ? inkOn(categoryColor(i.name)) : '#000' }}>
-                {i.name}
-                <button type="button" className="grid size-6 place-items-center rounded-full border-2 border-black bg-white text-black" aria-label={`Delete ${i.name}`} onClick={() => onDelete(i)}>
-                  <X aria-hidden="true" className="size-3.5" />
-                </button>
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="t-meta">None yet.</p>
-        )}
+      {(truncated || expanded) && (
+        <button type="button" className="catalog-built-in__toggle text-link t-meta w-fit font-bold" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? 'See less' : 'See all'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function CatalogGroup({ title, items, onAdd, onDelete, addLabel, fieldError, busy, colorize, validateAdd }) {
+  const [text, setText] = useState('')
+  const [clientError, setClientError] = useState(null)
+  const builtIn = items.filter((i) => i.preset)
+  const mine = items.filter((i) => !i.preset)
+  return (
+    <div className="catalog-panel">
+      <h3 className="catalog-panel__title t-sub">{title}</h3>
+      <div className="catalog-panel__body">
+        <section className="grid gap-2">
+          <p className="t-label">Built in</p>
+          <BuiltInList items={builtIn} colorize={colorize} />
+        </section>
+        <section className="grid gap-2">
+          <p className="row t-label gap-2">
+            Yours
+            <span className="row t-meta gap-1 font-normal">
+              <Lock aria-hidden="true" className="size-3.5" /> Only you can see these
+            </span>
+          </p>
+          {mine.length ? (
+            <div className="row gap-2">
+              {mine.map((i) => (
+                <span key={i.id} className="neo-pill neo-pill--sm gap-1.5 !pr-1.5" style={{ background: colorize ? categoryColor(i.name) : '#fff', color: colorize ? inkOn(categoryColor(i.name)) : '#000' }}>
+                  {i.name}
+                  <button type="button" className="grid size-6 place-items-center rounded-full border-2 border-black bg-white text-black" aria-label={`Delete ${i.name}`} onClick={() => onDelete(i)}>
+                    <X aria-hidden="true" className="size-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="t-meta">None yet.</p>
+          )}
+        </section>
       </div>
       <form
-        className="flex flex-wrap items-start gap-3"
+        className="catalog-panel__add flex flex-wrap items-start gap-3"
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
+          const err = validateAdd(text)
+          if (err) {
+            setClientError(err)
+            focusFirstInvalid()
+            return
+          }
+          setClientError(null)
           onAdd(text, () => setText(''))
         }}
       >
-        <Input label={addLabel} hideLabel value={text} onChange={(e) => setText(e.target.value)} placeholder={addLabel} fieldClass="flex-[1_1_14rem]" error={fieldError} />
+        <Input
+          label={addLabel}
+          hideLabel
+          maxLength={colorize ? 40 : 255}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => setClientError(validateAdd(text))}
+          placeholder={addLabel}
+          fieldClass="flex-[1_1_14rem]"
+          error={clientError ?? fieldError}
+        />
         <Button type="submit" variant="accept" icon={Plus} busy={busy}>
           Add
         </Button>
@@ -277,6 +435,7 @@ function CatalogCard() {
               addLabel="Add a category"
               fieldError={addCat.fields.name}
               busy={addCat.busy}
+              validateAdd={validateCategoryName}
               onAdd={(name, done) => addCat.run({ name }, { onSuccess: done })}
               onDelete={(i) => setConfirm({ ...i, type: 'category' })}
             />
@@ -290,6 +449,7 @@ function CatalogCard() {
               addLabel="Add a service name"
               fieldError={addName.fields.service}
               busy={addName.busy}
+              validateAdd={validateServiceName}
               onAdd={(name, done) => addName.run({ name }, { onSuccess: done })}
               onDelete={(i) => setConfirm({ ...i, type: 'service' })}
             />

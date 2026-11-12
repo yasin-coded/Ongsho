@@ -321,7 +321,15 @@ def request_email_change(user, *, new_email: str, password: str) -> None:
         {"email": user.email, "pending_email": previous_pending},
         {"pending_email": new_email},
     )
-    # TODO(notifications): notify the user that an email change was requested.
+    from core.notify import notify
+
+    notify(
+        user,
+        "email_changed",
+        "Confirm your new email",
+        f"We sent a link to {new_email}. Your old address keeps working until then.",
+        link="/app/profile",
+    )
 
 
 @transaction.atomic
@@ -363,7 +371,15 @@ def verify_email_change(user, token: str) -> User:
         {"email": user.email},
     )
     revoke_all_tokens(user)
-    # TODO(notifications): notify the user that their email address was changed.
+    from core.notify import notify
+
+    notify(
+        user,
+        "email_changed",
+        "Your email was changed",
+        f"You now sign in with {user.email}.",
+        link="/app/profile",
+    )
     return user
 
 

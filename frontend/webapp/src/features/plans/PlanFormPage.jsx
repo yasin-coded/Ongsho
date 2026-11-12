@@ -8,6 +8,8 @@ import { METHODS, METHOD_KEYS } from '@/lib/colors'
 import { MOCK_TODAY, dayOfMonth, fmtShort } from '@/lib/dates'
 import { formatBDT, formatRate, formatUSD, parseTaka, splitExact, usdToPaisa } from '@/lib/money'
 import { cycleLabel, firstBillDate, nextDueDate, perCycleLabel } from '@/mocks/schedule'
+import { focusFirstInvalid } from '@/lib/formFocus'
+import { validatePlanForm } from '@/lib/validation'
 import { useAction } from '@/hooks/useAction'
 import { TopBar } from '@/components/layout/TopBar'
 import { Box, BoxHead } from '@/components/ui/Box'
@@ -85,8 +87,17 @@ function Card({ n, title, children }) {
   )
 }
 
+function planNameForTypedService(prev, serviceName) {
+  const priorService = (prev.serviceName ?? '').trim()
+  const plan = (prev.planName ?? '').trim()
+  if (!plan || plan.toLowerCase() === priorService.toLowerCase()) return serviceName
+  return prev.planName
+}
+
 function Preview({ form, names, editing }) {
   const catalog = names.find((s) => s.name.toLowerCase() === form.serviceName.trim().toLowerCase())
+  const displayName = form.planName?.trim() || form.serviceName?.trim() || 'Untitled plan'
+  const logoName = form.serviceName?.trim() || displayName
   const cycle = cycleOf(form)
   const amount = chargePaisa(form)
   const seats = Math.max(1, Number(form.seats) || 1)
@@ -99,9 +110,9 @@ function Preview({ form, names, editing }) {
       <BoxHead title="Live preview" />
       <div className="grid gap-4">
         <div className="row gap-3">
-          <ServiceLogo serviceKey={catalog?.serviceKey} name={form.serviceName || form.planName || 'Plan'} size="compact" />
+          <ServiceLogo key={`${catalog?.serviceKey ?? 'custom'}-${form.serviceName}`} serviceKey={catalog?.serviceKey} name={logoName} size="compact" />
           <div className="grid min-w-0 gap-1">
-            <p className="t-sub truncate">{form.planName || 'Untitled plan'}</p>
+            <p className="t-sub truncate">{displayName}</p>
             <p className="t-meta">
               {cycleLabel(cycle)}
               {next ? (form.renewal === 'fixed' ? ` · ends ${fmtShort(next)}` : ` · renews ${fmtShort(next)}`) : ''}
@@ -165,6 +176,7 @@ function PlanForm({ initial, editing, planId }) {
   const [email, setEmail] = useState('')
   const cats = useQuery({ queryKey: ['categories'], queryFn: getCategories })
   const names = useQuery({ queryKey: ['service-names'], queryFn: getServiceNames })
+  const [clientFields, setClientFields] = useState({})
   const save = useAction(
     (payload) => (editing ? updateSubscription(planId, payload) : createSubscription(payload)),
     {
@@ -172,6 +184,8 @@ function PlanForm({ initial, editing, planId }) {
       toastMessage: editing ? 'Plan details saved.' : 'Plan created. Invites are on their way.',
     },
   )
+  const planValidateOpts = { editing, minSeats: editing ? Number(form.seats) : 0 }
+  const blurValidate = () => setClientFields(validatePlanForm(form, planValidateOpts))
 
   /** Functional updaters must return a partial patch; always merged so we never drop `invites` etc. */
   const set = (patch) =>
@@ -190,6 +204,13 @@ function PlanForm({ initial, editing, planId }) {
   }
 
   const submit = () => {
+    const clientErrs = validatePlanForm(form, { editing, minSeats: editing ? Number(form.seats) : 0 })
+    if (Object.keys(clientErrs).length) {
+      setClientFields(clientErrs)
+      focusFirstInvalid()
+      return
+    }
+    setClientFields({})
     const payload = {
       ...form,
       price: Number(form.price),
@@ -203,7 +224,7 @@ function PlanForm({ initial, editing, planId }) {
     save.run(payload)
   }
 
-  const f = save.fields
+  const f = { ...clientFields, ...save.fields }
   const serviceList = names.data ?? []
 
   return (
@@ -240,14 +261,42 @@ function PlanForm({ initial, editing, planId }) {
               <p className="field__label mb-2">Service name</p>
               <div className="row gap-2">
                 {serviceList.map((s) => (
-                  <button key={s.id} type="button" className="chip" aria-pressed={form.serviceName === s.name} onClick={() => set({ serviceName: s.name, planName: form.planName || `${s.name}` })}>
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={form.serviceName === s.name}
+                    onClick={() =>
+                      set({
+                        serviceName: s.name,
+                        planName: s.name,
+                        ...(s.categoryId ? { categoryId: String(s.categoryId) } : {}),
+                      })
+                    }
+                  >
                     {s.name}
                   </button>
                 ))}
               </div>
-              <Input className="mt-3" label="Service name" hideLabel value={form.serviceName} onChange={(e) => set({ serviceName: e.target.value })} error={f.serviceName} placeholder="Or type a name" />
+              <Input
+                className="mt-3"
+                label="Service name"
+                hideLabel
+                value={form.serviceName}
+                onChange={(e) => {
+                  const serviceName = e.target.value
+                  set((f) => ({
+                    serviceName,
+                    planName: planNameForTypedService(f, serviceName),
+                  }))
+                }}
+                maxLength={255}
+                onBlur={blurValidate}
+                error={f.serviceName}
+                placeholder="Or type a name"
+              />
             </div>
-            <Input label="Plan name" value={form.planName} onChange={(e) => set({ planName: e.target.value })} error={f.planName} placeholder='For example "Netflix Premium"' />
+            <Input label="Plan name" maxLength={255} value={form.planName} onChange={(e) => set({ planName: e.target.value })} onBlur={blurValidate} error={f.planName} placeholder='For example "Netflix Premium"' />
             <Select
               label="Category"
               value={form.categoryId}
@@ -262,7 +311,7 @@ function PlanForm({ initial, editing, planId }) {
 
         <Card n={3} title="What does it cost?">
           <div className="grid gap-5 sm:grid-cols-2">
-            <Input label={form.currency === 'USD' ? 'Price ($)' : 'Price (৳)'} inputMode="decimal" numeric value={form.price} onChange={(e) => set({ price: e.target.value })} error={f.price} locked={editing} />
+            <Input label={form.currency === 'USD' ? 'Price ($)' : 'Price (৳)'} inputMode="decimal" numeric value={form.price} onChange={(e) => set({ price: e.target.value })} onBlur={blurValidate} error={f.price} locked={editing} />
             <Select label="Currency" value={form.currency} disabled={editing} onChange={(e) => set({ currency: e.target.value })} options={[{ value: 'BDT', label: 'BDT' }, { value: 'USD', label: 'USD' }]} />
             <fieldset className="sm:col-span-2">
               <legend className="field__label mb-2">Billed</legend>

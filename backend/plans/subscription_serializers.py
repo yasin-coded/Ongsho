@@ -201,6 +201,13 @@ class SubscriptionCreateSerializer(serializers.Serializer):
     end_date = serializers.DateField(required=False, allow_null=True)
     recommended_method = serializers.ChoiceField(choices=PaymentMethod.choices)
     rarely_used = serializers.BooleanField(default=False)
+    seats = serializers.IntegerField(required=False, min_value=1, max_value=20, write_only=True)
+    split_type = serializers.ChoiceField(
+        choices=[("equal", "equal"), ("custom", "custom")], required=False, write_only=True
+    )
+    invite_emails = serializers.ListField(
+        child=serializers.EmailField(), required=False, allow_empty=True, write_only=True
+    )
     next_renewal_date = serializers.DateField(required=False, allow_null=True, write_only=True)
     owner = serializers.IntegerField(required=False, write_only=True)
     status = serializers.CharField(required=False, write_only=True)

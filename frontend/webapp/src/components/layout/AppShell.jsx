@@ -28,7 +28,8 @@ export function AppShell() {
     window.scrollTo(0, 0)
   }, [pathname])
   useEffect(() => {
-    queryClient.setQueryData(['nav-counts'], snapshotNavCounts())
+    const snap = snapshotNavCounts()
+    if (snap) queryClient.setQueryData(['nav-counts'], snap)
   }, [pathname, queryClient])
 
   return (

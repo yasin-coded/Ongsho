@@ -44,6 +44,7 @@ def generate_missing_charges(plan: Subscription, today) -> dict[str, int]:
     if plan.archived_on is not None:
         return {"created": 0, "errors": 0}
     if plan.status in (
+        SubscriptionStatus.TRIAL,
         SubscriptionStatus.PAUSED,
         SubscriptionStatus.CANCELLED,
         SubscriptionStatus.EXPIRED,
@@ -55,9 +56,6 @@ def generate_missing_charges(plan: Subscription, today) -> dict[str, int]:
     first = first_bill_date(plan.start_date, plan.trial_end_date)
     window_end = today + timedelta(days=CHARGE_LEAD_DAYS)
     from_date = max(plan.billing_from, first)
-    if plan.status == SubscriptionStatus.TRIAL and plan.trial_end_date:
-        from_date = max(from_date, plan.trial_end_date)
-
     due_list = [d for d in due_dates_between(schedule, from_date, window_end) if d >= plan.billing_from]
 
     prices = _prices_for_plan(plan.pk)
@@ -243,3 +241,40 @@ def correct_rate(user, charge_id: int, rate: Decimal, today) -> Charge:
     )
     charge_amount_changed.send(sender=correct_rate, charge=charge)
     return charge
+
+
+def generate_charges_for_owner(user, today) -> dict[str, int]:
+    plans = 0
+    created = 0
+    errors = 0
+    for plan in Subscription.objects.filter(owner=user, archived_on__isnull=True).iterator():
+        with transaction.atomic():
+            result = generate_missing_charges(plan, today)
+        plans += 1
+        created += result["created"]
+        errors += result["errors"]
+    return {"plans": plans, "created": created, "errors": errors}
+
+
+def generate_charges_for_all_plans(today) -> dict[str, int]:
+    import logging
+
+    logger = logging.getLogger(__name__)
+    plans = 0
+    created = 0
+    errors = 0
+    plan_ids = list(
+        Subscription.objects.filter(archived_on__isnull=True).order_by("id").values_list("pk", flat=True)
+    )
+    for plan_id in plan_ids:
+        try:
+            with transaction.atomic():
+                plan = Subscription.objects.get(pk=plan_id)
+                result = generate_missing_charges(plan, today)
+            plans += 1
+            created += result["created"]
+            errors += result["errors"]
+        except Exception:
+            logger.exception("Charge generation failed for plan_id=%s", plan_id)
+            errors += 1
+    return {"plans": plans, "created": created, "errors": errors}

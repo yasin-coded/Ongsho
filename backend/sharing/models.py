@@ -57,6 +57,7 @@ class Member(models.Model):
     status = models.CharField(max_length=20, choices=MemberStatus.choices)
     joined_on = models.DateField()
     left_on = models.DateField(null=True, blank=True)
+    leave_requested_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -72,6 +73,7 @@ class Member(models.Model):
 
 class Invite(models.Model):
     shared_plan = models.ForeignKey("sharing.SharedPlan", on_delete=models.CASCADE, related_name="invites")
+    created_at = models.DateTimeField(auto_now_add=True)
     invited_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

@@ -1,20 +1,23 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router'
-import { AuthProvider } from '@/auth/AuthProvider'
 import { ToastProvider } from '@/components/ui/Toast'
 import { router } from './routes'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 0 } },
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+      retry: (count, err) => (err?.status === 0 || !err?.status) && count < 1,
+    },
+  },
 })
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <AuthProvider>
-          <RouterProvider router={router} />
-        </AuthProvider>
+        <RouterProvider router={router} />
       </ToastProvider>
     </QueryClientProvider>
   )

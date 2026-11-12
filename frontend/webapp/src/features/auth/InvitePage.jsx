@@ -7,6 +7,8 @@ import { snapshotNavCounts } from '@/api/dashboard'
 import { acceptInvite, acceptInviteAsNewUser, declineInvite } from '@/api/shared'
 import { useAuth } from '@/auth/auth-context'
 import { useAction } from '@/hooks/useAction'
+import { focusFirstInvalid } from '@/lib/formFocus'
+import { validateName, validatePassword } from '@/lib/validation'
 import { formatBDT } from '@/lib/money'
 import { fmtShort } from '@/lib/dates'
 import { perCycleLabel } from '@/mocks/schedule'
@@ -18,22 +20,25 @@ import { AuthLayout } from './AuthLayout'
 
 export function InvitePage() {
   const { token } = useParams()
-  const { isAuthed, session, signInDirect } = useAuth()
+  const { isAuthed, session, signInDirect, adoptSession } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: invite, isPending, error, refetch } = useQuery({ queryKey: ['invite', token], queryFn: () => getInvite(token) })
   const [form, setForm] = useState({ name: '', password: '' })
+  const [clientFields, setClientFields] = useState({})
 
   const signUp = useMutation({
     mutationFn: () => acceptInviteAsNewUser(token, form),
-    onSuccess: async () => {
-      signInDirect({ name: form.name, email: invite.email })
-      queryClient.setQueryData(['nav-counts'], snapshotNavCounts())
+    onSuccess: async (result) => {
+      if (result?.access) adoptSession({ access: result.access, user: result.user })
+      else signInDirect({ name: form.name, email: invite.email })
+      const snap = snapshotNavCounts()
+      if (snap) queryClient.setQueryData(['nav-counts'], snap)
       await queryClient.invalidateQueries({ refetchType: 'all' })
       navigate('/app')
     },
   })
-  const accept = useAction(() => acceptInvite(invite.id), { onSuccess: (r) => navigate(`/app/shared/${r.planId}`) })
+  const accept = useAction(() => acceptInvite({ token, id: invite.id }), { onSuccess: (r) => navigate(`/app/shared/${r.planId}`) })
   const decline = useAction(() => declineInvite(invite.id), { onSuccess: () => navigate('/app/notifications') })
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: isAuthed })
 
@@ -110,12 +115,56 @@ export function InvitePage() {
           noValidate
           onSubmit={(e) => {
             e.preventDefault()
+            const fields = {}
+            const nm = validateName(form.name)
+            if (nm) fields.name = nm
+            const pw = validatePassword(form.password)
+            if (pw) fields.password = pw
+            if (Object.keys(fields).length) {
+              setClientFields(fields)
+              focusFirstInvalid()
+              return
+            }
+            setClientFields({})
             signUp.mutate()
           }}
         >
           <Input label="Email" value={invite.email} locked help="Opening this invite from that inbox proves the email is yours." />
-          <Input label="Your name" autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={signUp.error?.fields?.name} />
-          <PasswordInput label="Choose a password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} error={signUp.error?.fields?.password} help="At least 8 characters." />
+          <Input
+            label="Your name"
+            autoComplete="name"
+            maxLength={255}
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onBlur={() => {
+              const nm = validateName(form.name)
+              setClientFields((p) => {
+                const next = { ...p }
+                if (nm) next.name = nm
+                else delete next.name
+                return next
+              })
+            }}
+            error={clientFields.name ?? signUp.error?.fields?.name}
+          />
+          <PasswordInput
+            label="Choose a password"
+            autoComplete="new-password"
+            maxLength={128}
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            onBlur={() => {
+              const pw = form.password ? validatePassword(form.password) : null
+              setClientFields((p) => {
+                const next = { ...p }
+                if (pw) next.password = pw
+                else delete next.password
+                return next
+              })
+            }}
+            error={clientFields.password ?? signUp.error?.fields?.password}
+            help="At least 8 characters."
+          />
           <Button type="submit" variant="accept" block icon={ArrowRight} busy={signUp.isPending}>
             Create account and join
           </Button>

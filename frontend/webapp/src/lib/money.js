@@ -2,6 +2,29 @@
 
 const grouped = new Intl.NumberFormat('en-US')
 
+const MONEY_RE = /^-?\d+(\.\d{1,2})?$/
+
+/** Parse an API decimal string (e.g. "733.78") into integer paisa. Rejects scientific notation. */
+export function toPaisa(decimalString) {
+  const raw = String(decimalString ?? '').trim()
+  if (!MONEY_RE.test(raw)) throw new RangeError(`Invalid money string: ${raw}`)
+  const neg = raw.startsWith('-')
+  const clean = neg ? raw.slice(1) : raw
+  const [whole, frac = ''] = clean.split('.')
+  const paisa = Number(whole) * 100 + Number(frac.padEnd(2, '0').slice(0, 2))
+  return neg ? -paisa : paisa
+}
+
+/** Format integer paisa as an API decimal string with two places. */
+export function fromPaisa(paisa) {
+  const value = Math.trunc(Number(paisa) || 0)
+  const sign = value < 0 ? '-' : ''
+  const abs = Math.abs(value)
+  const whole = Math.floor(abs / 100)
+  const rest = abs % 100
+  return `${sign}${whole}.${String(rest).padStart(2, '0')}`
+}
+
 /**
  * ৳1,200.00 by default.
  * `trim`: whole amounts drop .00 (big stat numbers, compact rows).

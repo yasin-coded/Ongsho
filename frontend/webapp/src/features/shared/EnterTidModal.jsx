@@ -7,6 +7,8 @@ import { METHODS, METHOD_KEYS } from '@/lib/colors'
 import { fmtShort } from '@/lib/dates'
 import { formatBDT, sum } from '@/lib/money'
 import { useAction } from '@/hooks/useAction'
+import { focusFirstInvalid } from '@/lib/formFocus'
+import { validateTid } from '@/lib/validation'
 import { Box } from '@/components/ui/Box'
 import { Button } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Field'
@@ -19,6 +21,7 @@ function TidForm({ plan, onClose }) {
   const [picked, setPicked] = useState(() => new Set(mine.map((d) => d.id)))
   const [method, setMethod] = useState(plan.method)
   const [tid, setTid] = useState('')
+  const [clientFields, setClientFields] = useState({})
   const send = useAction(submitPayment, { onSuccess: onClose })
   const all = [...mine, ...plan.coverable]
   const amount = sum(all.filter((d) => picked.has(d.id)), (d) => d.amount)
@@ -39,6 +42,16 @@ function TidForm({ plan, onClose }) {
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
+        const fields = {}
+        if (!picked.size) fields.dues = 'Pick at least one due to cover.'
+        const tidErr = validateTid(tid)
+        if (tidErr) fields.tid = tidErr
+        if (Object.keys(fields).length) {
+          setClientFields(fields)
+          focusFirstInvalid()
+          return
+        }
+        setClientFields({})
         send.run({ planId: plan.id, dueIds: [...picked], method, tid })
       }}
     >
@@ -84,7 +97,7 @@ function TidForm({ plan, onClose }) {
             ))}
           </div>
         )}
-        {send.fields.dues && <p className="field__error">{send.fields.dues}</p>}
+        {(clientFields.dues ?? send.fields.dues) && <p className="field__error">{clientFields.dues ?? send.fields.dues}</p>}
       </fieldset>
 
       <Select
@@ -103,7 +116,17 @@ function TidForm({ plan, onClose }) {
         spellCheck="false"
         className="uppercase tabular-nums"
         help="You will find it in the confirmation message or in your payment app's history. Copy it exactly."
-        error={send.fields.tid}
+        maxLength={64}
+        onBlur={() => {
+          const err = tid ? validateTid(tid) : null
+          setClientFields((p) => {
+            const next = { ...p }
+            if (err) next.tid = err
+            else delete next.tid
+            return next
+          })
+        }}
+        error={clientFields.tid ?? send.fields.tid}
       />
       <Input label="Amount" value={formatBDT(amount)} locked help="Part payments are not supported yet, so this is always the full amount. No date is needed." />
 

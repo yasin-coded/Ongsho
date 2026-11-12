@@ -15,11 +15,20 @@ class DomainError(Exception):
     code: str = "error"
     status_code: int = 400
 
-    def __init__(self, message: str, *, fields: dict[str, list[str]] | None = None, code: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        fields: dict[str, list[str]] | None = None,
+        code: str | None = None,
+        status_code: int | None = None,
+    ):
         self.message = message
         self.fields = fields or {}
         if code is not None:
             self.code = code
+        if status_code is not None:
+            self.status_code = status_code
 
 
 class ValidationFailed(DomainError):

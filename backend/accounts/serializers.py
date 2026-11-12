@@ -127,9 +127,9 @@ class EmailChangeVerifySerializer(serializers.Serializer):
 
 class ReminderSettingsPatchSerializer(serializers.Serializer):
     days_before = serializers.ListField(
-        child=serializers.IntegerField(min_value=1, max_value=14),
+        child=serializers.IntegerField(),
         required=False,
-        allow_empty=False,
+        allow_empty=True,
     )
     email = serializers.BooleanField(required=False)
 

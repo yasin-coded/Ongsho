@@ -79,7 +79,7 @@ function Actions({ n, onReject }) {
 
 function Row({ n, onReject }) {
   const { icon: Icon, tile } = notificationLook(n)
-  const read = useAction(() => markRead(n.id), { toastMessage: null })
+  const read = useAction(() => markRead(n.id), { toastMessage: null, optimisticNav: 'decrement-unread', invalidate: ['notifications', 'nav'] })
   const unread = !n.readAt
   return (
     <li className="flex flex-wrap items-start gap-4 py-4">

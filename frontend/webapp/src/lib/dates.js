@@ -119,6 +119,11 @@ export function dhakaDate(ts) {
   return dhakaDateFmt.format(new Date(ts))
 }
 
+/** Live Dhaka calendar date (`YYYY-MM-DD`). Use on live-backed screens; keep `MOCK_TODAY` for mock data only. */
+export function todayDhaka() {
+  return dhakaDateFmt.format(new Date())
+}
+
 /** "Today, 11:42 AM", "Yesterday, 9:10 AM", "3 Nov, 4:00 PM" against the mock today. */
 export function fmtWhen(ts, today = MOCK_TODAY) {
   const day = dhakaDate(ts)

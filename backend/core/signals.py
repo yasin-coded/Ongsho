@@ -4,3 +4,8 @@ plan_prices_changed = Signal()
 plan_status_changed = Signal()
 charges_created = Signal()
 charge_amount_changed = Signal()
+
+plan_deleted = Signal()
+member_joined = Signal()
+member_leaving = Signal()
+split_changed = Signal()

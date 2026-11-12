@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Eye, Inbox, Plus } from 'lucide-react'
+import { isLive } from '@/api/modes'
 import { getSubscriptions } from '@/api/plans'
 import { STATUS } from '@/lib/colors'
 import { formatBDT } from '@/lib/money'
@@ -118,24 +119,36 @@ export function MyPlansPage() {
           </div>
         }
       >
-        {(d) => (
+        {(d) => {
+          const partialTotals = isLive('getSubscriptions') && d.totalsMeta && !d.totalsMeta.memberCollections
+          return (
           <>
             <div className="stat-grid">
               <StatCard label="Plans you own" value={d.totals.count} helper={`${formatBDT(d.totals.toProviders, { trim: true })} a month to the providers`} />
-              <StatCard label="Collected from members" value={formatBDT(d.totals.confirmed, { trim: true })} helper={`of ${formatBDT(d.totals.expected, { trim: true })} expected this month`}>
-                <ProgressBar
-                  total={d.totals.expected}
-                  label={`${formatBDT(d.totals.confirmed)} confirmed and ${formatBDT(d.totals.pending)} pending, of ${formatBDT(d.totals.expected)}`}
-                  parts={[
-                    { key: 'paid', value: d.totals.confirmed, fill: STATUS.paid.fill },
-                    { key: 'pending', value: d.totals.pending, fill: STATUS.pending.fill },
-                  ]}
-                />
-              </StatCard>
+              {partialTotals ? (
+                <StatCard label="Collected from members" value="—" helper="Member collection totals are not on the API yet." />
+              ) : (
+                <StatCard label="Collected from members" value={formatBDT(d.totals.confirmed, { trim: true })} helper={`of ${formatBDT(d.totals.expected, { trim: true })} expected this month`}>
+                  <ProgressBar
+                    total={d.totals.expected}
+                    label={`${formatBDT(d.totals.confirmed)} confirmed and ${formatBDT(d.totals.pending)} pending, of ${formatBDT(d.totals.expected)}`}
+                    parts={[
+                      { key: 'paid', value: d.totals.confirmed, fill: STATUS.paid.fill },
+                      { key: 'pending', value: d.totals.pending, fill: STATUS.pending.fill },
+                    ]}
+                  />
+                </StatCard>
+              )}
               <StatCard
                 label="Waiting for your review"
-                value={d.totals.reviewCount}
-                helper={d.totals.reviewCount ? `transaction IDs on ${d.totals.reviewPlans.join(', ')}` : 'Nothing to check right now.'}
+                value={partialTotals && !d.totals.reviewCount ? '—' : d.totals.reviewCount}
+                helper={
+                  partialTotals && !d.totals.reviewCount
+                    ? 'Review counts come from payment data not on the list API yet.'
+                    : d.totals.reviewCount
+                      ? `transaction IDs on ${d.totals.reviewPlans.join(', ')}`
+                      : 'Nothing to check right now.'
+                }
               />
             </div>
 
@@ -181,7 +194,8 @@ export function MyPlansPage() {
               <Pagination page={d.page} pages={d.pages} onPage={(n) => update({ page: String(n) })} />
             </div>
           </>
-        )}
+          )
+        }}
       </Loadable>
     </div>
   )

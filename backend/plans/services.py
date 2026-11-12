@@ -116,6 +116,9 @@ def _quantize_rate(value: Decimal) -> Decimal:
 
 @transaction.atomic
 def create_subscription(user, validated: dict) -> tuple[Subscription, str | None]:
+    seats = validated.pop("seats", None)
+    split_type = validated.pop("split_type", None)
+    invite_emails = validated.pop("invite_emails", None)
     service_name = service_name_for_user(user, validated["service_name_id"])
     if service_name is None:
         raise ValidationFailed(
@@ -131,7 +134,24 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
             fields={"category": ["Select a valid category."]},
         )
 
+    from plans.models import PlanMode
+
     today = today_dhaka()
+    will_share = (
+        validated.get("plan_mode") == PlanMode.RESELLER
+        or seats is not None
+        or split_type is not None
+        or invite_emails
+    )
+    if will_share:
+        from sharing import services as sharing_services
+
+        sharing_services.validate_invite_emails_for_new_plan(
+            owner=user,
+            plan_mode=validated["plan_mode"],
+            seats=seats if seats is not None else 2,
+            invite_emails=invite_emails or [],
+        )
     trial_end = validated.get("trial_end_date")
     start_date = validated["start_date"]
     next_renewal = validated.get("next_renewal_date")
@@ -218,6 +238,17 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
         f"You created {sub.plan_name}",
     )
     _emit_status_changed(sub)
+    if will_share:
+        from sharing import services as sharing_services
+
+        sharing_services.bootstrap_shared_plan(
+            user,
+            sub,
+            split_type=split_type,
+            seats=seats,
+            invite_emails=invite_emails or [],
+            today=today,
+        )
     return sub, amount_bdt_preview
 
 
@@ -345,10 +376,23 @@ def delete_subscription(user, pk: int, password: str) -> None:
     archive = _plan_has_confirmed_or_reversed_payment(sub)
     entity_id = sub.pk
     snapshot = {"id": sub.pk, "plan_name": sub.plan_name}
+    from core.signals import plan_deleted
+    from sharing import services as sharing_services
+
+    member_user_ids, shared = sharing_services.gather_plan_delete_context(sub)
+    plan_deleted.send(
+        sender=type(sub),
+        plan_id=sub.pk,
+        plan_name=sub.plan_name,
+        owner=user,
+        member_user_ids=member_user_ids,
+        archived=archive,
+    )
+    if shared is not None:
+        sharing_services.cancel_all_pending_invites(shared)
     if archive:
         sub.archived_on = timezone.now()
         sub.save(update_fields=["archived_on"])
-        # TODO: notify all members, cancel pending invites and ownership transfers.
         audit_services.log(
             user,
             "plan.archived",

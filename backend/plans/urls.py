@@ -1,6 +1,7 @@
 from django.urls import path
 
 from plans import subscription_status_views, subscription_views, views
+from sharing import views as sharing_views
 
 urlpatterns = [
     path("exchange-rates/", views.exchange_rate_list_create, name="exchange-rate-list"),
@@ -30,5 +31,10 @@ urlpatterns = [
         "subscriptions/<int:pk>/renew/",
         subscription_status_views.subscription_renew,
         name="subscription-renew",
+    ),
+    path(
+        "subscriptions/<int:pk>/share/",
+        sharing_views.subscription_share,
+        name="subscription-share",
     ),
 ]

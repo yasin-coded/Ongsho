@@ -1,0 +1,15 @@
+export const keys = {
+  me: ['me'],
+  reminderSettings: ['reminder-settings'],
+  categories: ['categories'],
+  serviceNames: ['service-names'],
+  subscriptions: (params) => ['subscriptions', params],
+  subscription: (id) => ['subscription', id],
+  planForm: (id) => ['plan-form', id],
+  dashboard: ['dashboard'],
+  calendar: (month) => ['calendar', month],
+  navCounts: ['nav-counts'],
+  notifications: (params) => ['notifications', params],
+  myShared: (params) => ['my-shared', params],
+  sharedPlan: (id) => ['shared-plan', id],
+}

@@ -24,4 +24,7 @@ urlpatterns = [
     path("api/reminders/", include("accounts.reminder_urls")),
     path("api/", include("catalog.urls")),
     path("api/", include("plans.urls")),
+    path("api/", include("billing.urls")),
+    path("api/", include("notifications.urls")),
+    path("api/", include("sharing.urls")),
 ]
