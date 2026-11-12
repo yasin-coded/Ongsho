@@ -126,7 +126,7 @@ export function MyPlansPage() {
             <div className="stat-grid">
               <StatCard label="Plans you own" value={d.totals.count} helper={`${formatBDT(d.totals.toProviders, { trim: true })} a month to the providers`} />
               {partialTotals ? (
-                <StatCard label="Collected from members" value="—" helper="Member collection totals are not on the API yet." />
+                <StatCard label="Collected from members" value="—" helper="No total on this page yet. Open a plan to see what members have paid this month." />
               ) : (
                 <StatCard label="Collected from members" value={formatBDT(d.totals.confirmed, { trim: true })} helper={`of ${formatBDT(d.totals.expected, { trim: true })} expected this month`}>
                   <ProgressBar
@@ -144,7 +144,7 @@ export function MyPlansPage() {
                 value={partialTotals && !d.totals.reviewCount ? '—' : d.totals.reviewCount}
                 helper={
                   partialTotals && !d.totals.reviewCount
-                    ? 'Review counts come from payment data not on the list API yet.'
+                    ? 'No count on this page yet. Open a plan or use Needs Review to check pending payments.'
                     : d.totals.reviewCount
                       ? `transaction IDs on ${d.totals.reviewPlans.join(', ')}`
                       : 'Nothing to check right now.'

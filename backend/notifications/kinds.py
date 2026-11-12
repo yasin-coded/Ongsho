@@ -33,6 +33,7 @@ PLAN_KINDS = frozenset(
         "price_change",
         "amount_changed",
         "member_removed",
+        "split_blocked",
     }
 )
 

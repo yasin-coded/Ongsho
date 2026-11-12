@@ -460,7 +460,6 @@ def accept_invite(user, *, today: date, invite_id: int | None = None, token: str
         payload={"plan_id": sub.pk},
     )
     member_joined.send(sender=type(member), member=member)
-    # TODO(dues): create member dues and recalculate splits when the dues engine exists.
     _audit(
         user,
         "invite.accepted",
@@ -655,8 +654,7 @@ def owner_leave_decision(
         member.save(update_fields=update_fields)
         from core.signals import member_leaving
 
-        member_leaving.send(sender=type(member), member=member, leave_date=leave_date, unpaid=unpaid)
-        # TODO(dues): apply leave rules and recalculate splits when the dues engine exists.
+        member_leaving.send(sender=type(member), member=member, leave_date=leave_date, unpaid=unpaid, today=today)
         resolve_notifications("leave", member_id=member.pk)
         notify(
             member.user,
@@ -790,7 +788,6 @@ def update_split(user, plan_id: int, *, split_type: str, shares: dict | None, to
     from core.signals import split_changed
 
     split_changed.send(sender=type(shared), plan=sub, today=today)
-    # TODO(dues): recalculate open dues when the dues engine exists.
     _audit(
         user,
         "shared_plan.split",

@@ -34,7 +34,9 @@ def run_daily(today) -> dict[str, int] | None:
         trials = billing_services.activate_ended_trials(today)
         generated = billing_services.generate_charges_for_all_plans(today)
         locked = billing_services.lock_due_charges(today)
-        # TODO(dues): create dues for new charges once the dues engine exists.
+        from dues import services as dues_services
+
+        dues_ensured = dues_services.ensure_dues(today)
         # TODO(notifications): enqueue renewal and due reminders once reminder jobs exist.
         return {
             "members_closed": departed,
@@ -44,6 +46,7 @@ def run_daily(today) -> dict[str, int] | None:
             "charges_created": generated["created"],
             "charge_errors": generated["errors"],
             "charges_locked": locked,
+            "dues_ensured": dues_ensured,
         }
     finally:
         _advisory_unlock()
