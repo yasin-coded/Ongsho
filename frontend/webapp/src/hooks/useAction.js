@@ -5,7 +5,7 @@ import { keys } from '@/api/keys'
 import { getNavCounts, snapshotNavCounts } from '@/api/dashboard'
 import { useToast } from '@/components/ui/toast-context'
 
-const DEFAULT_SCOPES = ['nav', 'plans', 'calendar', 'notifications', 'me', 'catalog']
+const DEFAULT_SCOPES = ['nav', 'plans', 'shared', 'dashboard', 'calendar', 'notifications']
 
 /**
  * Runs an API write, invalidates affected queries, optional optimistic nav counts,
@@ -50,7 +50,10 @@ export function useAction(
       if (message) toast(message, tone)
       onSuccess?.(data, vars)
     },
-    onError: (error) => {
+    onError: async (error) => {
+      if (error?.status === 409) {
+        await invalidateScopes(queryClient, invalidate.length ? invalidate : DEFAULT_SCOPES)
+      }
       if (error?.status === 0) {
         toast(error.message ?? 'Could not reach Ongsho. Check your connection and try again.', 'due')
       }

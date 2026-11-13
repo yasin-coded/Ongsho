@@ -1,5 +1,7 @@
+import { cycleFromForm, nextRenewalDateForApi } from '@/mocks/schedule'
 import { lookupServiceKey } from '@/lib/services'
 import { categoryColor } from '@/lib/colors'
+import { fmtMonth } from '@/lib/dates'
 import { idStr, moneyFromApi, moneyToApi, rateFromApi, rateToApi, paginatedBody } from './common'
 import { avatarColorFromId } from './me'
 
@@ -9,11 +11,11 @@ function cycleFromApi(unit, count) {
 }
 
 function renewalFromApi(renewalType) {
-  return renewalType === 'fixed_term' ? 'fixed' : 'ongoing'
+  return renewalType === 'fixed_term' ? 'fixed' : 'auto'
 }
 
 function renewalToApi(renewal) {
-  return renewal === 'fixed' ? 'fixed_term' : 'ongoing'
+  return renewal === 'fixed' ? 'fixed_term' : 'auto'
 }
 
 function priceBlock(sub) {
@@ -28,11 +30,18 @@ function priceBlock(sub) {
   return { amount, usdCents: null, rate: null, currency: 'BDT' }
 }
 
+function planHeadcount(sub, members = []) {
+  return Math.max(Number(sub.member_count) || 0, Number(sub.seats_taken) || 0, members.length)
+}
+
+function isMultiMemberPlan(sub, members = []) {
+  return planHeadcount(sub, members) > 1 || (sub.pending_invites?.length ?? 0) > 0
+}
+
 function statusPill(sub, members = []) {
   if (sub.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (sub.status !== 'active') return { key: sub.status, label: sub.status }
-  const shared = (sub.member_count ?? 0) > 1 || (sub.pending_invites?.length ?? 0) > 0
-  if (!shared) return { key: 'solo', label: 'Just me' }
+  if (!isMultiMemberPlan(sub, members)) return { key: 'solo', label: 'Just me' }
   const pending = members.filter((m) => m.dueStatus === 'pending').length
   const due = members.filter((m) => m.dueStatus === 'due').length
   if (pending) return { key: 'review', label: `${pending} to review`, count: pending }
@@ -56,6 +65,8 @@ export function mapMemberRow(row, meUserId) {
     leaveRequestedAt: row.leave_requested_at,
     pendingPaymentId: row.pending_payment_id ? idStr(row.pending_payment_id) : null,
     isYou: meUserId && String(row.user_id) === String(meUserId),
+    status: row.status,
+    joinedOn: row.joined_on,
   }
 }
 
@@ -63,7 +74,7 @@ export function mapSubscriptionSummary(sub, members = [], meUserId = null) {
   const serviceName = sub.service_name?.name ?? ''
   const category = sub.category
   const price = priceBlock(sub)
-  const shared = (sub.member_count ?? members.length) > 1 || (sub.pending_invites?.length ?? 0) > 0
+  const shared = isMultiMemberPlan(sub, members)
   const monthly = moneyFromApi(sub.monthly_cost) ?? price.amount
   return {
     id: idStr(sub.id),
@@ -75,9 +86,9 @@ export function mapSubscriptionSummary(sub, members = [], meUserId = null) {
     cycle: cycleFromApi(sub.cycle_unit, sub.cycle_count),
     currency: sub.currency,
     price,
-    perSeat: shared && members.length ? Math.floor(price.amount / Math.max(members.length, 1)) : price.amount,
+    perSeat: sub.per_seat ? moneyFromApi(sub.per_seat) : shared && members.length ? Math.floor(price.amount / Math.max(members.length, 1)) : price.amount,
     seatsCap: sub.seats ?? members.length ?? 1,
-    seatsTaken: members.length,
+    seatsTaken: sub.seats_taken ?? members.length,
     shared,
     nextRenewal: sub.next_renewal ?? null,
     trialEnd: sub.trial_end_date ?? null,
@@ -88,7 +99,7 @@ export function mapSubscriptionSummary(sub, members = [], meUserId = null) {
     method: sub.recommended_method,
     note: sub.note ?? '',
     category: category ? { id: idStr(category.id), name: category.name, color: categoryColor(category.name) } : null,
-    pendingCount: members.filter((m) => m.dueStatus === 'pending').length,
+    pendingCount: sub.pending_count ?? members.filter((m) => m.dueStatus === 'pending').length,
     chargeId: null,
     monthly,
   }
@@ -101,27 +112,71 @@ export function mapListResponse(body, membersByPlan = new Map(), meUserId = null
   const totals = {
     count: apiTotals.count ?? page.total,
     toProviders: moneyFromApi(apiTotals.to_providers) ?? 0,
-    confirmed: 0, // TODO(live): needs dues API
-    pending: 0, // TODO(live): needs dues API
-    expected: 0, // TODO(live): needs dues API
-    reviewCount: counts.review ?? 0,
-    reviewPlans: [], // TODO(live): needs payments review API on list
+    confirmed: moneyFromApi(apiTotals.confirmed) ?? 0,
+    pending: moneyFromApi(apiTotals.pending) ?? 0,
+    expected: moneyFromApi(apiTotals.expected) ?? 0,
+    reviewCount: apiTotals.review_count ?? counts.review ?? 0,
+    reviewPlans: (apiTotals.review_plans ?? []).map((p) => ({
+      id: idStr(p.id),
+      planName: p.plan_name,
+      count: p.count,
+    })),
     rarelyCount: counts.rarely ?? 0,
   }
   const totalsMeta = {
-    memberCollections: false,
-    reviewDetail: false,
+    memberCollections: true,
+    reviewDetail: true,
   }
   const items = page.items.map((sub) => {
-    const members = membersByPlan.get(sub.id) ?? []
+    const members = (sub.members ?? membersByPlan.get(sub.id) ?? []).map((m) =>
+      m.user_id !== undefined ? mapMemberRow(m, meUserId) : m,
+    )
     return mapSubscriptionSummary(sub, members, meUserId)
   })
   return { ...page, items, counts, totals, totalsMeta }
 }
 
+function mapActivityRow(row) {
+  const ts = row.created_at
+  return {
+    id: row.id != null ? idStr(row.id) : undefined,
+    text: row.text,
+    tone: row.tone,
+    amount: row.amount ? moneyFromApi(row.amount) : null,
+    createdAt: ts,
+    ts,
+  }
+}
+
+function mapIouRow(row) {
+  return {
+    debtorId: idStr(row.debtor?.id),
+    creditorId: idStr(row.creditor?.id),
+    debtor: row.debtor?.first_name ?? row.debtor?.name,
+    creditor: row.creditor?.first_name ?? row.creditor?.name,
+    amount: moneyFromApi(row.amount),
+  }
+}
+
+function mapChargeRow(ch) {
+  return {
+    id: idStr(ch.id),
+    dueDate: ch.due_date,
+    monthLabel: ch.due_date ? fmtMonth(ch.due_date) : ch.month,
+    amount: moneyFromApi(ch.amount_bdt ?? ch.amount),
+    locked: ch.locked,
+    status: ch.status,
+    hasPayments: ch.has_payments,
+  }
+}
+
 export function mapSubscriptionDetail(sub, extras = {}) {
   const members = extras.members ?? []
-  const summary = mapSubscriptionSummary({ ...sub, member_count: members.length }, members, extras.meUserId)
+  const summary = mapSubscriptionSummary(
+    { ...sub, member_count: members.length, seats: sub.seats ?? extras.seats, seats_taken: extras.seatsTaken ?? members.length, per_seat: sub.per_seat },
+    members,
+    extras.meUserId,
+  )
   const price = priceBlock(sub)
   const prices = (extras.priceChanges ?? []).map((p) => ({
     id: idStr(p.id),
@@ -130,23 +185,47 @@ export function mapSubscriptionDetail(sub, extras = {}) {
     usdCents: p.currency === 'USD' ? moneyFromApi(p.amount) : null,
     rate: p.exchange_rate ? rateFromApi(p.exchange_rate) : null,
   }))
+  const collected = sub.collected != null ? moneyFromApi(sub.collected) : extras.collected != null ? moneyFromApi(extras.collected) : null
+  const expected = sub.expected != null ? moneyFromApi(sub.expected) : extras.expected != null ? moneyFromApi(extras.expected) : null
+  const csf = sub.confirmed_so_far
+  const confirmedSoFar = csf
+    ? {
+        paid: moneyFromApi(csf.paid) ?? 0,
+        waived: moneyFromApi(csf.waived) ?? 0,
+        pending: moneyFromApi(csf.pending) ?? 0,
+        total: moneyFromApi(csf.expected) ?? 0,
+      }
+    : {
+        paid: collected ?? 0,
+        waived: 0,
+        pending: 0,
+        total: expected ?? price.amount,
+      }
   return {
     ...summary,
     startDate: sub.start_date,
     renewal: renewalFromApi(sub.renewal_type),
     endDate: sub.end_date ?? null,
-    split: extras.splitType ?? 'equal',
+    split: sub.split_type ?? extras.splitType ?? 'equal',
     categoryId: sub.category ? idStr(sub.category.id) : null,
     categoryName: sub.category?.name ?? '—',
     prices,
     leftMembers: extras.leftMembers ?? [],
-    confirmedSoFar: { paid: 0, waived: 0, pending: 0, total: price.amount },
-    cycleLabel: null,
-    activity: [],
-    ious: [],
+    confirmedSoFar,
+    cycleLabel: extras.charges?.[0]?.month ?? null,
+    activity: (sub.activity ?? []).map(mapActivityRow),
+    ious: (sub.ious ?? []).map(mapIouRow),
     invites: extras.invites ?? [],
-    charges: extras.charges ?? [],
+    charges: (sub.charges ?? extras.charges ?? []).map(mapChargeRow),
+    leaveRequests: (sub.leave_requests ?? []).map((lr) => ({
+      memberId: idStr(lr.member_id),
+      name: lr.name,
+      firstName: lr.first_name,
+      leaveRequestedAt: lr.leave_requested_at,
+    })),
     transfer: null,
+    collected: collected ?? undefined,
+    expected: expected ?? undefined,
   }
 }
 
@@ -183,6 +262,7 @@ export function mapPlanForm(sub) {
 }
 
 export function buildCreatePayload(form, serviceNameId) {
+  const cycle = cycleFromForm(form)
   const body = {
     service_name: Number(serviceNameId),
     category: form.categoryId ? Number(form.categoryId) : null,
@@ -191,15 +271,15 @@ export function buildCreatePayload(form, serviceNameId) {
     note: form.note ?? '',
     currency: form.currency,
     amount: moneyToApi(form.currency === 'USD' ? form.price : form.price),
-    cycle_unit: form.cycleUnit === 'custom' ? form.customUnit ?? 'month' : form.cycleUnit,
-    cycle_count: form.cycleUnit === 'custom' ? Number(form.cycleCount) || 1 : 1,
+    cycle_unit: cycle.unit,
+    cycle_count: cycle.count,
     start_date: form.startDate,
     trial_end_date: form.trialEnd || null,
     renewal_type: renewalToApi(form.renewal),
     end_date: form.renewal === 'fixed' ? form.endDate : null,
     recommended_method: form.method,
     rarely_used: Boolean(form.rarelyUsed),
-    next_renewal_date: form.nextRenewalDate || null,
+    next_renewal_date: nextRenewalDateForApi(form),
   }
   if (form.currency === 'USD') {
     body.exchange_rate = rateToApi(Math.round(form.rate * 100))

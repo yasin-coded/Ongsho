@@ -2,14 +2,27 @@ import { setAccessToken } from '@/auth/tokenStore'
 import { apiRequest } from '../http'
 import { mapUserFromApi } from '../adapters/me'
 import { idStr } from '../adapters/common'
+import { mapMySharedList, mapMySharedPlanDetail } from '../adapters/shared'
+import { getMe } from './accounts'
 import * as mock from '../mock/shared'
 
-export function getMyShared(opts) {
-  return mock.getMyShared(opts)
+export async function getMyShared({ filter = 'all', page = 1, size = 5 } = {}) {
+  const data = await apiRequest('get', '/api/me/shared-plans/', {
+    params: { filter, page, page_size: size },
+  })
+  const me = await getMe()
+  return mapMySharedList(data, me.id)
 }
 
-export function getMySharedPlan(id) {
-  return mock.getMySharedPlan(id)
+export async function getMySharedPlan(id) {
+  try {
+    const data = await apiRequest('get', `/api/me/shared-plans/${Number(id)}/`)
+    const me = await getMe()
+    return mapMySharedPlanDetail(data, me.id)
+  } catch (err) {
+    if (err.status === 404) return { notFound: true }
+    throw err
+  }
 }
 
 export function downloadMyStatement(planId, opts) {

@@ -227,7 +227,7 @@ export function memberView(member, charge) {
 export function ownerPlanStatus(plan, members) {
   if (plan.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (plan.status !== 'active') return { key: plan.status, label: plan.status }
-  if (!plan.shared) return { key: 'solo', label: 'Just me' }
+  if (members.length <= 1) return { key: 'solo', label: 'Just me' }
   const pending = members.filter((m) => m.dueStatus === 'pending').length
   const due = members.filter((m) => m.dueStatus === 'due').length
   if (pending) return { key: 'review', label: `${pending} to review`, count: pending }

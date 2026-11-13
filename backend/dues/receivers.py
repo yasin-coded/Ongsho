@@ -14,12 +14,19 @@ def on_charges_created(sender, *, charges, **kwargs):
 
 @receiver(member_joined)
 def on_member_joined(sender, *, member, **kwargs):
+    from billing.models import Charge
     from core.dates import today_dhaka
 
-    today = today_dhaka()
+    today = kwargs.get("today")
+    if today is None:
+        today = today_dhaka()
     plan = member.shared_plan.subscription
-    for charge in dues_services.unlocked_charges_for_plan(plan, today):
-        dues_services.recalculate_dues(charge, today)
+    charges = Charge.objects.filter(
+        subscription=plan,
+        period_start__gte=member.joined_on,
+    )
+    for charge in charges:
+        dues_services.recalculate_dues(charge, today, force=True)
 
 
 @receiver(member_leaving)

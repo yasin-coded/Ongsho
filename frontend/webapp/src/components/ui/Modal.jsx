@@ -6,7 +6,7 @@ import { cx } from './Box'
  * Native <dialog> opened with showModal(): focus is trapped, Esc closes,
  * and focus returns to the opener on close.
  */
-export function Modal({ open, onClose, title, subtitle, wide, children, footer }) {
+export function Modal({ open, onClose, title, subtitle, wide, className, children, footer }) {
   const ref = useRef(null)
   const bodyRef = useRef(null)
   const titleId = useId()
@@ -52,7 +52,7 @@ export function Modal({ open, onClose, title, subtitle, wide, children, footer }
   return (
     <dialog
       ref={ref}
-      className={cx('modal', wide && 'modal--wide')}
+      className={cx('modal', wide && 'modal--wide', className)}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault()

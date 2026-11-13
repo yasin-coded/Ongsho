@@ -215,11 +215,7 @@ class SubscriptionCreateSerializer(serializers.Serializer):
     archived_on = serializers.DateTimeField(required=False, write_only=True)
 
     def validate_next_renewal_date(self, value):
-        if value is None:
-            return value
-        if value <= today_dhaka():
-            return value
-        raise serializers.ValidationError("Next renewal date must be today or earlier.")
+        return value
 
     def validate_plan_name(self, value):
         trimmed = value.strip()

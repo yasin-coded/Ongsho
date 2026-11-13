@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ArrowRightLeft, Ban, Download, Eye, Pause, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Ban, ChevronDown, Download, Eye, Pause, Play, RotateCcw, Trash2 } from 'lucide-react'
 import * as plansApi from '@/api/plans'
 import { METHODS, STATUS } from '@/lib/colors'
-import { MOCK_TODAY, diffDays, fmtFull, fmtShort, fmtWhen, monthKey, plural } from '@/lib/dates'
+import { MOCK_TODAY, fmtFull, fmtShort, fmtWhen, monthKey, plural, renewsInLabel } from '@/lib/dates'
 import { formatBDT, formatRate, formatUSD, parseTaka } from '@/lib/money'
 import { cycleLabel, perCycleLabel } from '@/mocks/schedule'
 import { useAction } from '@/hooks/useAction'
@@ -24,16 +24,65 @@ import { ConfirmModal, DeletePlanModal, EditRateModal, InviteModal, LeaveModal, 
 
 const TONE = { pending: STATUS.pending.fill, paid: STATUS.paid.fill, due: STATUS.due.fill, info: '#14b3f2' }
 
-function renewsIn(date) {
-  if (!date) return '—'
-  const n = diffDays(date, MOCK_TODAY)
-  return n <= 0 ? 'today' : plural(n, 'day')
-}
+function PlanActionsMenu({ plan, onPick }) {
+  const [open, setOpen] = useState(false)
+  const wrap = useRef(null)
 
-function lastPay(m) {
-  if (m.isOwnerSeat) return 'No proof needed'
-  if (!m.lastPayment) return 'No payment yet'
-  return `${fmtWhen(m.lastPayment.at)} · ${METHODS[m.lastPayment.method]?.label ?? m.lastPayment.method}`
+  useEffect(() => {
+    if (!open) return undefined
+    const onDoc = (e) => {
+      if (wrap.current && !wrap.current.contains(e.target)) setOpen(false)
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const pick = (type) => {
+    setOpen(false)
+    onPick(type)
+  }
+
+  return (
+    <div className="action-menu" ref={wrap}>
+      <Button variant="ghost" size="sm" icon={ChevronDown} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}>
+        Actions
+      </Button>
+      {open && (
+        <div className="action-menu__panel" role="menu">
+          <Link role="menuitem" className="action-menu__item" to={`/app/plans/${plan.id}/review`} onClick={() => setOpen(false)}>
+            <Eye aria-hidden="true" />
+            Review payments
+            {plan.pendingCount > 0 ? <span className="action-menu__badge">{plan.pendingCount}</span> : null}
+          </Link>
+          {plan.status === 'paused' && (
+            <button type="button" role="menuitem" className="action-menu__item" onClick={() => pick('resume')}>
+              <Play aria-hidden="true" />
+              Resume
+            </button>
+          )}
+          {['active', 'trial'].includes(plan.status) && (
+            <button type="button" role="menuitem" className="action-menu__item" onClick={() => pick('pause')}>
+              <Pause aria-hidden="true" />
+              Pause
+            </button>
+          )}
+          {['active', 'trial', 'paused'].includes(plan.status) && (
+            <button type="button" role="menuitem" className="action-menu__item action-menu__item--danger" onClick={() => pick('cancel')}>
+              <Ban aria-hidden="true" />
+              Cancel plan
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function SeatSplitCard({ plan }) {
@@ -146,7 +195,7 @@ function MembersCard({ plan, onOpen, onInvite, openId, rowRefs }) {
 
       <ul className="dashed-rows">
         {list.map((m) => (
-          <li key={m.id} className="flex flex-wrap items-center gap-3 py-3">
+          <li key={m.id} className="flex w-full flex-wrap items-center gap-3 py-3">
             <Avatar name={m.name} color={m.avatarColor} size="md" status={m.dueStatus ?? undefined} decorative />
             <div className="min-w-0 flex-[1_1_12rem]">
               <p className="font-bold">
@@ -154,7 +203,6 @@ function MembersCard({ plan, onOpen, onInvite, openId, rowRefs }) {
                 {m.isOwnerSeat ? ' (owner)' : ''}
               </p>
               <p className="t-meta break-all">{m.email}</p>
-              <p className="t-meta">{lastPay(m)}</p>
               {m.leaveRequested && (
                 <button type="button" className="mt-1 text-[0.8rem] font-bold text-[#846ace] underline" onClick={() => onOpen('leave', m)}>
                   Asked to leave
@@ -358,26 +406,12 @@ function OwnerPlan({ plan }) {
         actions={
           <>
             <PlanStatusPill status={plan.status} />
-            {plan.status === 'paused' && (
-              <Button variant="accept" icon={Play} onClick={() => setModal({ type: 'resume' })}>
-                Resume
-              </Button>
-            )}
-            {['active', 'trial'].includes(plan.status) && (
-              <Button variant="ghost" icon={Pause} onClick={() => setModal({ type: 'pause' })}>
-                Pause
-              </Button>
-            )}
-            {['active', 'trial', 'paused'].includes(plan.status) && (
-              <Button variant="reject-outline" icon={Ban} onClick={() => setModal({ type: 'cancel' })}>
-                Cancel plan
-              </Button>
-            )}
             {plan.renewal === 'fixed' && (
               <Button variant="accept" icon={RotateCcw} onClick={() => setModal({ type: 'renew' })}>
                 Renew
               </Button>
             )}
+            <PlanActionsMenu plan={plan} onPick={(type) => setModal({ type })} />
           </>
         }
       />
@@ -385,7 +419,7 @@ function OwnerPlan({ plan }) {
       <div className="stat-grid">
         <StatCard label="Plan price" value={formatBDT(plan.price.amount, { trim: true })} helper={perCycleLabel(plan.cycle)} />
         <StatCard label="Each seat" value={formatBDT(plan.perSeat, { trim: true })} helper={perCycleLabel(plan.cycle)} />
-        <StatCard label="Renews in" value={renewsIn(plan.nextRenewal)} helper={plan.nextRenewal ? fmtShort(plan.nextRenewal) : undefined} />
+        <StatCard label="Renews in" value={renewsInLabel(plan.nextRenewal)} helper={plan.nextRenewal ? fmtShort(plan.nextRenewal) : undefined} />
       </div>
 
       <Box>
@@ -538,7 +572,7 @@ function OwnerPlan({ plan }) {
                     {i.status}
                   </StatusPill>
                 </div>
-                <p className="t-meta">expires {fmtShort(i.expiresOn)}</p>
+                <p className="t-meta">{i.expiresOn ? `expires ${fmtShort(i.expiresOn)}` : 'No expiry date'}</p>
                 {i.status === 'pending' && (
                   <div className="grid gap-3">
                     <CopyField label="Backup link" value={`${origin}/invite/${i.token}`} />

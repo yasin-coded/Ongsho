@@ -8,6 +8,7 @@ class BillingConfig(AppConfig):
     def ready(self):
         from core.signals import plan_prices_changed
 
+        from billing import receivers  # noqa: F401
         from billing import services
 
         def _on_prices_changed(sender, plan, **kwargs):

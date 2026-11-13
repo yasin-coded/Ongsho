@@ -37,7 +37,9 @@ def run_daily(today) -> dict[str, int] | None:
         from dues import services as dues_services
 
         dues_ensured = dues_services.ensure_dues(today)
-        # TODO(notifications): enqueue renewal and due reminders once reminder jobs exist.
+        from notifications.reminders import send_reminders
+
+        reminder_counts = send_reminders(today)
         return {
             "members_closed": departed,
             "expired": expired,
@@ -47,6 +49,7 @@ def run_daily(today) -> dict[str, int] | None:
             "charge_errors": generated["errors"],
             "charges_locked": locked,
             "dues_ensured": dues_ensured,
+            **reminder_counts,
         }
     finally:
         _advisory_unlock()

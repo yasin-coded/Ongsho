@@ -3,7 +3,8 @@ import { useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Download, LogOut, ReceiptText, TriangleAlert } from 'lucide-react'
 import { cancelLeaveRequest, downloadMyStatement, getMySharedPlan } from '@/api/shared'
-import { MOCK_TODAY, diffDays, dhakaDate, fmtShort, fmtWhen, monthKey, plural } from '@/lib/dates'
+import { memberSharedStatus } from '@/api/adapters/shared'
+import { fmtShort, fmtWhen, monthKey, renewsInLabel, todayDhaka } from '@/lib/dates'
 import { formatBDT } from '@/lib/money'
 import { cycleLabel, perCycleLabel } from '@/mocks/schedule'
 import { useAction } from '@/hooks/useAction'
@@ -20,15 +21,9 @@ import { NotFoundPage } from '@/features/NotFoundPage'
 import { EnterTidModal } from './EnterTidModal'
 import { RequestLeaveModal } from './RequestLeaveModal'
 
-function renewsIn(date) {
-  if (!date) return '—'
-  const n = diffDays(date, MOCK_TODAY)
-  return n <= 0 ? 'today' : plural(n, 'day')
-}
-
 function StatementPicker({ plan }) {
   const months = [...new Map(plan.history.map((h) => [monthKey(h.dueDate), h.monthLabel])).entries()]
-  const [month, setMonth] = useState(months[0]?.[0] ?? monthKey(MOCK_TODAY))
+  const [month, setMonth] = useState(months[0]?.[0] ?? monthKey(todayDhaka()))
   const download = useAction(() => downloadMyStatement(plan.id, { month }), { toastMessage: (r) => `Statement ${r.number} is ready. In the real app the PDF downloads now.` })
   if (!months.length) return null
   return (
@@ -48,7 +43,7 @@ function MemberPlan({ plan }) {
   const cancelLeave = useAction(() => cancelLeaveRequest(plan.id), { tone: 'waived' })
   const owner = plan.owner.firstName
   const open = plan.openDues.length > 0
-  const status = open ? 'due' : plan.pendingAmount ? 'pending' : plan.myStatus
+  const status = memberSharedStatus(plan)
   const openTotal = plan.openDues.reduce((a, d) => a + d.amount, 0)
   const rows = showAll ? plan.history : plan.history.slice(0, 5)
 
@@ -75,7 +70,7 @@ function MemberPlan({ plan }) {
       <div className="stat-grid">
         <StatCard label="Your share" value={formatBDT(plan.myShare, { trim: true })} helper={perCycleLabel(plan.cycle)} />
         <StatCard label="Total you spent" value={formatBDT(plan.totalSpent, { trim: true })} helper="on this plan" />
-        <StatCard label="Renews in" value={renewsIn(plan.nextRenewal)} helper={plan.nextRenewal ? fmtShort(plan.nextRenewal) : undefined} />
+        <StatCard label="Renews in" value={renewsInLabel(plan.nextRenewal)} helper={plan.nextRenewal ? fmtShort(plan.nextRenewal) : undefined} />
       </div>
 
       <Box roomy className="grid gap-6">

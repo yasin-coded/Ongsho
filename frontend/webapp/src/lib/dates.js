@@ -135,6 +135,14 @@ export function fmtWhen(ts, today = MOCK_TODAY) {
 }
 
 /** "Today", "Tomorrow", "in 3 days", "3 days ago". */
+/** "Today", "5 days", etc. until the next renewal date (live screens use todayDhaka). */
+export function renewsInLabel(iso, today = todayDhaka()) {
+  if (!iso) return '—'
+  const n = diffDays(iso, today)
+  if (n <= 0) return 'today'
+  return plural(n, 'day')
+}
+
 export function relativeDay(iso, today = MOCK_TODAY) {
   const gap = diffDays(iso, today)
   if (gap === 0) return 'Today'

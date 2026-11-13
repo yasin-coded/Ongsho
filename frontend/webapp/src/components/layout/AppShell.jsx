@@ -1,9 +1,11 @@
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, CalendarDays, House, Layers, UserRound, Users } from 'lucide-react'
 import Wordmark from '@/assets/media/logo-monochrome.svg?react'
 import { SVG_SIZES } from '@/lib/services'
 import { getNavCounts, snapshotNavCounts } from '@/api/dashboard'
+import { keys } from '@/api/keys'
+import { useAppLiveSync, liveQueryOptions } from '@/hooks/useAppLiveSync'
 import { CountBubble, OutsideNote } from '@/components/ui/Misc'
 import { useEffect } from 'react'
 
@@ -18,18 +20,20 @@ const NAV = [
 
 export function AppShell() {
   const queryClient = useQueryClient()
+  const { pathname } = useLocation()
   const { data: counts } = useQuery({
-    queryKey: ['nav-counts'],
+    queryKey: keys.navCounts,
     queryFn: getNavCounts,
     refetchOnMount: 'always',
+    ...liveQueryOptions('getNavCounts'),
   })
-  const { pathname } = useLocation()
+  useAppLiveSync(pathname)
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [pathname])
   useEffect(() => {
     const snap = snapshotNavCounts()
-    if (snap) queryClient.setQueryData(['nav-counts'], snap)
+    if (snap) queryClient.setQueryData(keys.navCounts, snap)
   }, [pathname, queryClient])
 
   return (
@@ -54,6 +58,11 @@ export function AppShell() {
       </aside>
 
       <div className="shell__main">
+        <header className="mobile-brandbar">
+          <Link to="/" className="mobile-brandbar__link" aria-label="Ongsho home — back to the website">
+            <Wordmark className="media" style={{ width: `${SVG_SIZES.wordmark.w}px` }} aria-hidden="true" />
+          </Link>
+        </header>
         <main id="main" className="content">
           <div key={pathname} className="content-route">
             <Outlet />

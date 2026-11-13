@@ -1,6 +1,7 @@
 import { parseTaka, fromPaisa, toPaisa } from '@/lib/money'
 import { apiRequest } from '../http'
 import { idStr, moneyToApi, rateToApi, moneyFromApi } from '../adapters/common'
+import { mapReview, mapLedgerResponse, mapMemberDetail } from '../adapters/review'
 import {
   buildCreatePayload,
   buildPatchPayload,
@@ -38,7 +39,8 @@ async function loadInvites(planId) {
       email: i.email,
       status: i.status,
       createdAt: i.created_at,
-      token: i.token,
+      expiresOn: i.expires_on ?? null,
+      token: i.token ?? i.link?.split('/').pop() ?? null,
     }))
   } catch {
     return []
@@ -59,13 +61,7 @@ export async function getSubscriptions({ search = '', filter = 'all', page = 1, 
   if (filter === 'rarely') params.rarely_used = 'true'
   const data = await apiRequest('get', '/api/subscriptions/', { params })
   const me = await getMe()
-  const membersByPlan = new Map()
-  for (const sub of data.results ?? []) {
-    if ((sub.member_count ?? 0) > 0) {
-      membersByPlan.set(sub.id, await loadMembers(sub.id, me.id))
-    }
-  }
-  return mapListResponse(data, membersByPlan, me.id)
+  return mapListResponse(data, new Map(), me.id)
 }
 
 export async function getSubscription(id) {
@@ -82,6 +78,8 @@ export async function getSubscription(id) {
       members,
       invites,
       splitType: shared?.split_type,
+      seats: shared?.seats,
+      seatsTaken: members.length,
       priceChanges: priceChanges ?? [],
       meUserId: me.id,
     })
@@ -98,16 +96,23 @@ export async function getPlanForm(id) {
   return form
 }
 
-export function getReview(planId) {
-  return mock.getReview(planId)
+export async function getReview(planId) {
+  const data = await apiRequest('get', `/api/shared-plans/${Number(planId)}/review/`)
+  return mapReview(data)
 }
 
-export function getMember(memberId) {
-  return mock.getMember(memberId)
+export async function getMember(memberId) {
+  const data = await apiRequest('get', `/api/members/${Number(memberId)}/`)
+  return mapMemberDetail(data)
 }
 
-export function getLedger(planId, opts) {
-  return mock.getLedger(planId, opts)
+export async function getLedger(planId, { member = 'all', month = 'all', status = 'all', page = 1, size = 8 } = {}) {
+  const params = { page, page_size: size }
+  if (member !== 'all') params.member = Number(member)
+  if (month !== 'all') params.month = month
+  if (status !== 'all') params.status = status
+  const data = await apiRequest('get', `/api/shared-plans/${Number(planId)}/ledger/`, { params })
+  return mapLedgerResponse(data)
 }
 
 export async function createSubscription(form) {
@@ -159,8 +164,12 @@ export async function setRarelyUsed(id, value) {
 }
 
 export async function updatePlanSplit(planId, { split, shares = {} }) {
-  await apiRequest('patch', `/api/shared-plans/${Number(planId)}/split/`, {
-    data: { split_type: split, shares },
+  const payload = {}
+  for (const [memberId, value] of Object.entries(shares)) {
+    payload[memberId] = typeof value === 'number' ? fromPaisa(value) : String(value)
+  }
+  await apiRequest('put', `/api/shared-plans/${Number(planId)}/split/`, {
+    data: { split_type: split, shares: payload },
   })
 }
 
@@ -191,7 +200,13 @@ export async function cancelInvite(inviteId) {
 }
 
 export async function decideLeave(memberId, payload) {
-  await apiRequest('post', `/api/members/${Number(memberId)}/leave/`, { data: payload })
+  await apiRequest('post', `/api/members/${Number(memberId)}/leave/`, {
+    data: {
+      approve: payload.approve,
+      leave_date: payload.leaveDate,
+      unpaid: payload.unpaid,
+    },
+  })
 }
 
 export async function replaceMember(memberId, { email }) {

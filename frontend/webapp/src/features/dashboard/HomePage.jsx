@@ -3,6 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { Check, Eye, Inbox, LogOut, X } from 'lucide-react'
 import { notificationLook } from '@/lib/notificationLook'
 import { getDashboard } from '@/api/dashboard'
+import { keys } from '@/api/keys'
+import { liveQueryOptions } from '@/hooks/useAppLiveSync'
+import { memberSharedStatus } from '@/api/adapters/shared'
 import { acceptInvite, acceptTransfer, declineInvite, declineTransfer } from '@/api/shared'
 import { useAction } from '@/hooks/useAction'
 import { CHART, categoryColor } from '@/lib/colors'
@@ -41,6 +44,13 @@ function OwnerRow({ plan }) {
 }
 
 function MemberRow({ plan }) {
+  const status = memberSharedStatus(plan)
+  const stack = (plan.members ?? []).map((m) => ({
+    id: m.id,
+    name: m.name || m.firstName || 'Member',
+    avatarColor: m.avatarColor,
+    status: m.isYou ? status : undefined,
+  }))
   return (
     <li>
       <LinkBox to={`/app/shared/${plan.id}`} className="neo-box--flat flex flex-wrap items-center gap-4 !p-4">
@@ -51,8 +61,12 @@ function MemberRow({ plan }) {
             Owner: {plan.owner.firstName} · {renewText(plan)}
           </p>
           <div className="row gap-2">
-            <Avatar name={plan.me.name} color={plan.me.avatarColor} size="sm" status={plan.myStatus} />
-            <StatusPill status={plan.myStatus} small />
+            {stack.length > 0 ? (
+              <AvatarStack people={stack} showStatus />
+            ) : (
+              <Avatar name={plan.me?.firstName || 'You'} color={plan.me?.avatarColor} size="sm" status={status} />
+            )}
+            <StatusPill status={status} small />
           </div>
         </div>
         <Price amount={plan.myShare} cycle={plan.cycle} />
@@ -179,7 +193,11 @@ function HomeSkeleton() {
 }
 
 export function HomePage() {
-  const query = useQuery({ queryKey: ['dashboard'], queryFn: getDashboard })
+  const query = useQuery({
+    queryKey: keys.dashboard,
+    queryFn: getDashboard,
+    ...liveQueryOptions('getDashboard'),
+  })
 
   return (
     <div className="stack-lg">

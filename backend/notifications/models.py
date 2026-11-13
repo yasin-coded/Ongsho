@@ -6,6 +6,7 @@ class ReminderKind(models.TextChoices):
     RENEWAL = "renewal", "Renewal"
     TRIAL_END = "trial_end", "Trial end"
     EXPIRY = "expiry", "Expiry"
+    DUE_SOON = "due_soon", "Due soon"
 
 
 class ReminderChannel(models.TextChoices):
@@ -30,18 +31,29 @@ class Notification(models.Model):
 
 
 class Reminder(models.Model):
-    charge = models.ForeignKey("billing.Charge", on_delete=models.CASCADE, related_name="reminders")
+    subscription = models.ForeignKey(
+        "plans.Subscription",
+        on_delete=models.CASCADE,
+        related_name="reminders",
+    )
+    charge = models.ForeignKey(
+        "billing.Charge",
+        on_delete=models.CASCADE,
+        related_name="reminders",
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reminders")
     kind = models.CharField(max_length=16, choices=ReminderKind.choices)
+    target_date = models.DateField()
     days_before = models.PositiveIntegerField()
-    send_on = models.DateField()
     sent_at = models.DateTimeField(null=True, blank=True)
     channel = models.CharField(max_length=16, choices=ReminderChannel.choices)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["kind", "charge", "days_before", "user"],
+                fields=["kind", "subscription", "target_date", "days_before", "user"],
                 name="notifications_reminder_unique",
             ),
         ]

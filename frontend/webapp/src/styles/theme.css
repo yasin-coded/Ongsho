@@ -102,4 +102,14 @@
     outline-offset: 0.125rem;
     box-shadow: 0 0 0 0.125rem #fff;
   }
+
+  input:focus,
+  input:focus-visible,
+  select:focus,
+  select:focus-visible,
+  textarea:focus,
+  textarea:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
 }

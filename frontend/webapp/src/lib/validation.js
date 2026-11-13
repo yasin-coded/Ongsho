@@ -115,6 +115,8 @@ export function validateLeaveDate(leaveDate) {
 export function validateTid(tid) {
   const clean = String(tid ?? '').replace(/\s+/g, '').toUpperCase()
   if (clean.length < 6) return 'Enter the transaction ID from your receipt.'
+  if (clean.length > 64) return 'That ID is too long. Copy the full ID from your receipt.'
+  if (!/^[A-Z0-9-]+$/.test(clean)) return 'Use letters, digits and dashes only.'
   return null
 }
 
@@ -141,7 +143,15 @@ export function validatePlanForm(form, { editing = false, minSeats = 0 } = {}) {
     }
     if (!form.startDate) fields.startDate = 'Pick the start date.'
   }
-  if (form.cycleUnit === 'custom' && !(Number(form.cycleCount) >= 1)) fields.cycleCount = 'Enter how many, 1 or more.'
+  if (form.cycleUnit === 'custom' && form.renewal !== 'fixed') {
+    if (!form.nextRenewalDate) fields.nextRenewalDate = 'Pick the next renewal date.'
+    else {
+      const first = form.trialEnd || form.startDate
+      if (first && form.nextRenewalDate <= first) {
+        fields.nextRenewalDate = 'Next renewal must be after the start date.'
+      }
+    }
+  }
   Object.assign(fields, validateDateOrder({
     startDate: form.startDate,
     trialEnd: form.trialEnd || null,

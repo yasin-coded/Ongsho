@@ -10,12 +10,13 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Box, BoxHead, cx } from '@/components/ui/Box'
 import { Button } from '@/components/ui/Button'
 import { DateBadge, ErrorBox, Skeleton } from '@/components/ui/Misc'
-import { EventList, eventWord } from '@/features/common/PlanBits'
+import { EventList, eventDotColor, eventWord } from '@/features/common/PlanBits'
 
 const WEEK = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const WEEK_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-function serviceColor(event) {
+function dotColor(event) {
+  if (event.kind === 'due' || event.role === 'owner') return eventDotColor(event)
   return SERVICES[event.serviceKey]?.color ?? CUSTOM_PALETTE[hashIndex(event.planName, CUSTOM_PALETTE.length)]
 }
 
@@ -77,7 +78,7 @@ function DayCell({ date, today, inMonth, events, selected, wide, onSelect, focus
             <span className="grid gap-0.5" aria-hidden="true">
               {shown.map((e) => (
                 <span key={e.id} className="flex min-w-0 items-center gap-1 text-[0.75rem] leading-tight font-bold">
-                  <span className="size-2.5 flex-none rounded-full border-2 border-black" style={{ background: serviceColor(e) }} />
+                  <span className="size-2.5 flex-none rounded-full border-2 border-black" style={{ background: dotColor(e) }} />
                   <span className="truncate">{e.planName.split(' ')[0]}</span>
                 </span>
               ))}
@@ -86,7 +87,7 @@ function DayCell({ date, today, inMonth, events, selected, wide, onSelect, focus
           ) : (
             <span className="flex flex-wrap items-center gap-0.5" aria-hidden="true">
               {shown.map((e) => (
-                <span key={e.id} className="size-2.5 rounded-full border-2 border-black sm:size-3" style={{ background: serviceColor(e) }} />
+                <span key={e.id} className="size-2.5 rounded-full border-2 border-black sm:size-3" style={{ background: dotColor(e) }} />
               ))}
               {extra > 0 && <span className="text-[0.7rem] font-bold">+{extra}</span>}
             </span>
@@ -208,7 +209,7 @@ export function CalendarPage() {
                 {dayEvents.map((e) => (
                   <li key={e.id} className="grid gap-1 py-3">
                     <span className="row min-w-0 gap-2">
-                      <span className="size-4 flex-none rounded-full border-[0.1875rem] border-black" style={{ background: serviceColor(e) }} aria-hidden="true" />
+                      <span className="size-4 flex-none rounded-full border-[0.1875rem] border-black" style={{ background: dotColor(e) }} aria-hidden="true" />
                       <span className="t-sub min-w-0 truncate">{e.planName}</span>
                     </span>
                     <span className="row-between gap-2">

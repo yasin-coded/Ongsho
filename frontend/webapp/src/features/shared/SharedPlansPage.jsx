@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Inbox, LogOut, ReceiptText } from 'lucide-react'
 import { getMyShared } from '@/api/shared'
+import { memberSharedStatus } from '@/api/adapters/shared'
 import { METHODS } from '@/lib/colors'
 import { fmtShort, plural } from '@/lib/dates'
 import { formatBDT } from '@/lib/money'
@@ -26,7 +27,7 @@ export function historyLine(row) {
 }
 
 function SharedCard({ plan, onPay, onLeave }) {
-  const status = plan.openDues.length ? 'due' : plan.pendingAmount ? 'pending' : plan.myStatus
+  const status = memberSharedStatus(plan)
   return (
     <Box as="article" className="grid gap-5" aria-labelledby={`shared-${plan.id}`}>
       <div className="flex flex-wrap items-start gap-4">

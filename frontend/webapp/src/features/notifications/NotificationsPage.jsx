@@ -4,6 +4,8 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Check, CheckCheck, Inbox, LogOut, X } from 'lucide-react'
 import { notificationLook } from '@/lib/notificationLook'
 import { getNotifications, markAllRead, markRead } from '@/api/dashboard'
+import { keys } from '@/api/keys'
+import { liveQueryOptions } from '@/hooks/useAppLiveSync'
 import { confirmPayment } from '@/api/payments'
 import { acceptInvite, acceptTransfer, declineInvite, declineTransfer } from '@/api/shared'
 import { useAction } from '@/hooks/useAction'
@@ -23,7 +25,6 @@ const FILTERS = [
   { key: 'reminders', label: 'Reminders' },
 ]
 
-const RESOLVED = { approved: 'Approved', rejected: 'Rejected', joined: 'Joined', declined: 'Declined', accepted: 'Accepted', waived: 'Waived' }
 
 function groupOf(n) {
   const gap = diffDays(MOCK_TODAY, dhakaDate(n.createdAt))
@@ -41,7 +42,7 @@ function Actions({ n, onReject }) {
   const acceptT = useAction(() => acceptTransfer(a.transferId))
   const declineT = useAction(() => declineTransfer(a.transferId), { tone: 'waived' })
 
-  if (n.resolved) return <span className="neo-pill neo-pill--sm neo-pill--plain">{RESOLVED[n.resolved] ?? n.resolved}</span>
+  if (n.resolved) return <span className="neo-pill neo-pill--sm neo-pill--plain">{n.resolved}</span>
   if (!a) return null
   if (a.type === 'payment') {
     return (
@@ -121,7 +122,12 @@ export function NotificationsPage() {
   const [filter, setFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [rejecting, setRejecting] = useState(null)
-  const query = useQuery({ queryKey: ['notifications', { filter, page }], queryFn: () => getNotifications({ filter, page }), placeholderData: keepPreviousData })
+  const query = useQuery({
+    queryKey: keys.notifications({ filter, page }),
+    queryFn: () => getNotifications({ filter, page }),
+    placeholderData: keepPreviousData,
+    ...liveQueryOptions('getNotifications', { interval: 30_000 }),
+  })
   const allRead = useAction(markAllRead, { toastMessage: 'All caught up. Everything is marked as read.' })
   const action = query.data?.counts.action ?? 0
 

@@ -3,9 +3,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.dates import today_dhaka
 from core.exceptions import DomainError, ValidationFailed
 from core.pagination import OngshoPageNumberPagination
-from plans import selectors, services
+from plans import owner_selectors, selectors, services
 from plans.subscription_serializers import (
     LOCKED_PATCH_FIELDS,
     PriceChangeCreateSerializer,
@@ -100,10 +101,16 @@ def subscription_list_create(request):
             return _domain_response(exc)
         qs = selectors.owned_subscriptions(request.user, params)
         counts = selectors.subscription_list_counts(request.user)
+        today = today_dhaka()
+        all_owned = list(selectors.owned_subscriptions(request.user, {}))
+        ctx = owner_selectors.prefetch_owner_plan_context(all_owned, today)
         paginator = OngshoPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=None)
-        data = SubscriptionListSerializer(page, many=True).data
-        totals = selectors.subscription_list_totals(request.user)
+        page_list = list(page)
+        data = SubscriptionListSerializer(page_list, many=True).data
+        for i, sub in enumerate(page_list):
+            data[i].update(owner_selectors.owner_list_extra(sub, ctx))
+        totals = owner_selectors.subscription_list_totals_from_ctx(all_owned, ctx, request.user)
         return paginator.get_paginated_response(data, extra={"counts": counts, "totals": totals})
     serializer = SubscriptionCreateSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
@@ -130,7 +137,21 @@ def subscription_detail(request, pk):
             sub = selectors.owned_subscription(request.user, pk)
         except DomainError as exc:
             return _domain_response(exc)
-        return Response(SubscriptionDetailSerializer(sub).data)
+        today = today_dhaka()
+        data = SubscriptionDetailSerializer(sub).data
+        data.update(owner_selectors.owner_detail_extra(sub, today))
+        from django.core.exceptions import ObjectDoesNotExist
+        from payments import selectors as payment_selectors
+
+        data["activity"] = []
+        data["ious"] = []
+        try:
+            shared = sub.shared_plan
+            data["activity"] = payment_selectors.plan_activity(sub.pk)
+            data["ious"] = payment_selectors.plan_ious_owner(shared)
+        except ObjectDoesNotExist:
+            pass
+        return Response(data)
     if request.method == "PATCH":
         if "plan_mode" in request.data:
             return _domain_response(

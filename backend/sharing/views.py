@@ -10,6 +10,8 @@ from accounts.serializers import user_public_dict
 from core.dates import today_dhaka
 from dues import selectors as dues_selectors
 from core.exceptions import DomainError
+from core.pagination import OngshoPageNumberPagination
+from payments import selectors as payment_selectors
 from sharing import selectors, serializers as sharing_serializers, services
 from sharing.models import SplitType
 
@@ -333,6 +335,42 @@ def member_replace(request, pk: int):
     data = sharing_serializers.invite_row(invite)
     data["link"] = services._invite_link(raw)
     return Response(data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def shared_plan_ledger(request, pk: int):
+    shared = selectors.shared_plan_for_owner(request.user, pk)
+    try:
+        params = payment_selectors.parse_ledger_params(request)
+    except DomainError as exc:
+        return _domain_response(exc)
+    try:
+        all_rows, filtered = payment_selectors.ledger_build(shared, params)
+    except DomainError as exc:
+        return _domain_response(exc)
+    paginator = OngshoPageNumberPagination()
+    page = paginator.paginate_queryset(filtered, request, view=None)
+    extra = {
+        "totals": payment_selectors.ledger_totals(filtered),
+        "months": payment_selectors.ledger_months(all_rows),
+        "people": payment_selectors.ledger_people(all_rows),
+    }
+    return paginator.get_paginated_response(page, extra=extra)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def shared_plan_ious(request, pk: int):
+    shared = selectors.shared_plan_for_owner(request.user, pk)
+    return Response(payment_selectors.plan_ious_owner(shared))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def shared_plan_review(request, pk: int):
+    shared = selectors.shared_plan_for_owner(request.user, pk)
+    return Response(payment_selectors.review_data(shared, today_dhaka()))
 
 
 @api_view(["PUT", "POST", "GET", "DELETE"])

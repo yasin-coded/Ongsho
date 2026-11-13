@@ -17,12 +17,6 @@ def _domain_response(exc: DomainError):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def due_list(request):
-    from plans.models import Subscription
-
-    if not Subscription.objects.filter(owner=request.user).exists():
-        from core.exceptions import NotFound
-
-        return _domain_response(NotFound("Not found."))
     try:
         params = selectors.parse_dues_list_params(request)
     except DomainError as exc:

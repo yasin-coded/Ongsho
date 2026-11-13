@@ -30,6 +30,8 @@ class Payment(models.Model):
     paid_on = models.DateField(null=True, blank=True)
     review_status = models.CharField(max_length=16, choices=ReviewStatus.choices)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    note = models.TextField(blank=True, default="")
 
     class Meta:
         constraints = [

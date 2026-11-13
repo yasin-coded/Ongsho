@@ -4,7 +4,7 @@ import {
   memberById, userById, firstName, membersOf, chargeById, duesOfCharge, paymentsForDue, nextRenewal,
 } from '@/mocks/selectors'
 import { audit, generateMissingCharges, recalcUnlocked, resolveNotifications } from '@/mocks/engine'
-import { dueDatesBetween, nextDueDate } from '@/mocks/schedule'
+import { cycleFromForm, dueDatesBetween, nextDueDate } from '@/mocks/schedule'
 import { MOCK_TODAY, addDays, mockNow, fmtShort, dayOfMonth } from '@/lib/dates'
 import { formatBDT, splitExact, usdToPaisa } from '@/lib/money'
 import { checkPassword } from '../accounts'
@@ -103,7 +103,12 @@ function validatePlanForm(form, { editing = false } = {}) {
     if (form.currency === 'USD' && !(form.rate > 0)) fields.rate = 'Enter the rate you are paying, for example 122.'
     if (!form.startDate) fields.startDate = 'Pick the start date.'
   }
-  if (form.cycleUnit === 'custom' && !(form.cycleCount >= 1)) fields.cycleCount = 'Enter how many, 1 or more.'
+  if (form.cycleUnit === 'custom' && form.renewal !== 'fixed') {
+    if (!form.nextRenewalDate) fields.nextRenewalDate = 'Pick the next renewal date.'
+    else if ((form.trialEnd || form.startDate) && form.nextRenewalDate <= (form.trialEnd || form.startDate)) {
+      fields.nextRenewalDate = 'Next renewal must be after the start date.'
+    }
+  }
   if (form.trialEnd && form.startDate && form.trialEnd < form.startDate) fields.trialEnd = 'The trial cannot end before the plan starts.'
   if (form.renewal === 'fixed' && !form.endDate) fields.endDate = 'Pick the date the plan ends.'
   if (form.renewal === 'fixed' && form.endDate && form.startDate && form.endDate <= form.startDate) fields.endDate = 'The end date must be after the start date.'
@@ -117,10 +122,7 @@ function validatePlanForm(form, { editing = false } = {}) {
   if (Object.keys(fields).length) throw new ApiError('Some answers need a fix.', { fields })
 }
 
-function cycleOf(form) {
-  if (form.cycleUnit === 'custom') return { unit: form.customUnit ?? 'month', count: Number(form.cycleCount) || 1 }
-  return { unit: form.cycleUnit, count: 1 }
-}
+const cycleOf = cycleFromForm
 
 /** Align anchor day and skip dates so the next due on or after today is `nextRenewalDate`. */
 function scheduleFromForm(form, existingSkip = []) {

@@ -218,15 +218,10 @@ def member_history_rows(member: Member, *, limit: int = 5) -> list[dict]:
         .select_related("charge")
         .order_by("-charge__due_date", "-id")[:limit]
     )
+    from payments.selectors import settling_allocations_for_dues, _paid_on, _recorded_by_owner
+
     due_ids = [d.pk for d in dues]
-    allocs = list(
-        PaymentAllocation.objects.filter(due_id__in=due_ids)
-        .select_related("payment", "payment__member__user", "due")
-    )
-    alloc_by_due = {}
-    for a in allocs:
-        if a.payment.review_status == ReviewStatus.CONFIRMED:
-            alloc_by_due.setdefault(a.due_id, a)
+    alloc_by_due = settling_allocations_for_dues(due_ids)
 
     rows = []
     for due in dues:
@@ -242,10 +237,8 @@ def member_history_rows(member: Member, *, limit: int = 5) -> list[dict]:
                 "amount": str(quantize_money(due.amount_bdt)),
                 "status": due.status,
                 "method": payment.method if payment else None,
-                "paid_on": payment.paid_on.isoformat() if payment and payment.paid_on else None,
-                "recorded_by_owner": (
-                    payment.recorded_by_id == member.shared_plan.subscription.owner_id if payment else False
-                ),
+                "paid_on": _paid_on(payment),
+                "recorded_by_owner": _recorded_by_owner(payment),
                 "covered_by": covered_by,
             }
         )
@@ -326,9 +319,67 @@ def _member_money_snapshot(member: Member, today: date) -> dict:
     }
 
 
+def _sync_member_dues(member: Member, today: date) -> None:
+    """Ensure dues exist when a member joined after the charge was locked (idempotent)."""
+    from dues import services as dues_services
+
+    sub = member.shared_plan.subscription
+    for charge in Charge.objects.filter(subscription=sub, period_start__gte=member.joined_on):
+        if Due.objects.filter(charge=charge, member=member).exists():
+            continue
+        dues_services.recalculate_dues(charge, today, force=True)
+
+
+def _member_open_dues_rows(member: Member) -> list[dict]:
+    open_dues_qs = (
+        Due.objects.filter(member=member, status=DueStatus.DUE)
+        .select_related("charge")
+        .order_by("charge__due_date", "id")
+    )
+    return [
+        {
+            "due_id": d.pk,
+            "charge_id": d.charge_id,
+            "month": d.charge.period_start.strftime("%Y-%m"),
+            "due_date": d.charge.due_date.isoformat(),
+            "amount": str(quantize_money(d.amount_bdt)),
+            "rejection_reason": d.rejection_reason,
+        }
+        for d in open_dues_qs
+    ]
+
+
+def _member_roster_rows(member: Member) -> list[dict]:
+    shared = member.shared_plan
+    others = sharing_selectors.members_queryset(shared).exclude(pk=member.pk).select_related("user")
+    rows = [
+        {
+            "id": m.pk,
+            "name": m.user.name,
+            "first_name": _first_name(m.user),
+            "avatar_id": m.user.avatar_id,
+            "is_owner": sharing_selectors.is_owner_seat(m),
+            "is_you": False,
+        }
+        for m in others
+    ]
+    rows.append(
+        {
+            "id": member.pk,
+            "name": member.user.name,
+            "first_name": _first_name(member.user),
+            "avatar_id": member.user.avatar_id,
+            "is_owner": sharing_selectors.is_owner_seat(member),
+            "is_you": True,
+        }
+    )
+    return rows
+
+
 def me_shared_plan_item(member: Member, today: date) -> dict:
     sub = member.shared_plan.subscription
     shared = member.shared_plan
+    _sync_member_dues(member, today)
     owner = sub.owner
     snap = _member_money_snapshot(member, today)
     price = price_now_dict(sub)
@@ -341,9 +392,14 @@ def me_shared_plan_item(member: Member, today: date) -> dict:
         "status": sub.status,
         "cycle": {"unit": sub.cycle_unit, "count": sub.cycle_count},
         "next_renewal": plan_selectors.display_next_renewal(sub),
+        "recommended_method": sub.recommended_method,
+        "note": sub.note or "",
+        "leave_requested": member.status == MemberStatus.LEAVE_REQUESTED,
         "price_now": {k: price[k] for k in ("amount", "currency", "rate", "amount_bdt")} if price else None,
         "seats": shared.seats,
         "seats_taken": taken,
+        "open_dues": _member_open_dues_rows(member),
+        "members": _member_roster_rows(member),
         **snap,
     }
     return row
@@ -403,18 +459,39 @@ def me_shared_plan_totals(memberships: list[Member], today: date) -> dict:
     shares = Decimal("0")
     due_now = Decimal("0")
     waiting = Decimal("0")
+    due_names: list[str] = []
+    waiting_names: list[str] = []
+    due_count = 0
+    pending_count = 0
+    paid_up_count = 0
     for m in memberships:
         snap = _member_money_snapshot(m, today)
-        price = price_now_dict(m.shared_plan.subscription)
+        sub = m.shared_plan.subscription
+        price = price_now_dict(sub)
         if price:
             shares += Decimal(price["monthly_cost_bdt"])
         due_now += Decimal(snap["open_amount"])
         waiting += Decimal(snap["pending_amount"])
+        open_amt = Decimal(snap["open_amount"])
+        pend_amt = Decimal(snap["pending_amount"])
+        if open_amt > 0:
+            due_names.append(sub.plan_name)
+            due_count += 1
+        if pend_amt > 0:
+            waiting_names.append(sub.plan_name)
+            pending_count += 1
+        if open_amt == 0 and pend_amt == 0:
+            paid_up_count += 1
     return {
         "shares": str(quantize_money(shares)),
         "plan_count": len(memberships),
         "due_now": str(quantize_money(due_now)),
         "waiting": str(quantize_money(waiting)),
+        "due_names": due_names,
+        "waiting_names": waiting_names,
+        "due_count": due_count,
+        "pending_count": pending_count,
+        "paid_up_count": paid_up_count,
     }
 
 
@@ -422,25 +499,21 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
     row = me_shared_plan_item(member, today)
     sub = member.shared_plan.subscription
     shared = member.shared_plan
+    is_owner_seat = sharing_selectors.is_owner_seat(member)
+    row["me"] = {
+        "member_id": member.pk,
+        "status": member.status,
+        "joined_on": member.joined_on.isoformat(),
+        "leave_requested_at": (
+            member.leave_requested_at.isoformat() if member.leave_requested_at else None
+        ),
+    }
+    row["leave_requested_at"] = row["me"]["leave_requested_at"]
+    row["can_request_leave"] = member.status == MemberStatus.ACTIVE and not is_owner_seat
     row["recommended_method"] = sub.recommended_method
     row["mode"] = sub.plan_mode
 
-    open_dues_qs = (
-        Due.objects.filter(member=member, status=DueStatus.DUE)
-        .select_related("charge")
-        .order_by("charge__due_date", "id")
-    )
-    row["open_dues"] = [
-        {
-            "due_id": d.pk,
-            "charge_id": d.charge_id,
-            "month": d.charge.period_start.strftime("%Y-%m"),
-            "due_date": d.charge.due_date.isoformat(),
-            "amount": str(quantize_money(d.amount_bdt)),
-            "rejection_reason": d.rejection_reason,
-        }
-        for d in open_dues_qs
-    ]
+    row["open_dues"] = _member_open_dues_rows(member)
 
     pending_pay = (
         Payment.objects.filter(
@@ -451,7 +524,9 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
         .order_by("id")
         .first()
     )
-    row["pending_since"] = pending_pay.reviewed_at.isoformat() if pending_pay and pending_pay.reviewed_at else None
+    row["pending_since"] = (
+        pending_pay.submitted_at.isoformat() if pending_pay and pending_pay.submitted_at else None
+    )
 
     last_rej = (
         Due.objects.filter(member=member)
@@ -481,32 +556,7 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
         for d in history
     ]
 
-    others = (
-        sharing_selectors.members_queryset(shared)
-        .exclude(pk=member.pk)
-        .select_related("user")
-    )
-    row["members"] = [
-        {
-            "id": m.pk,
-            "name": m.user.name,
-            "first_name": _first_name(m.user),
-            "avatar_id": m.user.avatar_id,
-            "is_owner": sharing_selectors.is_owner_seat(m),
-            "is_you": False,
-        }
-        for m in others
-    ]
-    row["members"].append(
-        {
-            "id": member.pk,
-            "name": member.user.name,
-            "first_name": _first_name(member.user),
-            "avatar_id": member.user.avatar_id,
-            "is_owner": sharing_selectors.is_owner_seat(member),
-            "is_you": True,
-        }
-    )
+    row["members"] = _member_roster_rows(member)
 
     coverable = []
     if sub.plan_mode == PlanMode.OWNER:
@@ -532,7 +582,9 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
                 }
             )
     row["coverable"] = coverable
-    row["ious"] = []
+    from payments.selectors import plan_ious_member
+
+    row["ious"] = plan_ious_member(shared, member)
     return row
 
 

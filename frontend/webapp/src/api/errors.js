@@ -21,6 +21,11 @@ export const API_FIELD_TO_FORM = {
   plan_mode: 'mode',
   invite_emails: 'invites',
   split_type: 'split',
+  transaction_id: 'tid',
+  due_ids: 'dues',
+  reason: 'reason',
+  note: 'note',
+  date: 'date',
   effective_from: 'effectiveFrom',
   password: 'password',
 }

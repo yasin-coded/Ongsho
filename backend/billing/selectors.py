@@ -105,7 +105,7 @@ def _owner_schedule_events(
     for due in raw_dates:
         if due < range_start or due > range_end:
             continue
-        if due >= today and due < sub.billing_from:
+        if due < sub.billing_from:
             continue
         amount = _bdt_at(sub, due, prices)
         kind = "trial_end" if sub.trial_end_date and due == sub.trial_end_date else "renews"

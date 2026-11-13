@@ -1,5 +1,41 @@
-import { addDays, addMonthsAnchored, addYearsAnchored, dayOfMonth } from '@/lib/dates'
+import { addDays, addMonthsAnchored, addYearsAnchored, dayOfMonth, diffDays } from '@/lib/dates'
 import { splitExact, usdToPaisa } from '@/lib/money'
+
+const PRESET_CYCLE_UNITS = new Set(['week', 'month', 'year'])
+
+export function isPresetCycleUnit(unit) {
+  return PRESET_CYCLE_UNITS.has(unit)
+}
+
+/** Next renewal one full period after the start date (weekly / monthly / yearly chips). */
+export function presetNextRenewalFromStart(startDate, cycleUnit) {
+  if (!startDate || !isPresetCycleUnit(cycleUnit)) return ''
+  const anchor = dayOfMonth(startDate)
+  if (cycleUnit === 'week') return addDays(startDate, 7)
+  if (cycleUnit === 'month') return addMonthsAnchored(startDate, 1, anchor)
+  return addYearsAnchored(startDate, 1, anchor)
+}
+
+/** Send `next_renewal_date` only when the user aligned billing (custom or edited date). */
+export function nextRenewalDateForApi(form) {
+  if (form.renewal === 'fixed') return null
+  const value = (form.nextRenewalDate || '').trim()
+  if (!value) return null
+  if (isPresetCycleUnit(form.cycleUnit)) {
+    const auto = presetNextRenewalFromStart(form.startDate, form.cycleUnit)
+    if (auto && value === auto) return null
+  }
+  return value
+}
+
+/** Custom billing: length in days between first bill date and the chosen next renewal. */
+export function cycleFromForm(form) {
+  if (form.cycleUnit !== 'custom') return { unit: form.cycleUnit, count: 1 }
+  const first = form.trialEnd || form.startDate
+  const renewal = form.nextRenewalDate || form.endDate
+  if (!first || !renewal) return { unit: 'day', count: 1 }
+  return { unit: 'day', count: Math.max(1, diffDays(renewal, first)) }
+}
 
 /** First billed date: the trial end when there is one, else the start date. */
 export function firstBillDate(plan) {

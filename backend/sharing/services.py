@@ -459,7 +459,7 @@ def accept_invite(user, *, today: date, invite_id: int | None = None, token: str
         link=f"/app/plans/{sub.pk}",
         payload={"plan_id": sub.pk},
     )
-    member_joined.send(sender=type(member), member=member)
+    member_joined.send(sender=type(member), member=member, today=today)
     _audit(
         user,
         "invite.accepted",

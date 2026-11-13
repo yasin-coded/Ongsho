@@ -1,14 +1,22 @@
 import { apiRequest } from '../http'
-import { paginatedBody } from '../adapters/common'
+import { idStr, paginatedBody } from '../adapters/common'
+import { composeDashboard } from '../adapters/dashboard'
 import { mapCalendarResponse } from '../adapters/calendar'
 import { mapNotificationCounts, mapNotificationItem } from '../adapters/notifications'
-import * as mock from '../mock/dashboard'
+import { getMe } from './accounts'
 
 const FILTER_TO_API = { all: 'all', action: 'action', needs_action: 'action', payments: 'payments', plans: 'plans', reminders: 'reminders' }
 const FILTER_FROM_API = { action: 'needs_action' }
 
 export async function getDashboard() {
-  return mock.getDashboard()
+  const me = await getMe()
+  const [summary, forecast, ownedPage, joinedPage] = await Promise.all([
+    apiRequest('get', '/api/dashboard/summary/'),
+    apiRequest('get', '/api/dashboard/forecast/', { params: { months: 6 } }),
+    apiRequest('get', '/api/subscriptions/', { params: { page_size: 3 } }),
+    apiRequest('get', '/api/me/shared-plans/', { params: { page_size: 3 } }),
+  ])
+  return composeDashboard(summary, forecast, ownedPage.results ?? [], joinedPage.results ?? [], me.id)
 }
 
 export async function getCalendar(key) {
@@ -50,8 +58,5 @@ export async function markAllRead() {
 
 export async function markRead(id) {
   const data = await apiRequest('post', `/api/notifications/${Number(id)}/read/`)
-  return {
-    id: idStr(data.id),
-    read: true,
-  }
+  return mapNotificationItem(data)
 }

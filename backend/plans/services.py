@@ -249,6 +249,9 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
             invite_emails=invite_emails or [],
             today=today,
         )
+    from core.signals import plan_created
+
+    plan_created.send(sender=type(sub), plan=sub, today=today)
     return sub, amount_bdt_preview
 
 
@@ -537,6 +540,9 @@ def resume_subscription(user, pk: int) -> Subscription:
         sub,
         "You resumed the plan.",
     )
+    from billing import services as billing_services
+
+    billing_services.generate_missing_charges(sub, today)
     # TODO(notifications): notify members that the plan was resumed.
     return sub
 
@@ -615,6 +621,9 @@ def renew_subscription(user, pk: int, *, end_date) -> Subscription:
         sub,
         f"You renewed the plan until {sub.end_date.isoformat()}",
     )
+    from billing import services as billing_services
+
+    billing_services.generate_missing_charges(sub, today)
     # TODO(notifications): notify members that the plan was renewed.
     return sub
 

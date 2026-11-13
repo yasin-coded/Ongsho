@@ -5,11 +5,19 @@ export const scopes = {
   me: [{ queryKey: keys.me }],
   reminders: [{ queryKey: keys.reminderSettings }],
   catalog: [{ queryKey: keys.categories }, { queryKey: keys.serviceNames }],
-  plans: [{ queryKey: ['subscriptions'] }, { queryKey: ['subscription'] }, { queryKey: ['plan-form'] }],
+  plans: [
+    { queryKey: ['subscriptions'] },
+    { queryKey: ['subscription'] },
+    { queryKey: ['plan'] },
+    { queryKey: ['plan-form'] },
+    { queryKey: ['review'] },
+    { queryKey: ['ledger'] },
+    { queryKey: ['member'] },
+  ],
   calendar: [{ queryKey: ['calendar'] }],
   nav: [{ queryKey: keys.navCounts }],
   notifications: [{ queryKey: ['notifications'] }],
-  shared: [{ queryKey: ['my-shared'] }, { queryKey: ['shared-plan'] }],
+  shared: [{ queryKey: ['my-shared'] }, { queryKey: ['shared'] }, { queryKey: ['shared-plan'] }],
   dashboard: [{ queryKey: keys.dashboard }],
 }
 

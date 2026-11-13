@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { BadgeCheck, HandCoins, RotateCcw, X } from 'lucide-react'
 import { markDuePaid, rejectPayment, setDueBack, waiveDue, waivePayment } from '@/api/payments'
 import { METHODS, METHOD_KEYS } from '@/lib/colors'
-import { MOCK_TODAY } from '@/lib/dates'
+import { MOCK_TODAY, todayDhaka } from '@/lib/dates'
 import { useAction } from '@/hooks/useAction'
 import { Button } from '@/components/ui/Button'
 import { Input, Select, Textarea } from '@/components/ui/Field'
@@ -20,6 +20,10 @@ export function RejectPaymentModal({ paymentId, name, onClose }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
+          if (!reason.trim()) {
+            act.setFields({ reason: 'Write a short reason. The member will see it.' })
+            return
+          }
           act.run()
         }}
       >
@@ -48,6 +52,10 @@ export function WaiveModal({ paymentId, dueId, name, onClose }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
+          if (!note.trim()) {
+            act.setFields({ note: 'Add a short note, for example "Birthday month".' })
+            return
+          }
           act.run()
         }}
       >
@@ -75,10 +83,14 @@ export function MarkPaidModal({ dueId, name, method = 'bkash', onClose }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
+          if (form.date > todayDhaka()) {
+            act.setFields({ date: 'The date cannot be in the future.' })
+            return
+          }
           act.run()
         }}
       >
-        <Input label="Date paid" type="date" max={MOCK_TODAY} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} error={act.fields.date} />
+        <Input label="Date paid" type="date" max={todayDhaka()} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} error={act.fields.date} />
         <Select label="Method" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} options={methodOptions} error={act.fields.method} />
         <Textarea label="Note (optional)" rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
         <div className="row justify-end">

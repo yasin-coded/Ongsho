@@ -156,7 +156,14 @@ export function EnterTidModal({ planId, onClose }) {
   const query = useQuery({ queryKey: ['shared-plan', planId], queryFn: () => getMySharedPlan(planId) })
   const owner = query.data?.owner?.firstName ?? 'the owner'
   return (
-    <Modal open onClose={onClose} title="Add your transaction ID" subtitle={`Paid ${owner} already? Send us the ID so they can confirm it.`} wide>
+    <Modal
+      open
+      onClose={onClose}
+      title="Add your transaction ID"
+      subtitle={`Paid ${owner} already? Send us the ID so they can confirm it.`}
+      wide
+      className="modal--tid"
+    >
       {query.isPending && <Skeleton className="h-64" />}
       {query.isError && <ErrorBox error={query.error} onRetry={() => query.refetch()} />}
       {query.data && !query.data.notFound && <TidForm plan={query.data} onClose={onClose} />}

@@ -13,6 +13,6 @@ class NotificationAdmin(admin.ModelAdmin):
 
 @admin.register(Reminder)
 class ReminderAdmin(admin.ModelAdmin):
-    list_display = ("user", "charge", "kind", "days_before", "send_on", "channel")
+    list_display = ("user", "subscription", "kind", "target_date", "days_before", "channel")
     list_filter = ("kind", "channel")
-    raw_id_fields = ("charge", "user")
+    raw_id_fields = ("charge", "subscription", "user")

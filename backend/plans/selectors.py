@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db.models import DecimalField, Exists, OuterRef, Q, Subquery
@@ -8,7 +9,7 @@ from core.dates import today_dhaka
 from core.exceptions import NotFound
 from payments.models import Payment, ReviewStatus
 from core.money import quantize_money, to_bdt
-from core.schedule import monthly_equivalent, next_due_date
+from core.schedule import first_bill_date, monthly_equivalent, next_due_date
 from billing.selectors import schedule_for_subscription
 from plans.models import ExchangeRate, PriceChange, Subscription, SubscriptionStatus
 
@@ -119,8 +120,16 @@ def display_next_renewal(sub: Subscription):
     ):
         return None
     today = today_dhaka()
-    nxt = next_due_date(schedule_for_subscription(sub), today)
-    return nxt.isoformat() if nxt else None
+    schedule = schedule_for_subscription(sub)
+    first = first_bill_date(schedule.start_date, schedule.trial_end_date)
+    nxt = next_due_date(schedule, today)
+    if nxt is None:
+        return None
+    if nxt == first and today >= first:
+        follow = next_due_date(schedule, first + timedelta(days=1))
+        if follow:
+            return follow.isoformat()
+    return nxt.isoformat()
 
 
 def price_now_dict(sub: Subscription) -> dict | None:

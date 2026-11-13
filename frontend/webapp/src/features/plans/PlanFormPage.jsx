@@ -5,9 +5,17 @@ import { Check, Plus, X } from 'lucide-react'
 import { createSubscription, getPlanForm, updateSubscription } from '@/api/plans'
 import { getCategories, getServiceNames } from '@/api/catalog'
 import { METHODS, METHOD_KEYS } from '@/lib/colors'
-import { MOCK_TODAY, dayOfMonth, fmtShort } from '@/lib/dates'
+import { dayOfMonth, fmtShort, todayDhaka } from '@/lib/dates'
 import { formatBDT, formatRate, formatUSD, parseTaka, splitExact, usdToPaisa } from '@/lib/money'
-import { cycleLabel, firstBillDate, nextDueDate, perCycleLabel } from '@/mocks/schedule'
+import {
+  cycleFromForm,
+  cycleLabel,
+  firstBillDate,
+  isPresetCycleUnit,
+  nextDueDate,
+  perCycleLabel,
+  presetNextRenewalFromStart,
+} from '@/mocks/schedule'
 import { focusFirstInvalid } from '@/lib/formFocus'
 import { validatePlanForm } from '@/lib/validation'
 import { useAction } from '@/hooks/useAction'
@@ -20,33 +28,33 @@ import { ServiceLogo } from '@/components/ui/ServiceLogo'
 import { NumberCircle, SkeletonCard } from '@/components/ui/Misc'
 import { Loadable } from '@/features/common/PlanBits'
 
-const EMPTY = {
-  mode: 'owner',
-  serviceName: '',
-  planName: '',
-  categoryId: '',
-  price: '',
-  currency: 'BDT',
-  rate: '122',
-  cycleUnit: 'month',
-  cycleCount: '2',
-  customUnit: 'month',
-  startDate: MOCK_TODAY,
-  trialEnd: '',
-  renewal: 'auto',
-  endDate: '',
-  seats: '2',
-  split: 'equal',
-  method: 'bkash',
-  note: '',
-  invites: [],
-  nextRenewalDate: '',
+function emptyPlanForm() {
+  const startDate = todayDhaka()
+  return {
+    mode: 'owner',
+    serviceName: '',
+    planName: '',
+    categoryId: '',
+    price: '',
+    currency: 'BDT',
+    rate: '122',
+    cycleUnit: 'month',
+    cycleCount: '1',
+    customUnit: 'month',
+    startDate,
+    trialEnd: '',
+    renewal: 'auto',
+    endDate: '',
+    seats: '2',
+    split: 'equal',
+    method: 'bkash',
+    note: '',
+    invites: [],
+    nextRenewalDate: presetNextRenewalFromStart(startDate, 'month'),
+  }
 }
 
-function cycleOf(form) {
-  if (form.cycleUnit === 'custom') return { unit: form.customUnit || 'month', count: Number(form.cycleCount) || 1 }
-  return { unit: form.cycleUnit, count: 1 }
-}
+const cycleOf = cycleFromForm
 
 function chargePaisa(form) {
   const price = parseTaka(form.price)
@@ -60,6 +68,10 @@ function chargePaisa(form) {
 }
 
 function nextRenewalOf(form) {
+  if (form.renewal !== 'fixed' && form.nextRenewalDate) return form.nextRenewalDate
+  if (isPresetCycleUnit(form.cycleUnit) && form.startDate) {
+    return presetNextRenewalFromStart(form.startDate, form.cycleUnit)
+  }
   if (!form.startDate) return null
   const plan = {
     startDate: form.startDate,
@@ -72,7 +84,7 @@ function nextRenewalOf(form) {
     endDate: form.endDate || null,
     anchorDay: dayOfMonth(form.trialEnd || form.startDate),
   }
-  return nextDueDate(plan, MOCK_TODAY) ?? firstBillDate(plan)
+  return nextDueDate(plan, todayDhaka()) ?? firstBillDate(plan)
 }
 
 function Card({ n, title, children }) {
@@ -317,20 +329,46 @@ function PlanForm({ initial, editing, planId }) {
               <legend className="field__label mb-2">Billed</legend>
               <div className="row gap-2">
                 {['week', 'month', 'year', 'custom'].map((u) => (
-                  <button key={u} type="button" className="chip" aria-pressed={form.cycleUnit === u} disabled={editing} onClick={() => set({ cycleUnit: u })}>
+                  <button
+                    key={u}
+                    type="button"
+                    className="chip"
+                    aria-pressed={form.cycleUnit === u}
+                    disabled={editing}
+                    onClick={() =>
+                      set((f) => {
+                        const patch = { cycleUnit: u }
+                        if (u !== 'custom' && f.renewal !== 'fixed' && f.startDate) {
+                          patch.nextRenewalDate = presetNextRenewalFromStart(f.startDate, u)
+                          patch.cycleCount = '1'
+                        }
+                        return patch
+                      })
+                    }
+                  >
                     {u === 'week' ? 'Weekly' : u === 'month' ? 'Monthly' : u === 'year' ? 'Yearly' : 'Custom'}
                   </button>
                 ))}
               </div>
-              {form.cycleUnit === 'custom' && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Input label="Every" inputMode="numeric" value={form.cycleCount} onChange={(e) => set({ cycleCount: e.target.value })} error={f.cycleCount} locked={editing} />
-                  <Select label="Unit" value={form.customUnit} disabled={editing} onChange={(e) => set({ customUnit: e.target.value })} options={[{ value: 'day', label: 'Days' }, { value: 'week', label: 'Weeks' }, { value: 'month', label: 'Months' }]} />
-                </div>
-              )}
             </fieldset>
             <div className="plan-date-pair sm:col-span-2">
-              <Input label="Start date" type="date" value={form.startDate} onChange={(e) => set({ startDate: e.target.value })} error={f.startDate} locked={editing} />
+              <Input
+                label="Start date"
+                type="date"
+                value={form.startDate}
+                onChange={(e) => {
+                  const startDate = e.target.value
+                  set((f) => {
+                    const patch = { startDate }
+                    if (f.renewal !== 'fixed' && isPresetCycleUnit(f.cycleUnit)) {
+                      patch.nextRenewalDate = presetNextRenewalFromStart(startDate, f.cycleUnit)
+                    }
+                    return patch
+                  })
+                }}
+                error={f.startDate}
+                locked={editing}
+              />
               {form.renewal === 'fixed' ? (
                 <Input
                   label="End date"
@@ -347,14 +385,26 @@ function PlanForm({ initial, editing, planId }) {
                   label="Next renewal date"
                   type="date"
                   value={form.nextRenewalDate ?? ''}
-                  onChange={(e) => set({ nextRenewalDate: e.target.value })}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    set((f) => {
+                      const patch = { nextRenewalDate: v }
+                      if (isPresetCycleUnit(f.cycleUnit)) {
+                        const expected = presetNextRenewalFromStart(f.startDate, f.cycleUnit)
+                        if (v && expected && v !== expected) patch.cycleUnit = 'custom'
+                      }
+                      return patch
+                    })
+                  }}
                   error={f.nextRenewalDate}
                 />
               )}
               <p className="plan-date-pair__help field__help">
                 {form.renewal === 'fixed'
-                  ? 'When the last charge is due before the plan ends. Must match your billing cycle from the start date.'
-                  : 'When the next charge is due. Must match your billing cycle from the start date.'}
+                  ? 'When the last charge is due before the plan ends.'
+                  : form.cycleUnit === 'custom'
+                    ? 'Pick the start date and the next renewal date. The days between them are your billing cycle.'
+                    : 'When the next charge is due.'}
               </p>
             </div>
             <Input label="Trial end date (optional)" type="date" value={form.trialEnd} onChange={(e) => set({ trialEnd: e.target.value })} error={f.trialEnd} locked={editing} />
@@ -503,7 +553,7 @@ export function PlanFormPage() {
     return (
       <div className="stack-lg">
         <TopBar breadcrumb={[{ label: 'My Plans', to: '/app/plans' }, { label: 'New plan' }]} title="Create a plan" subtitle="Set it up once, then invite people by email." />
-        <PlanForm initial={EMPTY} editing={false} />
+        <PlanForm initial={emptyPlanForm()} editing={false} />
       </div>
     )
   }

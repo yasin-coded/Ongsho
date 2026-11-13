@@ -45,13 +45,29 @@ const LIVE_FUNCTIONS = new Set([
   'cancelInvite',
   'decideLeave',
   'replaceMember',
-  // dashboard (partial)
+  'getReview',
+  'getLedger',
+  'getMember',
+  // payments
+  'submitPayment',
+  'confirmPayment',
+  'rejectPayment',
+  'reversePayment',
+  'waivePayment',
+  'waiveDue',
+  'markDuePaid',
+  'setDueBack',
+  'normalizeTid',
+  // dashboard
+  'getDashboard',
   'getCalendar',
   'getNavCounts',
   'getNotifications',
   'markRead',
   'markAllRead',
-  // shared (partial)
+  // shared
+  'getMyShared',
+  'getMySharedPlan',
   'acceptInvite',
   'declineInvite',
   'acceptInviteAsNewUser',
