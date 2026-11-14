@@ -71,6 +71,9 @@
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
   }
+  html.is-booting body {
+    background: var(--color-cream);
+  }
   body {
     margin: 0;
     background: var(--color-cream);

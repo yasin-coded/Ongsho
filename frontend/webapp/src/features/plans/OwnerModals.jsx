@@ -266,6 +266,16 @@ export function TransferModal({ plan, onClose }) {
   )
 }
 
+function deletePlanToast(planName, result) {
+  if (result?.archived === true) {
+    return `${planName} is archived. Members are told, and confirmed payments stay on record.`
+  }
+  if (result?.archived === false) {
+    return `${planName} is deleted. Members are told.`
+  }
+  return `${planName} is removed. Members are told. Confirmed payments stay on record.`
+}
+
 export function DeletePlanModal({ plan, onClose }) {
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
@@ -276,7 +286,7 @@ export function DeletePlanModal({ plan, onClose }) {
     },
     knownFieldKeys: ['password'],
     tone: 'due',
-    toastMessage: (r) => (r.archived ? `${plan.planName} is archived. Members are told, and confirmed payments stay on record.` : `${plan.planName} is deleted. Members are told.`),
+    toastMessage: (r) => deletePlanToast(plan.planName, r),
     onSuccess: () => navigate('/app/plans', { replace: true }),
   })
   return (

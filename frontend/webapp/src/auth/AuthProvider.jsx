@@ -5,12 +5,29 @@ import * as accounts from '@/api/accounts'
 import { keys } from '@/api/keys'
 import { forceMockMode } from '@/api/modes'
 import { clearAccessToken, setAccessToken } from '@/auth/tokenStore'
+import { BootSplash } from '@/components/layout/BootSplash'
+import { cx } from '@/components/ui/Box'
 import { AuthContext, useAuth } from './auth-context'
 
 export function AuthProvider({ children }) {
   const [status, setStatus] = useState('loading')
   const [session, setSession] = useState(null)
+  const [splash, setSplash] = useState('on')
+  const [revealApp, setRevealApp] = useState(false)
   const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const booting = status === 'loading' || splash !== 'gone'
+    document.documentElement.classList.toggle('is-booting', booting)
+    return () => document.documentElement.classList.remove('is-booting')
+  }, [status, splash])
+
+  useEffect(() => {
+    if (status === 'loading') return
+    setRevealApp(true)
+    const id = requestAnimationFrame(() => setSplash('off'))
+    return () => cancelAnimationFrame(id)
+  }, [status])
 
   useEffect(() => {
     let cancelled = false
@@ -87,19 +104,22 @@ export function AuthProvider({ children }) {
     [session, status, login, logout, signInDirect, adoptSession],
   )
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  const booted = status !== 'loading'
+
+  return (
+    <AuthContext.Provider value={value}>
+      {booted && (
+        <div className={cx('app-stage', revealApp && 'app-stage--in')}>{children}</div>
+      )}
+      {splash !== 'gone' && <BootSplash leaving={splash === 'off'} onGone={() => setSplash('gone')} />}
+    </AuthContext.Provider>
+  )
 }
 
 export function RequireAuth({ children }) {
   const { status, isAuthed } = useAuth()
   const location = useLocation()
-  if (status === 'loading') {
-    return (
-      <div className="shell" aria-busy="true">
-        <p className="p-8 font-bold">Loading…</p>
-      </div>
-    )
-  }
+  if (status === 'loading') return null
   if (!isAuthed) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return children
 }

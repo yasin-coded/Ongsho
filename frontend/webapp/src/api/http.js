@@ -92,4 +92,40 @@ export async function apiRequest(method, url, { data, params, ...rest } = {}) {
   }
 }
 
+async function blobErrorToJson(err) {
+  const blob = err?.response?.data
+  if (!(blob instanceof Blob)) return err
+  try {
+    const text = await blob.text()
+    const json = JSON.parse(text)
+    if (err.response) err.response.data = json
+  } catch {
+    /* keep blob body */
+  }
+  return err
+}
+
+/** GET a PDF (or other binary) and save it in the browser. */
+export async function downloadFile(url, { params } = {}) {
+  try {
+    const res = await http.get(url, { params, responseType: 'blob' })
+    const disposition = res.headers['content-disposition'] ?? ''
+    const nameMatch = disposition.match(/filename="([^"]+)"/i)
+    const filename = nameMatch?.[1] ?? 'ongsho-statement.pdf'
+    const number = res.headers['x-statement-number'] ?? ''
+    const href = URL.createObjectURL(res.data)
+    const link = document.createElement('a')
+    link.href = href
+    link.download = filename
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(href)
+    return { number: number || filename.replace(/^ongsho-statement-|\.pdf$/gi, '') }
+  } catch (err) {
+    throw normalizeApiError(await blobErrorToJson(err))
+  }
+}
+
 export { ApiError }

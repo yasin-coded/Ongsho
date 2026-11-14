@@ -113,7 +113,8 @@ export function Skeleton({ className, style }) {
 
 export function SkeletonCard({ lines = 3, tall }) {
   return (
-    <Box className="grid gap-4" aria-busy="true" aria-label="Loading">
+    <Box className="grid gap-4" aria-busy="true" aria-live="polite" aria-label="Loading">
+      <span className="sr-only">Loading</span>
       <Skeleton className="h-5 w-1/3" />
       <Skeleton className={tall ? 'h-24 w-1/2' : 'h-12 w-1/2'} />
       {Array.from({ length: lines }, (_, i) => (

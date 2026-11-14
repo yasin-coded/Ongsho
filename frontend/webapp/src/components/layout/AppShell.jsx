@@ -15,7 +15,7 @@ const NAV = [
   { to: '/app/shared', label: 'Shared Plans', short: 'Shared', icon: Users, count: 'dues', countLabel: 'open dues' },
   { to: '/app/calendar', label: 'Calendar', short: 'Calendar', icon: CalendarDays },
   { to: '/app/notifications', label: 'Notifications', short: 'Alerts', icon: Bell, count: 'unread', countLabel: 'unread', tone: 'notify' },
-  { to: '/app/profile', label: 'Profile', short: 'Profile', icon: UserRound, desktopOnly: true },
+  { to: '/app/profile', label: 'Profile', short: 'You', icon: UserRound },
 ]
 
 export function AppShell() {
@@ -72,7 +72,7 @@ export function AppShell() {
       </div>
 
       <nav aria-label="Main" className="bottombar">
-        {NAV.filter((n) => !n.desktopOnly).map((item) => (
+        {NAV.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className="bottombar__link">
             <item.icon aria-hidden="true" />
             <span>{item.short}</span>

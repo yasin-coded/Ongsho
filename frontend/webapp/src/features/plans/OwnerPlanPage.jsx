@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ArrowRightLeft, Ban, ChevronDown, Download, Eye, Pause, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Ban, ChevronDown, Download, Eye, Mail, Pause, Play, RotateCcw, Trash2, UserPlus } from 'lucide-react'
+import { canSendInvite, freeSeats, inviteReservesSeat, pendingInvitesReservingSeats } from '@/lib/planSeats'
 import * as plansApi from '@/api/plans'
 import { METHODS, STATUS } from '@/lib/colors'
 import { MOCK_TODAY, fmtFull, fmtShort, fmtWhen, monthKey, plural, renewsInLabel } from '@/lib/dates'
@@ -162,38 +163,58 @@ function SeatSplitCard({ plan }) {
   )
 }
 
-function MembersCard({ plan, onOpen, onInvite, openId, rowRefs }) {
-  const [tab, setTab] = useState('full')
-  const pendingInvites = plan.invites.filter((i) => i.status === 'pending')
-  const free = plan.seatsCap - plan.seatsTaken - pendingInvites.length
+function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, cancelInviteBusy }) {
+  const reservedInvites = pendingInvitesReservingSeats(plan.invites)
+  const free = freeSeats(plan)
   const reseller = plan.mode === 'reseller'
   const list = reseller ? plan.members.filter((m) => !m.isOwnerSeat) : plan.members
+  const inviteLabel = reseller ? 'Invite buyer' : 'Invite member'
+  const canInvite = canSendInvite(plan)
+  const seatsFullReason =
+    free <= 0 && reservedInvites.length > 0
+      ? `${reservedInvites.length} pending invite${reservedInvites.length === 1 ? '' : 's'} — cancel one to free a seat`
+      : free <= 0
+        ? 'All seats are taken'
+        : undefined
 
   return (
     <Box>
-      <div className="row-between mb-5">
+      <div className="row-between mb-5 gap-3 flex-wrap">
         <h2 className="t-card">{reseller ? 'Buyers' : 'Members'}</h2>
-        <div className="row gap-2" role="group" aria-label="Members or invite">
-          <button type="button" className="chip" aria-pressed={tab === 'full'} onClick={() => setTab('full')}>
-            Full
-          </button>
-          <button
-            type="button"
-            className="chip"
-            aria-pressed={tab === 'invite'}
-            disabled={free <= 0}
-            onClick={() => {
-              setTab('invite')
-              onInvite()
-            }}
-            title={free <= 0 ? 'All seats are taken' : undefined}
-          >
-            Invite
-          </button>
-        </div>
+        <Button
+          variant="primary-orange"
+          size="sm"
+          icon={UserPlus}
+          disabled={!canInvite}
+          title={!canInvite && seatsFullReason ? seatsFullReason : !canInvite ? 'Invites are not available for this plan status' : undefined}
+          onClick={onInvite}
+        >
+          {inviteLabel}
+        </Button>
       </div>
 
       <ul className="dashed-rows">
+        {reservedInvites.map((inv) => (
+          <li key={inv.id} className="flex w-full flex-wrap items-center gap-3 py-3">
+            <div className="grid min-h-[2.75rem] min-w-[2.75rem] place-items-center rounded-full border-[0.1875rem] border-dashed border-black bg-[var(--color-cream)]">
+              <Mail aria-hidden="true" className="size-5" />
+            </div>
+            <div className="min-w-0 flex-[1_1_12rem]">
+              <p className="font-bold break-all">{inv.email}</p>
+              <p className="t-meta">
+                {inv.status === 'expired' ? 'Invite expired — still holding a seat until you cancel' : 'Invited — not joined yet'}
+              </p>
+            </div>
+            <StatusPill status={inv.status === 'expired' ? 'due' : 'pending'} small>
+              {inv.status === 'expired' ? 'Expired' : 'Pending'}
+            </StatusPill>
+            {String(inv.id).startsWith('email-') ? null : (
+              <Button size="sm" variant="ghost" busy={cancelInviteBusy} onClick={() => onCancelInvite(inv.id)}>
+                Cancel invite
+              </Button>
+            )}
+          </li>
+        ))}
         {list.map((m) => (
           <li key={m.id} className="flex w-full flex-wrap items-center gap-3 py-3">
             <Avatar name={m.name} color={m.avatarColor} size="md" status={m.dueStatus ?? undefined} decorative />
@@ -233,7 +254,7 @@ function MembersCard({ plan, onOpen, onInvite, openId, rowRefs }) {
             )}
           </li>
         ))}
-        {!list.length && <li className="t-meta py-4">Nobody yet. Invite people by email.</li>}
+        {!list.length && !reservedInvites.length && <li className="t-meta py-4">Nobody yet. Invite people by email.</li>}
       </ul>
 
       {plan.leftMembers.length > 0 && (
@@ -269,7 +290,8 @@ function LedgerCard({ plan }) {
     placeholderData: keepPreviousData,
   })
   const download = useAction(() => plansApi.downloadOwnerStatement(plan.id, { month: stmt }), {
-    toastMessage: (r) => `Statement ${r.number} is ready. In the real app the PDF downloads now.`,
+    toastMessage: (r) => (r?.number ? `Downloaded statement ${r.number}.` : 'Statement downloaded.'),
+    invalidate: ['plans', 'nav', 'dashboard'],
   })
 
   return (
@@ -290,7 +312,7 @@ function LedgerCard({ plan }) {
               ))}
             </div>
             <div className="table-scroll">
-              <table className="neo-table">
+              <table className="neo-table neo-table--stack">
                 <thead>
                   <tr>
                     <th scope="col">Month</th>
@@ -303,17 +325,17 @@ function LedgerCard({ plan }) {
                 <tbody>
                   {d.items.map((r) => (
                     <tr key={r.id}>
-                      <td>{r.monthLabel}</td>
-                      <td>
+                      <td data-label="Month">{r.monthLabel}</td>
+                      <td data-label="Member">
                         {r.firstName}
                         {r.isOwnerSeat ? ' (you)' : ''}
                         {r.coveredBy && <span className="t-meta block">covered by {r.coveredBy}</span>}
                       </td>
-                      <td className="t-num">{formatBDT(r.amount)}</td>
-                      <td>
+                      <td className="t-num" data-label="Amount">{formatBDT(r.amount)}</td>
+                      <td data-label="Status">
                         <StatusPill status={r.status} small />
                       </td>
-                      <td className="t-meta">
+                      <td className="t-meta" data-label="Proof">
                         {r.tid ? `${METHODS[r.method]?.label ?? ''} · ${r.tid}` : r.recordedByOwner ? 'recorded by owner' : '—'}
                         {r.paidOn && <span className="block">{fmtShort(r.paidOn)}</span>}
                       </td>
@@ -392,9 +414,17 @@ function OwnerPlan({ plan }) {
     }
   }
 
-  const pendingInvites = plan.invites.filter((i) => i.status === 'pending')
-  const free = plan.seatsCap - plan.seatsTaken - pendingInvites.length
+  const free = freeSeats(plan)
+  const reservedInvites = pendingInvitesReservingSeats(plan.invites)
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const canInvite = canSendInvite(plan)
+  const seatsFullReason =
+    free <= 0 && reservedInvites.length > 0
+      ? `${reservedInvites.length} pending invite${reservedInvites.length === 1 ? '' : 's'} — cancel one to free a seat`
+      : free <= 0
+        ? 'All seats are taken'
+        : undefined
+  const openInvite = () => setModal({ type: 'invite' })
 
   return (
     <div className="stack-lg">
@@ -451,7 +481,9 @@ function OwnerPlan({ plan }) {
           plan={plan}
           openId={openId}
           rowRefs={rowRefs}
-          onInvite={() => setModal({ type: 'invite' })}
+          onInvite={openInvite}
+          onCancelInvite={(id) => cancelInv.run(id)}
+          cancelInviteBusy={cancelInv.busy}
           onOpen={(type, member) => {
             if (type === 'window') setOpenId(member.id)
             else setModal({ type, member })
@@ -556,7 +588,14 @@ function OwnerPlan({ plan }) {
       <LedgerCard plan={plan} />
 
       <Box>
-        <BoxHead title="Invite details" />
+        <BoxHead
+          title="Invite details"
+          action={
+            <Button size="sm" variant="ghost" icon={UserPlus} disabled={!canInvite} onClick={openInvite}>
+              Invite by email
+            </Button>
+          }
+        />
         <p>
           {free <= 0
             ? `All ${plan.seatsCap} seats are taken. If someone leaves, you can invite someone by email.`
@@ -573,7 +612,7 @@ function OwnerPlan({ plan }) {
                   </StatusPill>
                 </div>
                 <p className="t-meta">{i.expiresOn ? `expires ${fmtShort(i.expiresOn)}` : 'No expiry date'}</p>
-                {i.status === 'pending' && (
+                {inviteReservesSeat(i) && (
                   <div className="grid gap-3">
                     <CopyField label="Backup link" value={`${origin}/invite/${i.token}`} />
                     <Button size="sm" variant="ghost" onClick={() => cancelInv.run(i.id)} busy={cancelInv.busy}>

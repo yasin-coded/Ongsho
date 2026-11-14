@@ -4,14 +4,27 @@ import { mapReview, mapLedgerResponse } from './review'
 describe('review adapter', () => {
   it('maps pending payments', () => {
     const out = mapReview({
-      plan: { id: 1, plan_name: 'Netflix', mode: 'owner' },
+      plan: {
+        id: 1,
+        plan_name: 'Spotify Family',
+        mode: 'owner',
+        service_name: { name: 'Spotify' },
+        next_renewal: '2026-12-13',
+      },
       waiting: { count: 1, total: '500.00' },
       confirmed: { amount: '0.00', expected: '500.00', members: 1 },
       still_due: [{ id: 2 }],
       pending: [
         {
           payment_id: 9,
-          payer: { id: 3, name: 'M', first_name: 'M', avatar_id: 'sage' },
+          payer: {
+            id: 3,
+            name: 'M',
+            first_name: 'M',
+            email: 'm@example.com',
+            avatar_id: 'sage',
+            leave_requested: true,
+          },
           method: 'bkash',
           transaction_id: 'ABC123',
           amount: '500.00',
@@ -19,10 +32,25 @@ describe('review adapter', () => {
           covers: [{ due_id: 5, member_first_name: 'M', month: 'February', amount: '500.00' }],
         },
       ],
-      decided: [],
+      decided: [
+        {
+          due_id: 7,
+          payment_id: 4,
+          member: { first_name: 'A', email: 'a@example.com', avatar_id: 'coral' },
+          status: 'waived',
+          amount: '100.00',
+          waiver_note: 'Birthday',
+        },
+      ],
     })
     expect(out.pending[0].id).toBe('9')
     expect(out.pending[0].amount).toBe(50000)
+    expect(out.pending[0].email).toBe('m@example.com')
+    expect(out.pending[0].leaveRequested).toBe(true)
+    expect(out.plan.serviceKey).toBe('spotify')
+    expect(out.plan.nextRenewal).toBe('2026-12-13')
+    expect(out.decided[0].waiverNote).toBe('Birthday')
+    expect(out.decided[0].paymentId).toBe('4')
     expect(out.stillDue).toBe(1)
   })
 })

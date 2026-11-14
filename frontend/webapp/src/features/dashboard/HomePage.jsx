@@ -178,16 +178,24 @@ function NeedsAttention({ items }) {
 
 function HomeSkeleton() {
   return (
-    <div className="stack-lg">
+    <div className="stack-lg" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading</span>
       <div className="stat-grid">
         <SkeletonCard tall />
         <SkeletonCard tall />
         <SkeletonCard tall />
       </div>
-      <div className="two-col">
-        <SkeletonCard lines={5} />
-        <SkeletonCard lines={5} />
+      <div className="dash-home__cols grid gap-6">
+        <div className="stack">
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={3} />
+        </div>
+        <div className="dash-home__aside stack">
+          <SkeletonCard tall />
+          <SkeletonCard lines={4} />
+        </div>
       </div>
+      <SkeletonCard lines={6} />
     </div>
   )
 }

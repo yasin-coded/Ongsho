@@ -1,5 +1,5 @@
 import { parseTaka, fromPaisa, toPaisa } from '@/lib/money'
-import { apiRequest } from '../http'
+import { apiRequest, downloadFile } from '../http'
 import { idStr, moneyToApi, rateToApi, moneyFromApi } from '../adapters/common'
 import { mapReview, mapLedgerResponse, mapMemberDetail } from '../adapters/review'
 import {
@@ -31,20 +31,42 @@ async function loadMembers(planId, meUserId) {
   }
 }
 
+function mapInviteRow(i) {
+  return {
+    id: idStr(i.id),
+    email: i.email,
+    status: i.status,
+    createdAt: i.created_at,
+    expiresOn: i.expires_on ?? null,
+    token: i.token ?? i.link?.split('/').pop() ?? null,
+  }
+}
+
 async function loadInvites(planId) {
   try {
     const rows = await apiRequest('get', `/api/shared-plans/${Number(planId)}/invites/`)
-    return (rows ?? []).map((i) => ({
-      id: idStr(i.id),
-      email: i.email,
-      status: i.status,
-      createdAt: i.created_at,
-      expiresOn: i.expires_on ?? null,
-      token: i.token ?? i.link?.split('/').pop() ?? null,
-    }))
+    const list = Array.isArray(rows) ? rows : rows?.results ?? []
+    return list.map(mapInviteRow)
   } catch {
     return []
   }
+}
+
+/** Ensure pending emails from subscription detail appear even when the invites list call failed. */
+function mergePendingInviteEmails(invites, pendingEmails = []) {
+  if (!pendingEmails.length) return invites
+  const seen = new Set(invites.map((i) => i.email.toLowerCase()))
+  const extra = pendingEmails
+    .filter((email) => email && !seen.has(String(email).toLowerCase()))
+    .map((email) => ({
+      id: `email-${email}`,
+      email,
+      status: 'pending',
+      createdAt: null,
+      expiresOn: null,
+      token: null,
+    }))
+  return extra.length ? [...invites, ...extra] : invites
 }
 
 async function loadSharedMeta(planId) {
@@ -68,18 +90,20 @@ export async function getSubscription(id) {
   try {
     const sub = await apiRequest('get', `/api/subscriptions/${Number(id)}/`)
     const me = await getMe()
-    const [members, invites, shared, priceChanges] = await Promise.all([
+    const [members, invitesRaw, shared, priceChanges] = await Promise.all([
       loadMembers(id, me.id),
       loadInvites(id),
       loadSharedMeta(id),
       apiRequest('get', `/api/subscriptions/${Number(id)}/price-changes/`).catch(() => []),
     ])
+    const invites = mergePendingInviteEmails(invitesRaw, sub.pending_invites)
+    const seatsTaken = shared?.member_count ?? members.length
     return mapSubscriptionDetail(sub, {
       members,
       invites,
       splitType: shared?.split_type,
       seats: shared?.seats,
-      seatsTaken: members.length,
+      seatsTaken,
       priceChanges: priceChanges ?? [],
       meUserId: me.id,
     })
@@ -137,6 +161,7 @@ export async function updateSubscription(id, form) {
 
 export async function deletePlan(id, { password }) {
   await apiRequest('delete', `/api/subscriptions/${Number(id)}/`, { data: { password } })
+  return {}
 }
 
 export async function pausePlan(id) {
@@ -221,6 +246,6 @@ export function cancelTransfer(transferId) {
   return mock.cancelTransfer(transferId)
 }
 
-export function downloadOwnerStatement(planId, opts) {
-  return mock.downloadOwnerStatement(planId, opts)
+export async function downloadOwnerStatement(planId, { month }) {
+  return downloadFile(`/api/shared-plans/${Number(planId)}/statement/`, { params: { month } })
 }

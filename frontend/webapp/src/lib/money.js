@@ -2,17 +2,17 @@
 
 const grouped = new Intl.NumberFormat('en-US')
 
-const MONEY_RE = /^-?\d+(\.\d{1,2})?$/
+const DECIMAL_STRING_RE = /^-?(?:\d+|\d*\.\d+)$/
 
-/** Parse an API decimal string (e.g. "733.78") into integer paisa. Rejects scientific notation. */
+/** Parse an API decimal string (e.g. "733.78", "125.0000") into integer paisa. Rejects scientific notation. */
 export function toPaisa(decimalString) {
   const raw = String(decimalString ?? '').trim()
-  if (!MONEY_RE.test(raw)) throw new RangeError(`Invalid money string: ${raw}`)
-  const neg = raw.startsWith('-')
-  const clean = neg ? raw.slice(1) : raw
-  const [whole, frac = ''] = clean.split('.')
-  const paisa = Number(whole) * 100 + Number(frac.padEnd(2, '0').slice(0, 2))
-  return neg ? -paisa : paisa
+  if (!raw || !DECIMAL_STRING_RE.test(raw) || /[eE]/.test(raw)) {
+    throw new RangeError(`Invalid money string: ${raw}`)
+  }
+  const num = Number(raw)
+  if (!Number.isFinite(num)) throw new RangeError(`Invalid money string: ${raw}`)
+  return Math.round(num * 100)
 }
 
 /** Format integer paisa as an API decimal string with two places. */

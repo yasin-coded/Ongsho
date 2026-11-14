@@ -10,7 +10,8 @@ import {
   validateRequiredPassword,
   validateServiceName,
 } from '@/lib/validation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keys } from '@/api/keys'
 import { Check, Lock, LogOut, Plus, X } from 'lucide-react'
 import * as accounts from '@/api/accounts'
 import { createCategory, createServiceName, deleteCategory, deleteServiceName, getCategories, getServiceNames } from '@/api/catalog'
@@ -251,42 +252,67 @@ function PasswordCard() {
 }
 
 function RemindersCard() {
-  const query = useQuery({ queryKey: ['reminders'], queryFn: accounts.getReminderSettings })
-  const save = useAction(accounts.updateReminderSettings, { toastMessage: 'Reminder settings saved.' })
+  const queryClient = useQueryClient()
+  const query = useQuery({ queryKey: keys.reminderSettings, queryFn: accounts.getReminderSettings })
+  const save = useAction(accounts.updateReminderSettings, {
+    toastMessage: 'Reminder settings saved.',
+    invalidate: ['reminders'],
+    optimisticNav: false,
+  })
   const OPTIONS = [7, 3, 1, 0]
+  const patchSettings = (patch) => {
+    const prev = queryClient.getQueryData(keys.reminderSettings)
+    if (!prev) {
+      save.run(patch)
+      return
+    }
+    const next = { ...prev, ...patch }
+    queryClient.setQueryData(keys.reminderSettings, next)
+    save.run(patch)
+  }
   return (
     <Box>
       <BoxHead title="Reminders" sub="When we remind you about a due or a renewal." />
       <Loadable query={query} skeleton={<SkeletonCard lines={2} />}>
-        {(s) => (
-          <div className="grid gap-5">
-            <fieldset>
-              <legend className="field__label mb-2">Days before</legend>
-              <div className="row gap-2">
-                {OPTIONS.map((d) => {
-                  const on = s.daysBefore.includes(d)
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      className="chip"
-                      aria-pressed={on}
-                      onClick={() => save.run({ daysBefore: on ? s.daysBefore.filter((x) => x !== d) : [...s.daysBefore, d].sort((a, b) => b - a) })}
-                    >
-                      {d === 0 ? 'On the day' : `${d} day${d === 1 ? '' : 's'} before`}
-                    </button>
-                  )
-                })}
+        {(s) => {
+          const daysBefore = s.daysBefore ?? []
+          return (
+            <div className="grid gap-5">
+              <fieldset>
+                <legend className="field__label mb-2">Days before</legend>
+                <div className="row gap-2">
+                  {OPTIONS.map((d) => {
+                    const on = daysBefore.includes(d)
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        className="chip"
+                        aria-pressed={on}
+                        onClick={() => {
+                          const next = on ? daysBefore.filter((x) => x !== d) : [...daysBefore, d].sort((a, b) => b - a)
+                          patchSettings({ daysBefore: next })
+                        }}
+                      >
+                        {d === 0 ? 'On the day' : `${d} day${d === 1 ? '' : 's'} before`}
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+              <div className="row-between">
+                <span id="email-reminders" className="t-label">
+                  Also send reminders by email
+                </span>
+                <Switch
+                  checked={s.email}
+                  label="Also send reminders by email"
+                  onChange={(v) => patchSettings({ email: v })}
+                />
               </div>
-            </fieldset>
-            <div className="row-between">
-              <span id="email-reminders" className="t-label">
-                Also send reminders by email
-              </span>
-              <Switch checked={s.email} label="Also send reminders by email" onChange={(v) => save.run({ email: v })} />
             </div>
-          </div>
-        )}
+          )
+        }}
       </Loadable>
     </Box>
   )

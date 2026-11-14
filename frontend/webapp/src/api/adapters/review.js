@@ -3,7 +3,7 @@ import { fmtMonth } from '@/lib/dates'
 import { avatarColorFromId } from './me'
 import { idStr, moneyFromApi, paginatedBody } from './common'
 
-function mapCovers(covers, payerId) {
+function mapCovers(covers) {
   return (covers ?? []).map((c) => ({
     dueId: idStr(c.due_id),
     name: c.member_first_name,
@@ -15,27 +15,30 @@ function mapCovers(covers, payerId) {
 
 export function mapReview(data) {
   const pending = (data.pending ?? []).map((p) => {
-    const covers = mapCovers(p.covers, p.payer?.id)
+    const covers = mapCovers(p.covers)
     return {
       id: idStr(p.payment_id),
       memberId: idStr(p.payer?.id),
       name: p.payer?.name ?? '',
       firstName: p.payer?.first_name ?? '',
-      email: '',
+      email: p.payer?.email ?? '',
       avatarColor: avatarColorFromId(p.payer?.avatar_id),
       amount: moneyFromApi(p.amount),
       method: p.method,
       tid: p.transaction_id,
       submittedAt: p.submitted_at,
-      leaveRequested: false,
+      leaveRequested: Boolean(p.payer?.leave_requested),
       covers,
       cycleLabel: covers.map((c) => c.monthLong).filter(Boolean).join(', '),
     }
   })
+  const planName = data.plan?.plan_name
+  const serviceName = data.plan?.service_name?.name
   const decided = (data.decided ?? []).map((d) => ({
     id: idStr(d.due_id),
     name: d.member?.first_name ?? '',
     firstName: d.member?.first_name ?? '',
+    email: d.member?.email ?? '',
     avatarColor: avatarColorFromId(d.member?.avatar_id),
     isOwnerSeat: false,
     amount: moneyFromApi(d.amount),
@@ -50,10 +53,11 @@ export function mapReview(data) {
   return {
     plan: {
       id: idStr(data.plan?.id),
-      planName: data.plan?.plan_name,
+      planName,
       mode: data.plan?.mode,
-      serviceKey: null,
-      nextRenewal: null,
+      serviceKey: lookupServiceKey(serviceName ?? planName ?? ''),
+      serviceName,
+      nextRenewal: data.plan?.next_renewal ?? null,
     },
     cycleLabel: data.cycle_month,
     chargeDueDate: data.charge_due_date,

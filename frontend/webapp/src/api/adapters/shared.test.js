@@ -33,6 +33,26 @@ describe('shared adapter', () => {
     expect(out.items[0].openDues[0].amount).toBe(25000)
     expect(out.items[0].members).toHaveLength(2)
     expect(out.items[0].members[1].firstName).toBe('You')
+    const withTotals = mapMySharedList(
+      {
+        results: [],
+        count: 0,
+        totals: {
+          due_names: ['Netflix'],
+          waiting_names: [],
+          due_count: 1,
+          pending_count: 0,
+          paid_up_count: 2,
+          shares: '500.00',
+          due_now: '250.00',
+          waiting: '0.00',
+        },
+      },
+      'u9',
+    )
+    expect(withTotals.totals.dueNames).toEqual(['Netflix'])
+    expect(withTotals.totals.dueCount).toBe(1)
+    expect(withTotals.totals.paidUpCount).toBe(2)
   })
 
   it('maps member detail dues', () => {
@@ -53,10 +73,19 @@ describe('shared adapter', () => {
         ious: [{ you_owe: true, other: { first_name: 'Sam' }, amount: '100.00' }],
         history: [],
         total_spent: '500.00',
+        next_renewal: '2026-12-13',
+        leave_requested: false,
+        leave_requested_at: null,
+        can_request_leave: true,
+        me: { member_id: 9, status: 'active', joined_on: '2026-01-01', leave_requested_at: null },
       },
       'u9',
     )
     expect(out.openDues[0].amount).toBe(25000)
     expect(out.ious[0].youOwe).toBe(true)
+    expect(out.nextRenewal).toBe('2026-12-13')
+    expect(out.canRequestLeave).toBe(true)
+    expect(out.me.memberId).toBe('9')
+    expect(out.me.joinedOn).toBe('2026-01-01')
   })
 })

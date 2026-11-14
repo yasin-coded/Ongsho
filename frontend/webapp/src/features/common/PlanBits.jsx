@@ -3,13 +3,14 @@ import { CHART, STATUS } from '@/lib/colors'
 import { fmtShort, plural } from '@/lib/dates'
 import { formatBDT, formatRate, formatUSD } from '@/lib/money'
 import { cycleLabel, perCycleLabel } from '@/mocks/schedule'
+import { shouldShowInitialSkeleton } from '@/lib/queryLoading'
 import { DateBadge, EmptyState, ErrorBox, SkeletonCard } from '@/components/ui/Misc'
 import { cx } from '@/components/ui/Box'
 
 /** Renders a query's skeleton, error box, or its data. */
 export function Loadable({ query, skeleton, children }) {
-  if (query.isPending) return skeleton ?? <SkeletonCard />
-  if (query.isError) return <ErrorBox error={query.error} onRetry={() => query.refetch()} />
+  if (shouldShowInitialSkeleton(query)) return skeleton ?? <SkeletonCard />
+  if (query.isError && query.data === undefined) return <ErrorBox error={query.error} onRetry={() => query.refetch()} />
   return children(query.data)
 }
 

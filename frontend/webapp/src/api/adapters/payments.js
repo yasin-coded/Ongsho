@@ -13,6 +13,8 @@ const CODE_MESSAGES = {
   invalid_due_status: 'This due cannot be changed right now. Refresh and try again.',
 }
 
+const NOTE_HINT = 'Add a short note, for example "Birthday month".'
+
 export function mapPaymentFields(fields = {}) {
   const out = { ...fields }
   if (out.transaction_id) {
@@ -31,5 +33,11 @@ export function enrichPaymentError(err) {
   let message = err.message
   if (err.code && CODE_MESSAGES[err.code]) message = CODE_MESSAGES[err.code]
   const fields = mapPaymentFields(err.fields)
+  const noteErr = fields.note
+  if (noteErr) {
+    const text = Array.isArray(noteErr) ? noteErr[0] : noteErr
+    message = text || NOTE_HINT
+    fields.note = text || NOTE_HINT
+  }
   return new ApiError(message, { status: err.status, code: err.code, fields })
 }

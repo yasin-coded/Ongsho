@@ -67,10 +67,13 @@ export function mapMySharedSummary(row, meUserId) {
     totalSpent: moneyFromApi(row.total_spent) ?? 0,
     me: {
       memberId: row.me?.member_id != null ? idStr(row.me.member_id) : null,
+      status: row.me?.status ?? null,
+      joinedOn: row.me?.joined_on ?? null,
       name: row.me?.name ?? row.members?.find((m) => m.is_you)?.name ?? '',
       firstName: 'You',
       avatarColor: avatarColorFromId(meUserId),
-      leaveRequested: Boolean(row.leave_requested),
+      leaveRequested: Boolean(row.leave_requested ?? row.me?.status === 'leave_requested'),
+      leaveRequestedAt: row.leave_requested_at ?? row.me?.leave_requested_at ?? null,
     },
     price: priceBdt ? { amount: priceBdt } : { amount: myShare },
     seats: row.seats_taken ?? row.seats,
@@ -144,10 +147,14 @@ export function mapMySharedPlanDetail(row, meUserId) {
     totalSpent: moneyFromApi(row.total_spent) ?? 0,
     pendingSince: row.pending_since,
     lastRejection: row.last_rejection,
+    canRequestLeave: row.can_request_leave ?? true,
     me: {
       ...base.me,
-      leaveRequested: row.leave_requested,
-      leaveRequestedAt: row.leave_requested_at,
+      memberId: row.me?.member_id != null ? idStr(row.me.member_id) : base.me.memberId,
+      status: row.me?.status ?? base.me.status,
+      joinedOn: row.me?.joined_on ?? base.me.joinedOn,
+      leaveRequested: Boolean(row.leave_requested ?? row.me?.status === 'leave_requested'),
+      leaveRequestedAt: row.leave_requested_at ?? row.me?.leave_requested_at ?? base.me.leaveRequestedAt,
     },
   }
 }

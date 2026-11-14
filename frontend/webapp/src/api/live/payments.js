@@ -2,7 +2,6 @@ import { ApiError } from '../errors'
 import { apiRequest } from '../http'
 import { enrichPaymentError } from '../adapters/payments'
 import { idStr } from '../adapters/common'
-import { mapReview } from '../adapters/review'
 
 export const normalizeTid = (tid) => String(tid ?? '').replace(/\s+/g, '').toUpperCase()
 
@@ -67,28 +66,8 @@ export async function setDueBack(dueId) {
   return postAction(`/api/dues/${Number(dueId)}/set-due/`)
 }
 
-async function findPaymentInReviews(paymentId) {
-  const { results = [] } = await apiRequest('get', '/api/subscriptions/', { params: { page_size: 100 } })
-  for (const sub of results) {
-    try {
-      const raw = await apiRequest('get', `/api/shared-plans/${sub.id}/review/`)
-      const hit = mapReview(raw).pending.find((p) => String(p.id) === String(paymentId))
-      if (hit) return hit
-    } catch {
-      /* skip solo / not shared */
-    }
-  }
-  return null
-}
-
 export async function waivePayment(paymentId, { note }) {
   const clean = (note ?? '').trim()
   if (!clean) throw new ApiError('Add a note.', { fields: { note: 'Add a short note, for example "Birthday month".' } })
-  const payment = await findPaymentInReviews(paymentId)
-  if (!payment) throw new ApiError('Payment not found.', { status: 404 })
-  let last
-  for (const cover of payment.covers) {
-    last = await waiveDue(cover.dueId, { note: clean })
-  }
-  return last ?? { message: 'Waived.' }
+  return postAction(`/api/payments/${Number(paymentId)}/waive/`, { note: clean })
 }

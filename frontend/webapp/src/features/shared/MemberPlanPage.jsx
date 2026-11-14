@@ -24,7 +24,9 @@ import { RequestLeaveModal } from './RequestLeaveModal'
 function StatementPicker({ plan }) {
   const months = [...new Map(plan.history.map((h) => [monthKey(h.dueDate), h.monthLabel])).entries()]
   const [month, setMonth] = useState(months[0]?.[0] ?? monthKey(todayDhaka()))
-  const download = useAction(() => downloadMyStatement(plan.id, { month }), { toastMessage: (r) => `Statement ${r.number} is ready. In the real app the PDF downloads now.` })
+  const download = useAction(() => downloadMyStatement(plan.id, { month }), {
+    toastMessage: (r) => (r?.number ? `Downloaded statement ${r.number}.` : 'Statement downloaded.'),
+  })
   if (!months.length) return null
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -198,7 +200,9 @@ function MemberPlan({ plan }) {
 
           <Box>
             <BoxHead title="Leaving?" />
-            {plan.me.leaveRequested ? (
+            {plan.canRequestLeave === false ? (
+              <p className="t-meta">This plan does not support leave requests from your seat.</p>
+            ) : plan.me.leaveRequested ? (
               <div className="grid gap-3">
                 <p className="font-bold">Leave requested{plan.me.leaveRequestedAt ? ` on ${fmtShort(dhakaDate(plan.me.leaveRequestedAt))}` : ''}.</p>
                 <button type="button" className="text-link w-fit" onClick={() => cancelLeave.run()} disabled={cancelLeave.busy}>

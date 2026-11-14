@@ -109,7 +109,7 @@ function SharedCard({ plan, onPay, onLeave }) {
           <span className="neo-pill neo-pill--sm" style={{ background: '#846ace', color: '#000' }}>
             Leave requested
           </span>
-        ) : (
+        ) : plan.canRequestLeave === false ? null : (
           <Button variant="reject-outline" size="sm" icon={LogOut} onClick={() => onLeave(plan)}>
             Request leave
           </Button>

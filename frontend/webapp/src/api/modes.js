@@ -47,6 +47,7 @@ const LIVE_FUNCTIONS = new Set([
   'replaceMember',
   'getReview',
   'getLedger',
+  'downloadOwnerStatement',
   'getMember',
   // payments
   'submitPayment',
@@ -68,6 +69,7 @@ const LIVE_FUNCTIONS = new Set([
   // shared
   'getMyShared',
   'getMySharedPlan',
+  'downloadMyStatement',
   'acceptInvite',
   'declineInvite',
   'acceptInviteAsNewUser',

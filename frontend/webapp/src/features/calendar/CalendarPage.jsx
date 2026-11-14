@@ -6,6 +6,7 @@ import { SERVICES } from '@/lib/services'
 import { CUSTOM_PALETTE, hashIndex } from '@/lib/colors'
 import { addDays, addMonthsToKey, dayOfMonth, fmtFull, fmtMonthYearLong, monthKey, todayDhaka, weekday, weekdayName } from '@/lib/dates'
 import { formatBDT } from '@/lib/money'
+import { shouldShowInitialSkeleton } from '@/lib/queryLoading'
 import { TopBar } from '@/components/layout/TopBar'
 import { Box, BoxHead, cx } from '@/components/ui/Box'
 import { Button } from '@/components/ui/Button'
@@ -202,7 +203,7 @@ export function CalendarPage() {
               <p className="t-sub min-w-0 truncate">{weekdayName(selected).toUpperCase()}</p>
               <DateBadge date={selected} />
             </div>
-            {query.isPending ? (
+            {shouldShowInitialSkeleton(query) ? (
               <Skeleton className="h-16" />
             ) : dayEvents.length ? (
               <ul className="dashed-rows">
@@ -225,7 +226,11 @@ export function CalendarPage() {
           </Box>
           <Box className="min-w-0 overflow-hidden">
             <BoxHead title="Next 7 days" />
-            {query.data ? <EventList events={query.data.next7} /> : <Skeleton className="h-32" />}
+            {!shouldShowInitialSkeleton(query) && query.data ? (
+              <EventList events={query.data.next7} />
+            ) : (
+              <Skeleton className="h-32" />
+            )}
           </Box>
         </div>
       </div>

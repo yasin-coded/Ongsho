@@ -1,5 +1,5 @@
 import { setAccessToken } from '@/auth/tokenStore'
-import { apiRequest } from '../http'
+import { apiRequest, downloadFile } from '../http'
 import { mapUserFromApi } from '../adapters/me'
 import { idStr } from '../adapters/common'
 import { mapMySharedList, mapMySharedPlanDetail } from '../adapters/shared'
@@ -25,8 +25,8 @@ export async function getMySharedPlan(id) {
   }
 }
 
-export function downloadMyStatement(planId, opts) {
-  return mock.downloadMyStatement(planId, opts)
+export async function downloadMyStatement(planId, { month }) {
+  return downloadFile(`/api/me/shared-plans/${Number(planId)}/statement/`, { params: { month } })
 }
 
 export async function acceptInvite(ref) {

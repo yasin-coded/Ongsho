@@ -1,6 +1,7 @@
 @layer components {
   .shell {
     min-height: 100dvh;
+    overflow-x: clip;
     --font-display: "Bahnschrift", system-ui, sans-serif;
     --font-body: "Bahnschrift", system-ui, sans-serif;
     font-family: var(--font-body);
@@ -16,6 +17,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: 0.75rem;
     position: sticky;
     top: 0;
     z-index: 25;
@@ -27,6 +29,7 @@
   .mobile-brandbar__link {
     display: block;
     width: fit-content;
+    margin-inline: auto;
     padding: 0.2rem 0.35rem;
     border-radius: 0.5rem;
     text-decoration: none;
@@ -111,7 +114,7 @@
     inset: auto 0 0 0;
     z-index: 30;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0.25rem;
     padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom));
     background: var(--color-brand);
@@ -131,7 +134,7 @@
     text-decoration: none;
     font-family: var(--font-display);
     font-weight: 700;
-    font-size: 0.62rem;
+    font-size: 0.58rem;
     text-transform: uppercase;
     text-align: center;
     line-height: 1.1;
@@ -145,10 +148,81 @@
   .bottombar__link[aria-current="page"] { background: var(--color-cream); color: var(--color-brand); border-color: #000; }
   .bottombar__link .bubble { position: absolute; top: 0.05rem; right: calc(50% - 1.6rem); min-width: 1.3rem; height: 1.3rem; font-size: 0.65rem; padding: 0 0.25rem; }
 
+  .mobile-brandbar__menu {
+    flex: none;
+    color: var(--color-cream);
+    border-color: var(--color-cream);
+  }
+
+  .nav-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+  .nav-drawer__backdrop {
+    border: 0;
+    margin: 0;
+    background: rgb(0 0 0 / 0.55);
+    cursor: pointer;
+  }
+  .nav-drawer__panel {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 1.25rem;
+    width: min(18rem, 88vw);
+    max-height: 100dvh;
+    padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom));
+    background: var(--color-brand);
+    color: var(--color-cream);
+    border-left: 0.1875rem solid #000;
+    overflow-y: auto;
+  }
+  .nav-drawer__head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .nav-drawer__close { background: var(--color-cream); color: #000; }
+  .nav-drawer__nav { display: grid; gap: 0.45rem; align-content: start; }
+  .nav-drawer__link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.75rem;
+    border: 0.1875rem solid transparent;
+    border-radius: 999px;
+    color: var(--color-cream);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-decoration: none;
+  }
+  .nav-drawer__link svg { width: 1.25rem; height: 1.25rem; flex: none; }
+  .nav-drawer__link[aria-current="page"] {
+    background: var(--color-cream);
+    color: var(--color-brand);
+    border-color: #000;
+  }
+  .nav-drawer__foot {
+    margin-top: auto;
+    padding: 0.85rem;
+    border: 0.1875rem solid #000;
+    border-radius: 1rem;
+    background: var(--color-brand-deep);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    font-weight: 700;
+  }
+  @media (min-width: 64rem) {
+    .nav-drawer,
+    .mobile-brandbar__menu { display: none; }
+  }
+
   .content {
     max-width: 80rem;
+    width: 100%;
     margin: 0 auto;
-    padding: clamp(1.5rem, 3vw, 3rem);
+    padding: clamp(1rem, 3vw, 3rem);
+    overflow-x: clip;
     padding-bottom: calc(clamp(1.5rem, 3vw, 3rem) + 5rem + env(safe-area-inset-bottom));
   }
   .content-route {
@@ -240,6 +314,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
   @media (min-width: 40rem) {
+    .stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 64rem) {
     .stat-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
