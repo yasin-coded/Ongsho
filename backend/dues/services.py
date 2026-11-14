@@ -180,6 +180,26 @@ def apply_leave_unpaid(member: Member, *, today, unpaid: str, actor) -> None:
 
 
 @transaction.atomic
+@transaction.atomic
+def adjust_dues_after_ownership_transfer(shared: SharedPlan, old_owner, new_owner, today, *, actor) -> None:
+    from payments.models import PaymentAllocation
+
+    old_member = Member.objects.filter(shared_plan=shared, user=old_owner).first()
+    new_member = Member.objects.filter(shared_plan=shared, user=new_owner).first()
+    if old_member is None or new_member is None:
+        return
+    charges = Charge.objects.filter(subscription=shared.subscription, due_date__gt=today)
+    for charge in charges:
+        if charge.locked:
+            continue
+        old_due = Due.objects.filter(charge=charge, member=old_member).first()
+        if old_due and old_due.status == DueStatus.PAID and not PaymentAllocation.objects.filter(due=old_due).exists():
+            transition(old_due, DueStatus.DUE, actor)
+        new_due = Due.objects.filter(charge=charge, member=new_member).first()
+        if new_due and new_due.status == DueStatus.DUE:
+            transition(new_due, DueStatus.PAID, actor)
+
+
 def ensure_dues(today) -> int:
     touched = 0
     for shared in SharedPlan.objects.filter(subscription__archived_on__isnull=True).select_related("subscription"):

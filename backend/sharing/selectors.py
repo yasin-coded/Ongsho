@@ -7,7 +7,7 @@ from django.utils import timezone
 from core.exceptions import NotFound
 from plans.models import PlanMode
 from plans.selectors import owned_subscription
-from sharing.models import Invite, InviteStatus, Member, MemberStatus, SharedPlan, SplitType
+from sharing.models import Invite, InviteStatus, Member, MemberStatus, OwnershipTransfer, SharedPlan, SplitType, TransferStatus
 
 User = get_user_model()
 
@@ -124,3 +124,27 @@ def member_count_active(shared: SharedPlan) -> int:
 
 def is_owner_seat(member: Member) -> bool:
     return member.user_id == member.shared_plan.subscription.owner_id
+
+
+def pending_transfer_for_plan(sub) -> OwnershipTransfer | None:
+    try:
+        shared = sub.shared_plan
+    except SharedPlan.DoesNotExist:
+        return None
+    return (
+        OwnershipTransfer.objects.filter(shared_plan=shared, status=TransferStatus.PENDING)
+        .select_related("to_user")
+        .first()
+    )
+
+
+def incoming_transfer_for_member(user, plan_id: int) -> OwnershipTransfer | None:
+    return (
+        OwnershipTransfer.objects.filter(
+            to_user=user,
+            status=TransferStatus.PENDING,
+            shared_plan__subscription_id=plan_id,
+        )
+        .select_related("from_user", "shared_plan__subscription")
+        .first()
+    )

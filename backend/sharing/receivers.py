@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.dispatch import receiver
 
 from core.money import format_bdt, quantize_money
-from core.signals import plan_deleted, plan_prices_changed
+from core.signals import ownership_transferred, plan_deleted, plan_prices_changed
 from plans.models import PriceChange
 from sharing import services as sharing_services
 from sharing.models import Member, MemberStatus, SplitType
@@ -12,6 +12,11 @@ from sharing.models import Member, MemberStatus, SplitType
 @receiver(plan_deleted)
 def on_plan_deleted(sender, *, plan_id, plan_name, owner, member_user_ids, archived, **kwargs):
     from core.notify import notify
+    from sharing.models import SharedPlan
+
+    shared = SharedPlan.objects.filter(subscription_id=plan_id).first()
+    if shared is not None:
+        sharing_services.cancel_pending_transfers_for_deleted_plan(shared, actor=owner, plan_name=plan_name)
 
     if archived:
         message = "The plan was removed from your dashboard. Its payment history is kept."
@@ -79,4 +84,29 @@ def on_plan_prices_changed(sender, *, plan, **kwargs):
             message,
             link=f"/app/shared-plans/{plan.pk}",
             payload={"plan_id": plan.pk},
+        )
+
+
+@receiver(ownership_transferred)
+def on_ownership_transferred_leave_requests(sender, *, plan, old_owner, new_owner, today, **kwargs):
+    from core.notify import notify, resolve_notifications
+
+    try:
+        shared = plan.shared_plan
+    except Exception:
+        return
+    for member in Member.objects.filter(shared_plan=shared, status=MemberStatus.LEAVE_REQUESTED).select_related(
+        "user"
+    ):
+        resolve_notifications("leave", member_id=member.pk)
+        notify(
+            new_owner,
+            "leave_request",
+            f"{sharing_services._first_name(member.user)} wants to leave",
+            f"{plan.plan_name} · needs your OK before the next renewal",
+            link=f"/app/plans/{plan.pk}?leave={member.pk}",
+            payload={
+                "action": {"type": "leave", "member_id": member.pk, "plan_id": plan.pk},
+                "plan_id": plan.pk,
+            },
         )

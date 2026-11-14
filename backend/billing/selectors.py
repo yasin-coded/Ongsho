@@ -9,7 +9,7 @@ from django.db.models import Exists, OuterRef, Q
 from billing.models import Charge
 from core.exceptions import NotFound
 from core.money import quantize_money, to_bdt
-from core.schedule import Schedule, due_dates_between, first_bill_date, price_at, stop_date
+from core.schedule import Schedule, due_dates_between, first_bill_date, price_at, schedule_date_counts_for_user, stop_date
 from plans.models import PriceChange, Subscription, SubscriptionStatus
 from sharing.models import Member, MemberStatus
 
@@ -105,7 +105,7 @@ def _owner_schedule_events(
     for due in raw_dates:
         if due < range_start or due > range_end:
             continue
-        if due < sub.billing_from:
+        if not schedule_date_counts_for_user(due, today=today, billing_from=sub.billing_from):
             continue
         amount = _bdt_at(sub, due, prices)
         kind = "trial_end" if sub.trial_end_date and due == sub.trial_end_date else "renews"
@@ -167,6 +167,8 @@ def _member_schedule_events(
         if due < from_date or due > to_date:
             continue
         if due < range_start or due > range_end:
+            continue
+        if not schedule_date_counts_for_user(due, today=today, billing_from=sub.billing_from):
             continue
         amount, status = calendar_member_amount(member, due, prices, dues_by_period)
         out.append(

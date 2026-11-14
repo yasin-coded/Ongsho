@@ -31,6 +31,22 @@ RESEND_VERIFICATION_COOLDOWN_SECONDS = 60
 _RESEND_VERIFY_CACHE_PREFIX = "accounts:resend-verify:"
 
 
+def verify_current_password(user, password: str) -> None:
+    if not password:
+        raise ValidationFailed(
+            "Enter your password.",
+            code="invalid_password",
+            fields={"password": ["Enter your password."]},
+        )
+    if not user.check_password(password):
+        # TODO: increment failed-password lockout counter for this user.
+        raise ValidationFailed(
+            "The password is not correct.",
+            code="invalid_password",
+            fields={"password": ["The password is not correct."]},
+        )
+
+
 @transaction.atomic
 def register_user(*, email: str, password: str, name: str) -> User:
     if User.objects.filter(email__iexact=email).exists():

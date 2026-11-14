@@ -66,6 +66,13 @@ def nth_due_date(first: date, anchor_day: int, unit: str, count: int, k: int) ->
     raise ValueError(f"Unknown cycle unit: {unit}")
 
 
+def schedule_date_counts_for_user(on_date: date, *, today: date, billing_from: date) -> bool:
+    """Past renewals always count; future ones only on or after billing_from."""
+    if on_date < today:
+        return True
+    return on_date >= billing_from
+
+
 def stop_date(schedule: Schedule) -> date | None:
     stops: list[date] = []
     if schedule.status == "paused" and schedule.paused_on:

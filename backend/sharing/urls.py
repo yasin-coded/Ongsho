@@ -1,5 +1,6 @@
 from django.urls import path
 
+from reports import views as report_views
 from sharing import views
 
 urlpatterns = [
@@ -8,6 +9,11 @@ urlpatterns = [
     path("shared-plans/<int:pk>/members/", views.shared_plan_members, name="shared-plan-members"),
     path("shared-plans/<int:pk>/leave-request/", views.leave_request, name="shared-plan-leave-request"),
     path("shared-plans/<int:pk>/split/", views.shared_plan_split, name="shared-plan-split"),
+    path("shared-plans/<int:pk>/transfer/", views.shared_plan_transfer_start, name="shared-plan-transfer"),
+    path("transfers/<int:pk>/cancel/", views.transfer_cancel, name="transfer-cancel"),
+    path("transfers/<int:pk>/decline/", views.transfer_decline, name="transfer-decline"),
+    path("transfers/<int:pk>/accept/", views.transfer_accept, name="transfer-accept"),
+    path("shared-plans/<int:pk>/statement/", report_views.owner_statement, name="shared-plan-statement"),
     path("shared-plans/<int:pk>/ledger/", views.shared_plan_ledger, name="shared-plan-ledger"),
     path("shared-plans/<int:pk>/ious/", views.shared_plan_ious, name="shared-plan-ious"),
     path("shared-plans/<int:pk>/review/", views.shared_plan_review, name="shared-plan-review"),

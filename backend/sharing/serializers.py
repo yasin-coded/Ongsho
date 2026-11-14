@@ -2,7 +2,7 @@ from django.utils import timezone
 
 from core.money import format_bdt
 from sharing import selectors
-from sharing.models import Invite, Member
+from sharing.models import Invite, Member, OwnershipTransfer
 from sharing.services import _invite_share_message, _per_seat_bdt
 
 
@@ -75,3 +75,31 @@ def me_invite_row(invite: Invite) -> dict:
 
 def _first_name(user) -> str:
     return ((user.name or "").strip().split(" ") or [""])[0] or (user.name or "")
+
+
+def transfer_row(transfer: OwnershipTransfer) -> dict:
+    user = transfer.to_user
+    return {
+        "id": transfer.pk,
+        "status": transfer.status,
+        "to": {
+            "id": user.pk,
+            "name": user.name,
+            "first_name": _first_name(user),
+            "avatar_id": user.avatar_id,
+        },
+        "created_at": transfer.created_at,
+    }
+
+
+def incoming_transfer_row(transfer: OwnershipTransfer) -> dict:
+    user = transfer.from_user
+    return {
+        "id": transfer.pk,
+        "from": {
+            "name": user.name,
+            "first_name": _first_name(user),
+            "avatar_id": user.avatar_id,
+        },
+        "created_at": transfer.created_at,
+    }

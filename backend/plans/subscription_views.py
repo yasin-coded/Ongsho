@@ -140,6 +140,11 @@ def subscription_detail(request, pk):
         today = today_dhaka()
         data = SubscriptionDetailSerializer(sub).data
         data.update(owner_selectors.owner_detail_extra(sub, today))
+        from sharing import selectors as sharing_selectors
+        from sharing.serializers import transfer_row
+
+        pending = sharing_selectors.pending_transfer_for_plan(sub)
+        data["transfer"] = transfer_row(pending) if pending else None
         from django.core.exceptions import ObjectDoesNotExist
         from payments import selectors as payment_selectors
 

@@ -558,6 +558,12 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
 
     row["members"] = _member_roster_rows(member)
 
+    from sharing.selectors import incoming_transfer_for_member
+    from sharing.serializers import incoming_transfer_row
+
+    incoming = incoming_transfer_for_member(member.user, sub.pk)
+    row["incoming_transfer"] = incoming_transfer_row(incoming) if incoming else None
+
     coverable = []
     if sub.plan_mode == PlanMode.OWNER:
         cutoff = today + timedelta(days=CHARGE_LEAD_DAYS)

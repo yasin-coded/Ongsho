@@ -387,3 +387,62 @@ def shared_plan_split(request, pk: int):
     except DomainError as exc:
         return _domain_response(exc)
     return Response({"split_type": shared.split_type})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def shared_plan_transfer_start(request, pk: int):
+    member_id = request.data.get("member_id")
+    password = request.data.get("password", "")
+    try:
+        member_id = int(member_id)
+    except (TypeError, ValueError):
+        from core.exceptions import ValidationFailed
+
+        return _domain_response(
+            ValidationFailed(
+                "Pick a member.",
+                fields={"member_id": ["Pick the member who will become the owner."]},
+            )
+        )
+    try:
+        transfer = services.start_ownership_transfer(
+            request.user, pk, member_id=member_id, password=password
+        )
+    except DomainError as exc:
+        return _domain_response(exc)
+    from sharing.serializers import transfer_row
+
+    return Response(transfer_row(transfer), status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def transfer_cancel(request, pk: int):
+    try:
+        transfer = services.cancel_ownership_transfer(request.user, pk)
+    except DomainError as exc:
+        return _domain_response(exc)
+    from sharing.serializers import transfer_row
+
+    return Response(transfer_row(transfer))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def transfer_decline(request, pk: int):
+    try:
+        transfer = services.decline_ownership_transfer(request.user, pk)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response({"message": "Transfer declined. Nothing changed.", "plan_id": transfer.shared_plan.subscription_id})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def transfer_accept(request, pk: int):
+    try:
+        result = services.accept_ownership_transfer(request.user, pk, today=today_dhaka())
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(result)

@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from django.dispatch import receiver
 
-from core.signals import charge_amount_changed, charges_created, member_joined, member_leaving, split_changed
+from core.signals import (
+    charge_amount_changed,
+    charges_created,
+    member_joined,
+    member_leaving,
+    ownership_transferred,
+    split_changed,
+)
 from dues import services as dues_services
 
 
@@ -46,6 +53,19 @@ def on_member_leaving(sender, *, member, leave_date, unpaid, **kwargs):
 @receiver(split_changed)
 def on_split_changed(sender, *, plan, today, **kwargs):
     dues_services.recalculate_plan_dues(plan, today)
+
+
+@receiver(ownership_transferred)
+def on_ownership_transferred(sender, *, plan, old_owner, new_owner, today, **kwargs):
+    from sharing.models import SharedPlan
+
+    try:
+        shared = plan.shared_plan
+    except SharedPlan.DoesNotExist:
+        return
+    dues_services.adjust_dues_after_ownership_transfer(
+        shared, old_owner, new_owner, today, actor=new_owner
+    )
 
 
 @receiver(charge_amount_changed)

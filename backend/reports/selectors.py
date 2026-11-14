@@ -14,8 +14,7 @@ from billing.models import Charge
 from billing.selectors import _bdt_at, _month_last_day, calendar_events, schedule_for_subscription
 from core.exceptions import ValidationFailed
 from core.money import quantize_money
-from core.schedule import monthly_equivalent
-from core.schedule import due_dates_between, stop_date
+from core.schedule import due_dates_between, monthly_equivalent, schedule_date_counts_for_user, stop_date
 from dues.models import Due, DueStatus
 from dues.selectors import project_share_bdt
 from payments.models import Payment, ReviewStatus
@@ -134,7 +133,7 @@ def _schedule_dates_in_range(sub: Subscription, start: date, end: date, today: d
     for d in dates:
         if d < start or d > end:
             continue
-        if d < sub.billing_from:
+        if not schedule_date_counts_for_user(d, today=today, billing_from=sub.billing_from):
             continue
         out.append(d)
     return out
