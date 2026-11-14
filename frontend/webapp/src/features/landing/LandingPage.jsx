@@ -163,8 +163,9 @@ export function LandingPage() {
         </section>
 
         <section className="l-section l-section--features" id="how-it-works" aria-labelledby="how-title about-title">
-          <h2 id="how-title" className="l-display l-section__title mb-10 text-[#274f00]">
-            Three Plans. No Spreadsheet.
+          <h2 id="how-title" className="l-display l-section__title l-section__title--split mb-10 text-[#274f00]">
+            <span>Three Plans.</span>
+            <span className="l-section__title__line">No Spreadsheet.</span>
           </h2>
           <div className="feature-grid feature-grid--steps">
             {STEPS.map((s, i) => (
@@ -175,8 +176,9 @@ export function LandingPage() {
           </div>
 
           <div className="l-features-block" id="about">
-            <h2 id="about-title" className="l-display l-section__title mb-10 text-[#ff0000]">
-              Built for people who split plans.
+            <h2 id="about-title" className="l-display l-section__title l-section__title--split mb-10 text-[#ff0000]">
+              <span>Built for people</span>
+              <span className="l-section__title__line">who split plans.</span>
             </h2>
             <div className="feature-grid feature-grid--about">
               {FEATURES.map((f) => (
