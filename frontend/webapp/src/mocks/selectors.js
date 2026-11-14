@@ -1,7 +1,8 @@
 import { MOCK_TODAY, addDays, diffDays, monthStart, monthEnd, addMonthsToKey, monthKey, fmtMonth, fmtShort, dhakaDate } from '@/lib/dates'
 import { splitExact, sum } from '@/lib/money'
 import { db, LEAD_DAYS } from './db'
-import { dueDatesBetween, monthlyEquivalent, nextDueDate, priceAt, splitCharge } from './schedule'
+import { fmtCycleDueLabel } from '@/lib/dates'
+import { billingFromDate, dueDatesBetween, monthlyEquivalent, nextDueDate, priceAt, splitCharge } from './schedule'
 
 // ---------- lookups ----------
 export const userById = (id) => db.users.find((u) => u.id === id)
@@ -42,6 +43,15 @@ export function currentCharge(planId) {
   const list = chargesOf(planId)
   const arrived = list.filter((c) => c.dueDate <= MOCK_TODAY)
   return arrived.at(-1) ?? list.at(-1) ?? null
+}
+
+/** Due status on the upcoming/current billing charge for one member. */
+export function memberCycleStatus(plan, memberId) {
+  const renewal = nextRenewal(plan)
+  if (!renewal) return null
+  const charge = db.charges.find((c) => c.planId === plan.id && c.dueDate === renewal)
+  if (!charge) return null
+  return db.dues.find((d) => d.chargeId === charge.id && d.memberId === memberId)?.status ?? null
 }
 
 export function nextRenewal(plan) {
@@ -161,6 +171,8 @@ export function spendInMonth(userId, key) {
     for (const date of dueDatesBetween(plan, plan.startDate, to)) {
       if (date < from) continue
       if (role === 'member' && date < myMemberRow(plan.id, userId).joinedOn) continue
+      const charge = db.charges.find((c) => c.planId === plan.id && c.dueDate === date)
+      if (role === 'member' && date > MOCK_TODAY && !charge) continue
       const amount = myPortion(plan, userId, date)
       if (amount > 0) rows.push({ planId: plan.id, plan, role, date, amount, yearly: plan.cycle.unit === 'year' })
     }
@@ -417,7 +429,24 @@ export function reviewData(planId) {
     waiting: { count: pending.length, total: sum(pending, (p) => p.amount) },
     confirmed: { amount: sum(memberDues.filter((d) => d.status === 'paid'), (d) => d.amount), expected: sum(memberDues, (d) => d.amount), members: memberDues.length },
     stillDue: memberDues.filter((d) => d.status === 'due').length,
-    pending, decided,
+    unpaid: memberDues
+      .filter((d) => d.status === 'due')
+      .map((d) => {
+        const m = memberById(d.memberId)
+        const u = userById(m.userId)
+        return {
+          dueId: d.id,
+          memberId: m.id,
+          name: u.name,
+          firstName: firstName(u),
+          email: u.email,
+          avatarColor: u.avatarColor,
+          amount: d.amount,
+          leaveRequested: m.status === 'leave_requested',
+        }
+      }),
+    pending,
+    decided,
   }
 }
 
@@ -436,8 +465,13 @@ export function ownerPlanDetail(planId) {
       ...i,
       customSharePaisa: i.customShare ?? null,
     }))
+  const pendingReserve = invites.filter((i) => i.status === 'pending').length
+  const joinLinkAvailable = plan.shared && summary.seatsTaken + pendingReserve < plan.seats
+  const origin = typeof globalThis !== 'undefined' && globalThis.location?.origin ? globalThis.location.origin : 'http://localhost:5173'
   return {
     ...summary,
+    joinLink: plan.shared ? `${origin}/join/mock-${planId}` : null,
+    joinLinkAvailable,
     startDate: plan.startDate, renewal: plan.renewal, endDate: plan.endDate ?? null, split: plan.split,
     categoryId: plan.categoryId, categoryName: category?.name ?? '—',
     prices: [...plan.prices].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1)),
@@ -454,6 +488,7 @@ export function ownerPlanDetail(planId) {
     invites,
     charges: ownerChargeRows(planId),
     transfer: db.transfers.find((t) => t.planId === planId && t.status === 'pending') ?? null,
+    coverable: coverableDues(planId, plan.ownerId),
   }
 }
 
@@ -466,12 +501,27 @@ export function memberPlanSummary(plan, userId) {
     .map((d) => ({ ...d, charge: chargeById(d.chargeId) }))
     .sort((a, b) => (a.charge.dueDate < b.charge.dueDate ? 1 : -1))
   const latest = myDues[0] ?? null
-  const openDues = myDues.filter((d) => d.status === 'due').map((d) => ({ id: d.id, amount: d.amount, dueDate: d.charge.dueDate, monthLabel: fmtMonth(d.charge.dueDate) }))
+  const billFrom = billingFromDate(plan)
+  const openDuesRaw = myDues
+    .filter((d) => d.status === 'due' && d.charge.dueDate >= billFrom)
+    .map((d) => ({
+      id: d.id,
+      amount: d.amount,
+      dueDate: d.charge.dueDate,
+      monthLabel: fmtCycleDueLabel(d.charge.dueDate, plan.cycle),
+    }))
+  const openDues = []
+  const seenDue = new Set()
+  for (const row of openDuesRaw) {
+    if (seenDue.has(row.id)) continue
+    seenDue.add(row.id)
+    openDues.push(row)
+  }
   const history = myDues.map((d) => {
     const p = settlingPayment(d.id)
     const rejected = paymentsForDue(d.id).find((x) => x.review === 'rejected')
     return {
-      id: d.id, dueDate: d.charge.dueDate, monthLabel: fmtMonth(d.charge.dueDate), amount: d.amount, status: d.status,
+      id: d.id, dueDate: d.charge.dueDate, monthLabel: fmtCycleDueLabel(d.charge.dueDate, plan.cycle), amount: d.amount, status: d.status,
       method: p?.method ?? null, tid: p?.tid ?? null, waiverNote: d.waiverNote,
       rejectionReason: d.status === 'due' && d.rejectionReason ? d.rejectionReason : null,
       wasRejected: Boolean(rejected),
@@ -481,7 +531,14 @@ export function memberPlanSummary(plan, userId) {
     .filter((m) => m.id !== me.id)
     .map((m) => {
       const u = userById(m.userId)
-      return { id: m.id, name: u.name, firstName: firstName(u), avatarColor: u.avatarColor, isOwner: m.isOwnerSeat }
+      return {
+        id: m.id,
+        name: u.name,
+        firstName: firstName(u),
+        avatarColor: u.avatarColor,
+        isOwner: m.isOwnerSeat,
+        status: memberCycleStatus(plan, m.id),
+      }
     })
   const meUser = userById(userId)
   const myStatus = latest?.status ?? 'due'
@@ -496,7 +553,15 @@ export function memberPlanSummary(plan, userId) {
     me: { memberId: me.id, name: meUser.name, firstName: firstName(meUser), avatarColor: meUser.avatarColor, leaveRequested: me.status === 'leave_requested', leaveRequestedAt: me.leaveRequestedAt },
     members: [
       ...others.filter((o) => o.isOwner),
-      { id: me.id, name: meUser.name, firstName: 'You', avatarColor: meUser.avatarColor, isOwner: false, isYou: true, status: myStatus },
+      {
+        id: me.id,
+        name: meUser.name,
+        firstName: 'You',
+        avatarColor: meUser.avatarColor,
+        isOwner: false,
+        isYou: true,
+        status: memberCycleStatus(plan, me.id) ?? myStatus,
+      },
       ...others.filter((o) => !o.isOwner),
     ],
     openDues, history,
@@ -515,13 +580,19 @@ export function memberPlanSummary(plan, userId) {
 /** Dues of other members the payer may cover (creates an IOU). Names and amounts only. */
 export function coverableDues(planId, userId) {
   const plan = planById(planId)
-  if (plan.mode === 'reseller') return []
   const me = myMemberRow(planId, userId)
+  const renewal = nextRenewal(plan)
   return db.dues
-    .filter((d) => d.planId === planId && d.memberId !== me.id && d.status === 'due')
+    .filter((d) => {
+      if (d.planId !== planId || d.memberId === me.id || d.status !== 'due') return false
+      if (!renewal) return false
+      const c = chargeById(d.chargeId)
+      return c && c.dueDate === renewal
+    })
     .map((d) => {
       const m = memberById(d.memberId)
-      return { id: d.id, name: firstName(userById(m.userId)), amount: d.amount, monthLabel: fmtMonth(chargeById(d.chargeId).dueDate) }
+      const c = chargeById(d.chargeId)
+      return { id: d.id, name: firstName(userById(m.userId)), amount: d.amount, monthLabel: fmtCycleDueLabel(c.dueDate, plan.cycle) }
     })
 }
 

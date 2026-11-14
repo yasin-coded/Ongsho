@@ -5,6 +5,7 @@ Django settings for Ongsho. Environment variables are loaded with python-dotenv 
 2. `backend/.env` if present (overrides root for local-only values)
 """
 
+import json
 import os
 import sys
 from datetime import timedelta
@@ -26,6 +27,8 @@ if "pytest" in sys.argv[0] or any(arg == "pytest" or arg.endswith("pytest") for 
     os.environ.setdefault("REFRESH_COOKIE_SECURE", "False")
     os.environ.setdefault("REFRESH_COOKIE_SAMESITE", "Lax")
     os.environ.setdefault("FRONTEND_ORIGINS", "http://localhost:5173")
+    os.environ.setdefault("CACHE_BACKEND", "locmem")
+    os.environ.setdefault("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
 
 
 def _env_bool(name: str) -> bool:
@@ -99,6 +102,8 @@ def _database_config() -> dict:
 SECRET_KEY = os.environ["SECRET_KEY"]
 DEBUG = _env_bool("DEBUG")
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS")
+if _running_pytest() and "testserver" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS = [*ALLOWED_HOSTS, "testserver"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -132,6 +137,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.logging.RequestLogMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -206,4 +212,79 @@ PASSWORD_RESET_TIMEOUT = 3600
 CORS_URLS_REGEX = r"^/api/.*$"
 CORS_ALLOWED_ORIGINS = _env_list("FRONTEND_ORIGINS")
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ["Content-Disposition", "X-Statement-Number"]
+CORS_EXPOSE_HEADERS = ["Content-Disposition", "X-Statement-Number", "X-Request-ID"]
+
+NUM_PROXIES = int(os.environ.get("NUM_PROXIES", "0"))
+
+DEFAULT_THROTTLE_RATES = {
+    "login_ip": "10/m",
+    "login_email": "10/15m",
+    "register_ip": "10/h",
+    "password_reset_request_ip": "5/h",
+    "password_reset_request_email": "3/h",
+    "password_reset_confirm_ip": "10/h",
+    "verify_email_ip": "20/h",
+    "resend_verification_ip": "5/h",
+    "resend_verification_email": "3/h",
+    "refresh_ip": "60/m",
+    "public_invite_get_ip": "60/m",
+    "plan_join_get_ip": "60/m",
+    "plan_join_signup_ip": "10/h",
+    "invite_signup_ip": "10/h",
+    "invite_create_user": "30/h",
+    "invite_replace_user": "30/h",
+    "payment_submit_user": "30/h",
+    "statement_download_user": "30/h",
+}
+
+_throttle_overrides = json.loads(os.environ.get("THROTTLE_RATES", "{}") or "{}")
+THROTTLE_RATES = {**DEFAULT_THROTTLE_RATES, **_throttle_overrides}
+
+_cache_backend = os.environ.get("CACHE_BACKEND", "locmem").strip().lower()
+_cache_table = os.environ.get("CACHE_TABLE", "ongsho_cache")
+if _cache_backend == "db":
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": _cache_table,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ongsho-locmem",
+        }
+    }
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "mask_sensitive": {
+            "()": "core.logging.SensitiveDataFilter",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["mask_sensitive"],
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.environ.get("LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        "ongsho.request": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "jobs.services": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

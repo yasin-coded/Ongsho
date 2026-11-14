@@ -37,9 +37,16 @@ export function cycleFromForm(form) {
   return { unit: 'day', count: Math.max(1, diffDays(renewal, first)) }
 }
 
-/** First billed date: the trial end when there is one, else the start date. */
+/** Anchor for the billing schedule (trial end or plan start). */
 export function firstBillDate(plan) {
   return plan.trialEnd ?? plan.startDate
+}
+
+/** First renewal that may create a charge — never on plan start unless that is the trial end. */
+export function billingFromDate(plan) {
+  const first = firstBillDate(plan)
+  if (plan.trialEnd) return first
+  return nthDueDate(plan, 1)
 }
 
 /** The k-th due date counted from the first billed date. */
@@ -64,11 +71,13 @@ export function dueDatesBetween(plan, from, to) {
   const out = []
   const stop = stopDate(plan)
   const skipped = new Set(plan.skipDates ?? [])
+  const billFrom = billingFromDate(plan)
+  const effectiveFrom = from > billFrom ? from : billFrom
   for (let k = 0; k < 600; k += 1) {
     const date = nthDueDate(plan, k)
     if (date > to) break
     if (stop && date >= stop) break
-    if (date >= from && !skipped.has(date)) out.push(date)
+    if (date >= effectiveFrom && !skipped.has(date)) out.push(date)
   }
   return out
 }

@@ -1,7 +1,7 @@
 import { cycleFromForm, nextRenewalDateForApi } from '@/mocks/schedule'
 import { lookupServiceKey } from '@/lib/services'
 import { categoryColor } from '@/lib/colors'
-import { fmtMonth } from '@/lib/dates'
+import { fmtCycleDueLabel, fmtMonth } from '@/lib/dates'
 import { idStr, moneyFromApi, moneyToApi, rateFromApi, rateToApi, paginatedBody } from './common'
 import { avatarColorFromId } from './me'
 import { mapOwnerTransfer } from './transfers'
@@ -60,6 +60,7 @@ export function mapMemberRow(row, meUserId) {
     email: row.email,
     avatarColor: avatarColorFromId(row.avatar_id),
     isOwnerSeat: row.is_owner_seat,
+    dueId: row.due_id != null ? idStr(row.due_id) : null,
     dueStatus: row.due_status,
     dueAmount: row.due_amount ? moneyFromApi(row.due_amount) : null,
     leaveRequested: Boolean(row.leave_requested_at),
@@ -159,11 +160,11 @@ function mapIouRow(row) {
   }
 }
 
-function mapChargeRow(ch) {
+function mapChargeRow(ch, cycle) {
   return {
     id: idStr(ch.id),
     dueDate: ch.due_date,
-    monthLabel: ch.due_date ? fmtMonth(ch.due_date) : ch.month,
+    monthLabel: ch.due_date ? fmtCycleDueLabel(ch.due_date, cycle) : ch.month,
     amount: moneyFromApi(ch.amount_bdt ?? ch.amount),
     locked: ch.locked,
     status: ch.status,
@@ -188,6 +189,16 @@ export function mapSubscriptionDetail(sub, extras = {}) {
   }))
   const collected = sub.collected != null ? moneyFromApi(sub.collected) : extras.collected != null ? moneyFromApi(extras.collected) : null
   const expected = sub.expected != null ? moneyFromApi(sub.expected) : extras.expected != null ? moneyFromApi(extras.expected) : null
+  const coverable = (sub.coverable_dues ?? []).map((c) => {
+    const dueDate = c.due_date ?? (c.month ? `${c.month}-01` : null)
+    return {
+      id: idStr(c.due_id),
+      name: c.first_name ?? c.name,
+      amount: moneyFromApi(c.amount),
+      dueDate,
+      monthLabel: dueDate ? fmtCycleDueLabel(dueDate, summary.cycle) : '',
+    }
+  })
   const csf = sub.confirmed_so_far
   const confirmedSoFar = csf
     ? {
@@ -217,7 +228,9 @@ export function mapSubscriptionDetail(sub, extras = {}) {
     activity: (sub.activity ?? []).map(mapActivityRow),
     ious: (sub.ious ?? []).map(mapIouRow),
     invites: extras.invites ?? [],
-    charges: (sub.charges ?? extras.charges ?? []).map(mapChargeRow),
+    joinLink: extras.joinLink ?? null,
+    joinLinkAvailable: extras.joinLinkAvailable ?? false,
+    charges: (sub.charges ?? extras.charges ?? []).map((ch) => mapChargeRow(ch, summary.cycle)),
     leaveRequests: (sub.leave_requests ?? []).map((lr) => ({
       memberId: idStr(lr.member_id),
       name: lr.name,
@@ -227,6 +240,7 @@ export function mapSubscriptionDetail(sub, extras = {}) {
     transfer: mapOwnerTransfer(sub.transfer),
     collected: collected ?? undefined,
     expected: expected ?? undefined,
+    coverable,
   }
 }
 

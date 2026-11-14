@@ -60,8 +60,6 @@ def _owned_due(user, due_id: int) -> Due:
 
 
 def _payer_member(user, plan_id: int) -> Member:
-    if Subscription.objects.filter(pk=plan_id, owner=user, archived_on__isnull=True).exists():
-        raise Forbidden("Use mark as paid for your own seat.", code="owner_cannot_submit")
     member = (
         Member.objects.select_related("shared_plan__subscription", "user")
         .filter(
@@ -152,11 +150,13 @@ def submit_payment(
             raise ConflictError("One of those dues is no longer open.", code="due_not_open")
         if due.status != DueStatus.DUE:
             raise ConflictError("One of those dues is no longer open.", code="due_not_open")
-    if sub.plan_mode == PlanMode.RESELLER:
+    if sub.owner_id == user.pk:
         for due in dues:
-            if due.member_id != payer.pk:
-                raise ConflictError("You can only pay your own dues on this plan.", code="reseller_own_dues_only")
-
+            if due.member.user_id == user.pk:
+                raise Forbidden(
+                    "Use mark as paid for your own seat.",
+                    code="owner_cannot_submit",
+                )
     total = sum((quantize_money(d.amount_bdt) for d in dues), Decimal("0"))
     if amount is not None and quantize_money(amount) != total:
         raise ValidationFailed(
@@ -204,17 +204,18 @@ def submit_payment(
         summary=f"{_first_name(user)} sent {format_bdt(total)} (ID {tid})",
         amount=total,
     )
-    notify(
-        owner,
-        "payment_submitted",
-        f"{_first_name(user)} sent a transaction ID",
-        f"{sub.plan_name} · {_method_label(method)} · ID {tid} · {format_bdt(total)}",
-        link=f"/app/plans/{sub.pk}/review",
-        payload={
-            "action": {"type": "payment", "payment_id": payment.pk, "plan_id": sub.pk},
-            "plan_id": sub.pk,
-        },
-    )
+    if user.pk != owner.pk:
+        notify(
+            owner,
+            "payment_submitted",
+            f"{_first_name(user)} sent a transaction ID",
+            f"{sub.plan_name} · {_method_label(method)} · ID {tid} · {format_bdt(total)}",
+            link=f"/app/plans/{sub.pk}/review",
+            payload={
+                "action": {"type": "payment", "payment_id": payment.pk, "plan_id": sub.pk},
+                "plan_id": sub.pk,
+            },
+        )
     return payment
 
 
@@ -350,14 +351,15 @@ def reverse_payment(user, payment_id: int) -> dict:
         summary=f"You reversed {_first_name(payer)}'s payment",
         amount=payment.amount,
     )
-    notify(
-        payer,
-        "payment_reversed",
-        "Payment reversed",
-        f"{sub.plan_name} · {format_bdt(payment.amount)}",
-        link=f"/app/shared/{sub.pk}",
-        payload={"plan_id": sub.pk},
-    )
+    if payer.pk != user.pk:
+        notify(
+            payer,
+            "payment_reversed",
+            "Payment reversed",
+            f"{sub.plan_name} · {format_bdt(payment.amount)}",
+            link=f"/app/shared/{sub.pk}",
+            payload={"plan_id": sub.pk},
+        )
     return {"message": "Reversed. The original stays in the history, and the due is back to Due."}
 
 
@@ -600,5 +602,8 @@ def set_due_back(user, due_id: int) -> dict:
 
 
 def submit_message(payment: Payment) -> str:
-    owner_name = _first_name(payment.shared_plan.subscription.owner)
+    sub = payment.shared_plan.subscription
+    if payment.member.user_id == sub.owner_id:
+        return "Sent. Confirm it on Review payments. Until then those dues show Pending."
+    owner_name = _first_name(sub.owner)
     return f"Sent. {owner_name} will confirm it. Until then your due shows Pending."

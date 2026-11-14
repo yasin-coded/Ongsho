@@ -16,18 +16,25 @@ import { Modal } from '@/components/ui/Modal'
 import { ServiceLogo } from '@/components/ui/ServiceLogo'
 import { ErrorBox, Skeleton, Stepper } from '@/components/ui/Misc'
 
-function TidForm({ plan, onClose }) {
-  const mine = plan.openDues
+function dueLabel(d, { name } = {}) {
+  const bits = []
+  if (name) bits.push(`${name}’s`)
+  if (d.monthLabel) bits.push(d.monthLabel)
+  return bits.join(' · ') || (d.dueDate ? `Due ${fmtShort(d.dueDate)}` : 'Due')
+}
+
+function TidForm({ plan, onClose, othersOnly = false }) {
+  const mine = othersOnly ? [] : plan.openDues
+  const coverable = plan.coverable ?? []
   const [picked, setPicked] = useState(() => new Set(mine.map((d) => d.id)))
   const [method, setMethod] = useState(plan.method)
   const [tid, setTid] = useState('')
   const [clientFields, setClientFields] = useState({})
   const send = useAction(submitPayment, { onSuccess: onClose })
-  const all = [...mine, ...plan.coverable]
-  const amount = sum(all.filter((d) => picked.has(d.id)), (d) => d.amount)
+  const selectable = [...mine, ...coverable]
+  const amount = sum(selectable.filter((d) => picked.has(d.id)), (d) => d.amount)
   const owner = plan.owner.firstName
   const firstDue = mine.at(-1)?.dueDate
-
   const toggle = (id) =>
     setPicked((prev) => {
       const next = new Set(prev)
@@ -67,29 +74,28 @@ function TidForm({ plan, onClose }) {
         </div>
         <p className="text-right">
           <span className="t-mid block">{formatBDT(amount, { trim: true })}</span>
-          <span className="t-meta">full share</span>
+          <span className="t-meta">{mine.length > 1 ? 'selected total' : 'your share'}</span>
         </p>
       </Box>
 
       <fieldset className="grid gap-2">
-        <legend className="field__label mb-2">Dues to cover</legend>
+        <legend className="field__label mb-2">{othersOnly ? 'Dues to cover' : 'Your open dues'}</legend>
         {mine.map((d) => (
           <label key={d.id} className="check">
             <input type="checkbox" checked={picked.has(d.id)} onChange={() => toggle(d.id)} />
-            <span className="flex-1 font-bold">{d.monthLabel}</span>
+            <span className="flex-1 font-bold">{dueLabel(d)}</span>
             <span className="t-num">{formatBDT(d.amount)}</span>
           </label>
         ))}
-        {plan.coverable.length > 0 && (
-          <div className="mt-3 grid gap-2">
+        {coverable.length > 0 && (
+          <div className={`grid gap-2 ${mine.length ? 'mt-3' : ''}`}>
             <p className="t-label">Paying for someone else?</p>
-            {plan.coverable.map((d) => (
+            <p className="t-meta">Selected members will owe you. Confirm the ID on Review payments.</p>
+            {coverable.map((d) => (
               <label key={d.id} className="check">
                 <input type="checkbox" checked={picked.has(d.id)} onChange={() => toggle(d.id)} />
                 <span className="flex-1">
-                  <span className="font-bold">
-                    {d.name}’s {d.monthLabel}
-                  </span>
+                  <span className="font-bold">{dueLabel(d, { name: d.name })}</span>
                   <span className="t-meta block">They will owe you</span>
                 </span>
                 <span className="t-num">{formatBDT(d.amount)}</span>
@@ -132,8 +138,19 @@ function TidForm({ plan, onClose }) {
 
       <div className="grid gap-3">
         <p className="t-label">What happens next</p>
-        <Stepper current="pending" labels={{ due: 'Due', pending: 'Pending, after you send', paid: `Paid, when ${owner} confirms` }} />
-        <p className="t-meta">If {owner} cannot match the ID, this goes back to Due and you can send a new one.</p>
+        <Stepper
+          current="pending"
+          labels={
+            othersOnly
+              ? { due: 'Due', pending: 'Pending, after you send', paid: 'Paid, when you confirm on Review payments' }
+              : { due: 'Due', pending: 'Pending, after you send', paid: `Paid, when ${owner} confirms` }
+          }
+        />
+        <p className="t-meta">
+          {othersOnly
+            ? 'If the ID does not match, reject it on Review payments. Dues go back to Due.'
+            : `If ${owner} cannot match the ID, this goes back to Due and you can send a new one.`}
+        </p>
       </div>
       </div>
 

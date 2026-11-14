@@ -83,6 +83,16 @@ export function fmtMonth(iso) {
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
 }
 
+/** Due label by billing cycle: week/custom → full date; month → Mon YYYY; year → YYYY only. */
+export function fmtCycleDueLabel(iso, cycle) {
+  if (!iso) return ''
+  const unit = cycle?.unit ?? 'month'
+  if (unit === 'week') return fmtFull(iso)
+  if (unit === 'month') return fmtMonth(iso)
+  if (unit === 'year') return String(parseDate(iso).getUTCFullYear())
+  return fmtFull(iso)
+}
+
 export function fmtMonthLong(iso) {
   return MONTHS_LONG[parseDate(iso).getUTCMonth()]
 }

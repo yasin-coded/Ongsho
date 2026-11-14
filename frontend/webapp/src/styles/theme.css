@@ -28,7 +28,7 @@
   /* status */
   --color-due: #ff1a1a;
   --color-pending: #fff200;
-  --color-paid: #2fd600;
+  --color-paid: #22c400;
   --color-waived: #19c8f0;
   --color-trial: #d9ccff;
 
@@ -64,7 +64,7 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    scroll-padding-top: 5.5rem;
+    scroll-padding-top: 6.25rem;
     -webkit-text-size-adjust: 100%;
     scrollbar-color: var(--color-brand) var(--color-cream);
   }

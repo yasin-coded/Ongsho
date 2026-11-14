@@ -75,11 +75,10 @@ def create_dues_for_charge(charge: Charge) -> int:
 
     created = 0
     for member, amount in zip(members, result.amounts, strict=True):
-        status = DueStatus.PAID if _is_owner_seat(member) else DueStatus.DUE
         _, was_new = Due.objects.get_or_create(
             charge=charge,
             member=member,
-            defaults={"amount_bdt": amount, "status": status},
+            defaults={"amount_bdt": amount, "status": DueStatus.DUE},
         )
         if was_new:
             created += 1
@@ -147,12 +146,11 @@ def recalculate_dues(charge: Charge, today, *, force: bool = False) -> None:
 
     for member in members:
         if member.pk not in existing:
-            status = DueStatus.PAID if _is_owner_seat(member) else DueStatus.DUE
             Due.objects.create(
                 charge=charge,
                 member=member,
                 amount_bdt=amounts_by_member[member.pk],
-                status=status,
+                status=DueStatus.DUE,
             )
 
 

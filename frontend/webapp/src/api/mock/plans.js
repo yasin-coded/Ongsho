@@ -95,7 +95,7 @@ export function getLedger(planId, { member = 'all', month = 'all', status = 'all
 // ---------- create and edit ----------
 function validatePlanForm(form, { editing = false } = {}) {
   const fields = {}
-  if (!form.serviceName?.trim()) fields.serviceName = 'Pick or type a service name.'
+  if (!form.serviceName?.trim()) fields.serviceName = 'Pick a service.'
   if (!form.planName?.trim()) fields.planName = 'Give the plan a name, for example "Netflix Premium".'
   if (!form.categoryId) fields.categoryId = 'Pick a category.'
   if (!editing) {

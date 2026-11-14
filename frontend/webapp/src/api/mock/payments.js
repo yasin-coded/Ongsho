@@ -126,13 +126,13 @@ export function setDueBack(dueId) {
   return write(() => {
     const due = dueById(dueId)
     ownedPlanOf(due.planId)
+    const m = memberById(due.memberId)
     const payment = settlingPayment(dueId)
-    if (payment?.review === 'confirmed' && payment.recordedBy !== ME) {
+    if (payment?.review === 'confirmed' && (m.isOwnerSeat || payment.recordedBy !== ME)) {
       payment.review = 'reversed'
       payment.reviewedAt = mockNow()
     }
     setDueStatus(due, 'due', { paidOn: null, recordedByOwner: false })
-    const m = memberById(due.memberId)
     audit({ planId: due.planId, action: 'set_due', tone: 'due', text: m.isOwnerSeat ? 'You set your own seat back to Due' : `You set ${firstName(userById(m.userId))}'s due back to Due`, amount: due.amount })
     return { message: 'Set back to Due.' }
   })
@@ -154,7 +154,9 @@ export function submitPayment({ planId, dueIds, method, tid }) {
     if (Object.keys(fields).length) throw new ApiError('Check the highlighted fields.', { fields })
     const dues = dueIds.map(dueById)
     if (dues.some((d) => !d || d.planId !== planId || d.status !== 'due')) throw new ApiError('One of those dues is no longer open. Refresh and try again.', { status: 409 })
-    if (plan.mode === 'reseller' && dues.some((d) => d.memberId !== me.id)) throw new ApiError('Paying for someone else is off in Reseller plans.', { status: 409 })
+    if (plan.ownerId === ME && dues.some((d) => memberById(d.memberId).isOwnerSeat)) {
+      throw new ApiError('Use mark as paid for your own seat.', { status: 403, code: 'owner_cannot_submit' })
+    }
     const amount = dues.reduce((a, d) => a + d.amount, 0)
     const payment = {
       id: nextId('pay'), planId, payerMemberId: me.id, method, tid: clean, amount, paidOn: null, recordedBy: ME, review: 'pending',
@@ -162,10 +164,14 @@ export function submitPayment({ planId, dueIds, method, tid }) {
     }
     db.payments.push(payment)
     for (const d of dues) setDueStatus(d, 'pending', { rejectionReason: null })
-    if (plan.ownerId === ME) {
-      notifyMe({ kind: 'payment_submitted', title: 'You sent a transaction ID', detail: `${plan.planName} · ${METHODS[method].label} · ID ${clean} · ${formatBDT(amount)}`, link: `/app/plans/${planId}/review`, action: { type: 'payment', paymentId: payment.id } })
-    }
     const owner = firstName(userById(plan.ownerId))
-    return { message: `Sent. ${owner} will confirm it. Until then your due shows Pending.`, paymentId: payment.id }
+    if (plan.ownerId !== ME) {
+      notifyMe({ kind: 'payment_submitted', title: `${firstName(userById(ME))} sent a transaction ID`, detail: `${plan.planName} · ${METHODS[method].label} · ID ${clean} · ${formatBDT(amount)}`, link: `/app/plans/${planId}/review`, action: { type: 'payment', paymentId: payment.id } })
+    }
+    const message =
+      plan.ownerId === ME
+        ? 'Sent. Confirm it on Review payments. Until then those dues show Pending.'
+        : `Sent. ${owner} will confirm it. Until then your due shows Pending.`
+    return { message, paymentId: payment.id }
   })
 }

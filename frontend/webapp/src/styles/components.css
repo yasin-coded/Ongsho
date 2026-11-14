@@ -30,10 +30,10 @@
       transform: rotate(360deg);
     }
   }
+  /* Opacity only — transform here breaks position:fixed on shell nav (creates a containing block). */
   .app-stage {
     min-height: 100dvh;
     opacity: 0;
-    transform: translateY(0.4rem);
   }
   .app-stage--in {
     animation: app-stage-in 0.65s cubic-bezier(0.33, 1, 0.68, 1) forwards;
@@ -41,7 +41,6 @@
   @keyframes app-stage-in {
     to {
       opacity: 1;
-      transform: none;
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -54,7 +53,6 @@
     }
     .app-stage {
       opacity: 1;
-      transform: none;
     }
     .app-stage--in {
       animation: none;
@@ -536,6 +534,127 @@
   .copy-field code {
     font-family: var(--font-body); font-weight: 700; font-size: 1.1rem; letter-spacing: 0.06em;
     font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+    min-width: 0;
+    flex: 1 1 12rem;
+  }
+  .copy-field-skeleton {
+    border: 0.1875rem dashed #000;
+    border-radius: 0.9rem;
+    background: #fff;
+  }
+
+  .review-card__head .t-mid { min-width: 0; }
+  @media (max-width: 39.99rem) {
+    .review-card__actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      width: 100%;
+    }
+    .review-card__actions .neo-btn {
+      width: 100%;
+      min-height: 2.75rem;
+    }
+  }
+
+  .review-decided-row {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    min-width: 0;
+  }
+  .review-decided-row__facts {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+  }
+  .review-decided-row__facts > div {
+    display: grid;
+    gap: 0.2rem;
+  }
+  .review-decided-row__facts dt { margin: 0; }
+  .review-decided-row__facts dd { margin: 0; }
+  .review-decided-row__reverse {
+    justify-self: start;
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+  }
+  @media (min-width: 40rem) {
+    .review-decided-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem 1rem;
+    }
+    .review-decided-row__facts {
+      display: flex;
+      flex: 1 1 14rem;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 1rem;
+      min-width: 0;
+    }
+    .review-decided-row__detail {
+      flex: 1 1 12rem;
+      min-width: 0;
+    }
+    .review-decided-row__facts dt { display: none; }
+    .review-decided-row__facts > div:not(.review-decided-row__detail) dd {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .review-decided-row__person {
+      flex: 1 1 10rem;
+      min-width: 0;
+    }
+    .review-decided-row__reverse {
+      margin-left: auto;
+    }
+  }
+
+  @media (max-width: 39.99rem) {
+    .owner-member-row > .neo-btn,
+    .owner-member-row > a.neo-btn {
+      flex: 1 1 100%;
+      width: 100%;
+      min-height: 2.75rem;
+    }
+    .owner-member-row .neo-pill,
+    .owner-member-row .status-dot {
+      flex-shrink: 0;
+    }
+  }
+
+  .catalog-pill-delete {
+    flex: none;
+  }
+
+  @media (max-width: 22.5rem) {
+    .stat-card--spend > div:first-child {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .stat-card--spend .stat-card__visual {
+      justify-self: center;
+      width: 4.25rem;
+      height: 4.25rem;
+    }
+    .chart-forecast-legend {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.65rem;
+    }
+    .chart-bars--compact .recharts-cartesian-axis-tick text {
+      font-size: 0.7rem;
+    }
+    .copy-field {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .copy-field .neo-btn {
+      width: 100%;
+      min-height: 2.75rem;
+    }
   }
 
   /* ---------- skeleton ---------- */

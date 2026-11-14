@@ -105,6 +105,8 @@ export async function getSubscription(id) {
       splitType: shared?.split_type,
       seats: shared?.seats,
       seatsTaken,
+      joinLink: shared?.join_link ?? null,
+      joinLinkAvailable: shared?.join_link_available ?? false,
       priceChanges: priceChanges ?? [],
       meUserId: me.id,
     })

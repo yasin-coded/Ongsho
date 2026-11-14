@@ -25,7 +25,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Input, PasswordInput, Switch } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Pill } from '@/components/ui/Pill'
-import { SkeletonCard } from '@/components/ui/Misc'
+import { CatalogPanelSkeleton, SkeletonCard } from '@/components/ui/Misc'
 import { Loadable } from '@/features/common/PlanBits'
 
 function AvatarPicker({ me }) {
@@ -391,7 +391,7 @@ function CatalogGroup({ title, items, onAdd, onDelete, addLabel, fieldError, bus
               {mine.map((i) => (
                 <span key={i.id} className="neo-pill neo-pill--sm gap-1.5 !pr-1.5" style={{ background: colorize ? categoryColor(i.name) : '#fff', color: colorize ? inkOn(categoryColor(i.name)) : '#000' }}>
                   {i.name}
-                  <button type="button" className="grid size-6 place-items-center rounded-full border-2 border-black bg-white text-black" aria-label={`Delete ${i.name}`} onClick={() => onDelete(i)}>
+                  <button type="button" className="catalog-pill-delete grid min-h-11 min-w-11 place-items-center rounded-full border-2 border-black bg-white text-black" aria-label={`Delete ${i.name}`} onClick={() => onDelete(i)}>
                     <X aria-hidden="true" className="size-3.5" />
                   </button>
                 </span>
@@ -452,7 +452,7 @@ function CatalogCard() {
     <Box roomy>
       <BoxHead title="Categories and service names" sub="Built-in ones are for everyone. Yours are private." />
       <div className="grid gap-10 lg:grid-cols-2">
-        <Loadable query={cats} skeleton={<SkeletonCard />}>
+        <Loadable query={cats} skeleton={<CatalogPanelSkeleton />}>
           {(list) => (
             <CatalogGroup
               title="Categories"
@@ -467,7 +467,7 @@ function CatalogCard() {
             />
           )}
         </Loadable>
-        <Loadable query={names} skeleton={<SkeletonCard />}>
+        <Loadable query={names} skeleton={<CatalogPanelSkeleton />}>
           {(list) => (
             <CatalogGroup
               title="Service names"

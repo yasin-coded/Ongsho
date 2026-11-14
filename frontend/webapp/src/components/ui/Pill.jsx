@@ -35,7 +35,7 @@ export function PlanStatusPill({ status, small }) {
 
 /** The status pill on an owner plan row: "2 TO REVIEW", "ALL PAID", "TRIAL", "JUST ME"… */
 export function OwnerPlanPill({ pill, small }) {
-  const fills = { review: '#fff200', due: '#ff1a1a', allpaid: '#2fd600', trial: '#d9ccff', solo: '#000c7c', empty: '#ffffff' }
+  const fills = { review: '#fff200', due: '#ff1a1a', allpaid: '#22c400', trial: '#d9ccff', solo: '#000c7c', empty: '#ffffff' }
   if (PLAN_STATUS[pill.key] && pill.key !== 'trial') return <PlanStatusPill status={pill.key} small={small} />
   return (
     <Pill fill={fills[pill.key] ?? '#fff'} small={small}>

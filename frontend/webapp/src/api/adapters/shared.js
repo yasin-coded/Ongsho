@@ -1,5 +1,5 @@
 import { lookupServiceKey } from '@/lib/services'
-import { fmtMonth } from '@/lib/dates'
+import { fmtCycleDueLabel, fmtMonth } from '@/lib/dates'
 import { avatarColorFromId } from './me'
 import { idStr, moneyFromApi, paginatedBody } from './common'
 import { mapIncomingTransfer } from './transfers'
@@ -10,12 +10,12 @@ function cycleFromApi(cycle) {
   return { unit: cycle.unit, count: 1 }
 }
 
-function mapMemberHistoryRow(h) {
+function mapMemberHistoryRow(h, cycle) {
   const dueDate = h.due_date ?? (h.month ? `${h.month}-01` : null)
   return {
     id: idStr(h.due_id ?? h.id),
     dueDate,
-    monthLabel: dueDate ? fmtMonth(dueDate) : h.month ? fmtMonth(`${h.month}-01`) : '',
+    monthLabel: dueDate ? fmtCycleDueLabel(dueDate, cycle) : h.month ? fmtCycleDueLabel(`${h.month}-01`, cycle) : '',
     amount: moneyFromApi(h.amount),
     status: h.status,
     method: h.method ?? null,
@@ -27,17 +27,30 @@ function mapMemberHistoryRow(h) {
   }
 }
 
-function mapOpenDueRow(d) {
+function mapOpenDueRow(d, cycle) {
+  const dueDate = d.due_date ?? (d.month ? `${d.month}-01` : null)
   return {
     id: idStr(d.due_id ?? d.id),
     amount: moneyFromApi(d.amount),
-    dueDate: d.due_date,
-    monthLabel: d.due_date ? fmtMonth(d.due_date) : d.month ? fmtMonth(`${d.month}-01`) : '',
+    dueDate,
+    monthLabel: dueDate ? fmtCycleDueLabel(dueDate, cycle) : '',
     rejectionReason: d.rejection_reason ?? null,
   }
 }
 
+/** One row per due id (guards against bad API/mock duplicates). */
+export function uniqueDueRows(rows) {
+  const seen = new Set()
+  return rows.filter((r, i) => {
+    const key = r.id ?? `i-${i}-${r.dueDate}-${r.amount}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function mapRosterMember(m, myStatus) {
+  const cycle = m.cycle_status && m.cycle_status !== 'none' ? m.cycle_status : null
   return {
     id: idStr(m.id),
     name: m.name,
@@ -45,7 +58,7 @@ function mapRosterMember(m, myStatus) {
     avatarColor: avatarColorFromId(m.avatar_id),
     isOwner: m.is_owner,
     isYou: m.is_you,
-    status: m.is_you ? myStatus : null,
+    status: cycle ?? (m.is_you ? myStatus : null),
   }
 }
 
@@ -62,7 +75,8 @@ export function mapMySharedSummary(row, meUserId) {
   const openAmount = moneyFromApi(row.open_amount) ?? 0
   const pendingAmount = moneyFromApi(row.pending_amount) ?? 0
   const myShare = moneyFromApi(row.my_share) ?? openAmount ?? 0
-  const openDues = (row.open_dues ?? []).map(mapOpenDueRow)
+  const cycle = cycleFromApi(row.cycle)
+  let openDues = uniqueDueRows((row.open_dues ?? []).map((d) => mapOpenDueRow(d, cycle)))
   if (!openDues.length && (row.open_dues_count ?? 0) > 0 && openAmount > 0) {
     openDues.push({ id: `${subId}-open`, amount: openAmount, dueDate: null, monthLabel: '' })
   }
@@ -129,15 +143,26 @@ export function mapMySharedList(body, meUserId) {
 
 export function mapMySharedPlanDetail(row, meUserId) {
   const base = mapMySharedSummary(row, meUserId)
-  const openDues = (row.open_dues ?? []).map(mapOpenDueRow)
-  const history = (row.history ?? []).map(mapMemberHistoryRow)
+  const openAmount = moneyFromApi(row.open_amount) ?? 0
+  const cycle = cycleFromApi(row.cycle)
+  let openDues = uniqueDueRows((row.open_dues ?? []).map((d) => mapOpenDueRow(d, cycle)))
+  if (!openDues.length && (row.open_dues_count ?? 0) > 0 && openAmount > 0) {
+    openDues.push({ id: `${idStr(row.plan_id)}-open`, amount: openAmount, dueDate: null, monthLabel: '' })
+  }
+  const history = (row.history ?? []).map((h) => mapMemberHistoryRow(h, base.cycle))
   const members = (row.members ?? []).map((m) => mapRosterMember(m, base.myStatus))
-  const coverable = (row.coverable ?? []).map((c) => ({
-    id: idStr(c.due_id),
-    name: c.first_name,
-    amount: moneyFromApi(c.amount),
-    monthLabel: c.month ? fmtMonth(`${c.month}-01`) : '',
-  }))
+  const coverable = uniqueDueRows(
+    (row.coverable ?? []).map((c) => {
+      const dueDate = c.due_date ?? (c.month ? `${c.month}-01` : null)
+      return {
+        id: idStr(c.due_id),
+        name: c.first_name,
+        amount: moneyFromApi(c.amount),
+        dueDate,
+        monthLabel: dueDate ? fmtCycleDueLabel(dueDate, base.cycle) : '',
+      }
+    }),
+  )
   const ious = (row.ious ?? []).map((i) => ({
     text: i.you_owe ? `You owe ${i.other?.first_name} ` : `${i.other?.first_name} owes you `,
     amount: moneyFromApi(i.amount),

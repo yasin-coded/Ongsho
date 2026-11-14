@@ -1,7 +1,7 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -18,12 +18,25 @@ from accounts.serializers import (
 )
 from core.exceptions import DomainError, ValidationFailed
 from core.security import require_same_app_request
+from core.throttles import (
+    LoginEmailThrottle,
+    LoginIpThrottle,
+    PasswordResetConfirmIpThrottle,
+    PasswordResetRequestEmailThrottle,
+    PasswordResetRequestIpThrottle,
+    RefreshIpThrottle,
+    RegisterIpThrottle,
+    ResendVerificationEmailThrottle,
+    ResendVerificationIpThrottle,
+    VerifyEmailIpThrottle,
+    client_ip,
+)
 
 
 def _domain_response(exc: DomainError, *, clear_refresh: bool = False) -> Response:
-    from core.exceptions import error_response
+    from core.exceptions import domain_error_response
 
-    resp = error_response(exc.code, exc.message, exc.fields, exc.status_code)
+    resp = domain_error_response(exc)
     if clear_refresh:
         clear_refresh_cookie(resp)
     return resp
@@ -31,6 +44,7 @@ def _domain_response(exc: DomainError, *, clear_refresh: bool = False) -> Respon
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([RegisterIpThrottle])
 def register_view(request):
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -44,6 +58,7 @@ def register_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([VerifyEmailIpThrottle])
 def verify_email_view(request):
     serializer = VerifyEmailSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -56,12 +71,17 @@ def verify_email_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([LoginIpThrottle, LoginEmailThrottle])
 def login_view(request):
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
     try:
-        access, refresh, user = services.login_user(email=data["email"], password=data["password"])
+        access, refresh, user = services.login_user(
+            email=data["email"],
+            password=data["password"],
+            client_ip=client_ip(request),
+        )
     except DomainError as exc:
         return _domain_response(exc)
     response = Response({"access": access, "user": user_public_dict(user)}, status=status.HTTP_200_OK)
@@ -71,6 +91,7 @@ def login_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([RefreshIpThrottle])
 def refresh_view(request):
     try:
         require_same_app_request(request)
@@ -103,6 +124,7 @@ def logout_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([ResendVerificationIpThrottle, ResendVerificationEmailThrottle])
 def resend_verification_view(request):
     serializer = ResendVerificationSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -112,6 +134,7 @@ def resend_verification_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([PasswordResetRequestIpThrottle, PasswordResetRequestEmailThrottle])
 def password_reset_view(request):
     serializer = PasswordResetRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -121,6 +144,7 @@ def password_reset_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([PasswordResetConfirmIpThrottle])
 def password_reset_confirm_view(request):
     serializer = PasswordResetConfirmSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)

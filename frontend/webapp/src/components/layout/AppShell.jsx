@@ -41,6 +41,11 @@ export function AppShell() {
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-white focus:p-3 focus:font-bold">
         Skip to content
       </a>
+      <header className="mobile-brandbar">
+        <Link to="/" className="mobile-brandbar__link" aria-label="Ongsho home — back to the website">
+          <Wordmark className="media" style={{ width: `${SVG_SIZES.wordmark.w}px` }} aria-hidden="true" />
+        </Link>
+      </header>
       <aside className="sidebar">
         <NavLink to="/" className="sidebar__brand" aria-label="Ongsho home">
           <Wordmark className="media" style={{ width: `${SVG_SIZES.wordmark.w}px` }} aria-hidden="true" />
@@ -58,11 +63,6 @@ export function AppShell() {
       </aside>
 
       <div className="shell__main">
-        <header className="mobile-brandbar">
-          <Link to="/" className="mobile-brandbar__link" aria-label="Ongsho home — back to the website">
-            <Wordmark className="media" style={{ width: `${SVG_SIZES.wordmark.w}px` }} aria-hidden="true" />
-          </Link>
-        </header>
         <main id="main" className="content">
           <div key={pathname} className="content-route">
             <Outlet />

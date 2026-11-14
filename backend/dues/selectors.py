@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from calendar import monthrange
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -10,7 +11,9 @@ from django.db.models import Sum
 from django.db.models.functions import Coalesce
 
 from billing.models import Charge
+from billing.selectors import schedule_for_subscription
 from billing.services import CHARGE_LEAD_DAYS
+from core.schedule import due_dates_between, schedule_date_counts_for_user, stop_date
 from core.dates import today_dhaka
 from core.exceptions import NotFound, ValidationFailed
 from core.money import quantize_money
@@ -25,19 +28,20 @@ from sharing import selectors as sharing_selectors
 from sharing.models import Member, MemberStatus, SharedPlan, SplitType
 
 
-def current_charge(subscription: Subscription, today: date) -> Charge | None:
-    past = (
-        Charge.objects.filter(subscription=subscription, due_date__lte=today)
-        .order_by("-due_date", "-id")
-        .first()
-    )
+def _member_charge_floor(sub: Subscription, member: Member) -> date:
+    return max(member.joined_on, sub.billing_from)
+
+
+def current_charge(
+    subscription: Subscription, today: date, *, min_due_date: date | None = None
+) -> Charge | None:
+    base = Charge.objects.filter(subscription=subscription)
+    if min_due_date is not None:
+        base = base.filter(due_date__gte=min_due_date)
+    past = base.filter(due_date__lte=today).order_by("-due_date", "-id").first()
     if past:
         return past
-    return (
-        Charge.objects.filter(subscription=subscription, due_date__gt=today)
-        .order_by("due_date", "id")
-        .first()
-    )
+    return base.filter(due_date__gt=today).order_by("due_date", "id").first()
 
 
 def _first_name(user) -> str:
@@ -167,7 +171,7 @@ def _payment_brief(payment: Payment | None) -> dict | None:
 def prefetch_member_payment_ctx(shared: SharedPlan, members: list[Member], today: date) -> dict[int, dict]:
     """Per-member due/payment snapshot for the plan's current charge."""
     sub = shared.subscription
-    charge = current_charge(sub, today)
+    charge = current_charge(sub, today, min_due_date=sub.billing_from)
     ctx: dict[int, dict] = {m.pk: {} for m in members}
     if charge is None:
         for mid in ctx:
@@ -311,7 +315,8 @@ def active_membership(user, plan_id: int) -> Member:
 def _member_money_snapshot(member: Member, today: date) -> dict:
     sub = member.shared_plan.subscription
     shared = member.shared_plan
-    charge = current_charge(sub, today)
+    floor = _member_charge_floor(sub, member)
+    charge = current_charge(sub, today, min_due_date=floor)
     due = None
     if charge:
         due = Due.objects.filter(charge=charge, member=member).first()
@@ -327,7 +332,11 @@ def _member_money_snapshot(member: Member, today: date) -> dict:
         my_share = None
         my_status = "none"
 
-    open_dues = Due.objects.filter(member=member, status=DueStatus.DUE)
+    open_dues = Due.objects.filter(
+        member=member,
+        status=DueStatus.DUE,
+        charge__due_date__gte=floor,
+    )
     open_count = open_dues.count()
     open_amount = open_dues.aggregate(s=Coalesce(Sum("amount_bdt"), Decimal("0")))["s"]
     pending_dues = Due.objects.filter(member=member, status=DueStatus.PENDING)
@@ -343,33 +352,28 @@ def _member_money_snapshot(member: Member, today: date) -> dict:
 
 
 def _sync_member_dues(member: Member, today: date) -> None:
-    """Ensure dues exist when a member joined after the charge was locked (idempotent)."""
+    """Ensure a due exists on the current billing cycle when the member joined late (idempotent)."""
     from dues import services as dues_services
 
     sub = member.shared_plan.subscription
-    charges = list(
-        Charge.objects.filter(subscription=sub, period_start__gte=member.joined_on).order_by(
-            "period_start", "id"
-        )
-    )
-    if not charges:
+    floor = _member_charge_floor(sub, member)
+    charge = current_charge(sub, today, min_due_date=floor)
+    if charge is None:
         return
-    have_due = set(
-        Due.objects.filter(member=member, charge_id__in=[c.pk for c in charges]).values_list(
-            "charge_id", flat=True
-        )
-    )
-    for charge in charges:
-        if charge.pk in have_due:
-            continue
-        dues_services.recalculate_dues(charge, today, force=True)
+    if charge.period_start < member.joined_on:
+        return
+    if Due.objects.filter(member=member, charge=charge).exists():
+        return
+    dues_services.recalculate_dues(charge, today, force=True)
 
 
 def _member_open_dues_rows(member: Member) -> list[dict]:
     from payments.selectors import settling_allocations_for_dues
 
+    sub = member.shared_plan.subscription
+    floor = _member_charge_floor(sub, member)
     open_dues_qs = list(
-        Due.objects.filter(member=member, status=DueStatus.DUE)
+        Due.objects.filter(member=member, status=DueStatus.DUE, charge__due_date__gte=floor)
         .select_related("charge")
         .order_by("charge__due_date", "id")
     )
@@ -395,30 +399,27 @@ def _member_open_dues_rows(member: Member) -> list[dict]:
     return rows
 
 
-def _member_roster_rows(member: Member) -> list[dict]:
+def _member_roster_rows(member: Member, today: date) -> list[dict]:
     shared = member.shared_plan
-    others = sharing_selectors.members_queryset(shared).exclude(pk=member.pk).select_related("user")
-    rows = [
-        {
+    roster = list(sharing_selectors.members_queryset(shared).select_related("user"))
+    ctx = prefetch_member_payment_ctx(shared, roster, today)
+
+    def _entry(m: Member, *, is_you: bool) -> dict:
+        snap = ctx.get(m.pk, {})
+        cycle_status = snap.get("due_status")
+        return {
             "id": m.pk,
             "name": m.user.name,
             "first_name": _first_name(m.user),
             "avatar_id": m.user.avatar_id,
             "is_owner": sharing_selectors.is_owner_seat(m),
-            "is_you": False,
+            "is_you": is_you,
+            "cycle_status": cycle_status,
         }
-        for m in others
-    ]
-    rows.append(
-        {
-            "id": member.pk,
-            "name": member.user.name,
-            "first_name": _first_name(member.user),
-            "avatar_id": member.user.avatar_id,
-            "is_owner": sharing_selectors.is_owner_seat(member),
-            "is_you": True,
-        }
-    )
+
+    others = [m for m in roster if m.pk != member.pk]
+    rows = [_entry(m, is_you=False) for m in others]
+    rows.append(_entry(member, is_you=True))
     return rows
 
 
@@ -445,7 +446,7 @@ def me_shared_plan_item(member: Member, today: date) -> dict:
         "seats": shared.seats,
         "seats_taken": taken,
         "open_dues": _member_open_dues_rows(member),
-        "members": _member_roster_rows(member),
+        "members": _member_roster_rows(member, today),
         **snap,
     }
     return row
@@ -492,6 +493,62 @@ def filter_memberships_by_status(memberships: list[Member], plan_filter: str, to
     return out
 
 
+def member_renewal_dates_in_month(member: Member, today: date) -> list[date]:
+    """Billable renewal dates for this member in the calendar month (matches calendar/spend rules)."""
+    sub = member.shared_plan.subscription
+    month_start = today.replace(day=1)
+    _, last_day = monthrange(today.year, today.month)
+    month_end = today.replace(day=last_day)
+    schedule = schedule_for_subscription(sub)
+    stop = stop_date(schedule)
+    raw_end = min(month_end, stop) if stop else month_end
+    dates = due_dates_between(schedule, sub.start_date, raw_end)
+    out: list[date] = []
+    for due in dates:
+        if due < month_start or due > month_end:
+            continue
+        if due < member.joined_on:
+            continue
+        if member.left_on and due > member.left_on:
+            continue
+        if due < sub.billing_from:
+            continue
+        if not schedule_date_counts_for_user(due, today=today, billing_from=sub.billing_from):
+            continue
+        out.append(due)
+    return out
+
+
+def member_share_on_renewal_date(
+    member: Member, due_date: date, today: date, prices: list | None = None
+) -> Decimal | None:
+    """This member's BDT share for one renewal (due row, else charge-backed projection)."""
+    sub = member.shared_plan.subscription
+    shared = member.shared_plan
+    if prices is None:
+        prices = list(PriceChange.objects.filter(subscription=sub).order_by("effective_from", "id"))
+    due_row = Due.objects.filter(member=member, charge__period_start=due_date).first()
+    if due_row:
+        return quantize_money(due_row.amount_bdt)
+    charge = Charge.objects.filter(subscription=sub, period_start=due_date).first()
+    if due_date > today and charge is None:
+        return None
+    share = project_share_bdt(shared, member, due_date, prices)
+    return quantize_money(share) if share is not None else None
+
+
+def _member_shares_this_month(member: Member, today: date) -> Decimal:
+    """Sum of this member's share for each billable renewal in the calendar month."""
+    sub = member.shared_plan.subscription
+    prices = list(PriceChange.objects.filter(subscription=sub).order_by("effective_from", "id"))
+    total = Decimal("0")
+    for due_date in member_renewal_dates_in_month(member, today):
+        amt = member_share_on_renewal_date(member, due_date, today, prices)
+        if amt:
+            total += amt
+    return quantize_money(total)
+
+
 def me_shared_plan_counts(memberships: list[Member], today: date) -> dict:
     counts = {"all": len(memberships), "due": 0, "pending": 0, "paid": 0}
     for m in memberships:
@@ -513,9 +570,7 @@ def me_shared_plan_totals(memberships: list[Member], today: date) -> dict:
     for m in memberships:
         snap = _member_money_snapshot(m, today)
         sub = m.shared_plan.subscription
-        price = price_now_dict(sub)
-        if price:
-            shares += Decimal(price["monthly_cost_bdt"])
+        shares += _member_shares_this_month(m, today)
         due_now += Decimal(snap["open_amount"])
         waiting += Decimal(snap["pending_amount"])
         open_amt = Decimal(snap["open_amount"])
@@ -539,6 +594,34 @@ def me_shared_plan_totals(memberships: list[Member], today: date) -> dict:
         "pending_count": pending_count,
         "paid_up_count": paid_up_count,
     }
+
+
+def coverable_dues_for_viewer(viewer: Member, today: date) -> list[dict]:
+    shared = viewer.shared_plan
+    sub = shared.subscription
+    charge = current_charge(sub, today, min_due_date=sub.billing_from)
+    if charge is None:
+        return []
+    cover_qs = (
+        Due.objects.filter(
+            charge=charge,
+            status=DueStatus.DUE,
+        )
+        .exclude(member=viewer)
+        .select_related("member__user", "charge")
+        .order_by("member_id")
+    )
+    return [
+        {
+            "due_id": d.pk,
+            "name": d.member.user.name,
+            "first_name": _first_name(d.member.user),
+            "month": d.charge.period_start.strftime("%Y-%m"),
+            "due_date": d.charge.due_date.isoformat(),
+            "amount": str(quantize_money(d.amount_bdt)),
+        }
+        for d in cover_qs
+    ]
 
 
 def me_shared_plan_detail(member: Member, today: date) -> dict:
@@ -602,30 +685,7 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
     incoming = incoming_transfer_for_member(member.user, sub.pk)
     row["incoming_transfer"] = incoming_transfer_row(incoming) if incoming else None
 
-    coverable = []
-    if sub.plan_mode == PlanMode.OWNER:
-        cutoff = today + timedelta(days=CHARGE_LEAD_DAYS)
-        cover_qs = (
-            Due.objects.filter(
-                charge__subscription=sub,
-                status=DueStatus.DUE,
-                charge__due_date__lte=cutoff,
-            )
-            .exclude(member=member)
-            .select_related("member__user", "charge")
-            .order_by("charge__due_date", "member_id")
-        )
-        for d in cover_qs:
-            coverable.append(
-                {
-                    "due_id": d.pk,
-                    "name": d.member.user.name,
-                    "first_name": _first_name(d.member.user),
-                    "month": d.charge.period_start.strftime("%Y-%m"),
-                    "amount": str(quantize_money(d.amount_bdt)),
-                }
-            )
-    row["coverable"] = coverable
+    row["coverable"] = coverable_dues_for_viewer(member, today)
     from payments.selectors import plan_ious_member
 
     row["ious"] = plan_ious_member(shared, member)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ArrowRightLeft, Ban, ChevronDown, Download, Eye, Mail, Pause, Play, RotateCcw, Trash2, UserPlus } from 'lucide-react'
+import { ArrowRightLeft, Ban, BadgeCheck, ChevronDown, Download, Eye, Mail, Pause, Play, RotateCcw, Trash2, UserPlus } from 'lucide-react'
 import { canSendInvite, freeSeats, inviteReservesSeat, pendingInvitesReservingSeats } from '@/lib/planSeats'
 import * as plansApi from '@/api/plans'
 import { METHODS, STATUS } from '@/lib/colors'
@@ -20,7 +20,7 @@ import { CopyField, EmptyState, FilterChip, Pagination, ProgressBar, SkeletonCar
 import { Loadable, ownerMeta } from '@/features/common/PlanBits'
 import { NotFoundPage } from '@/features/NotFoundPage'
 import { FloatingMember } from './FloatingMember'
-import { MarkPaidModal, SetDueModal, WaiveModal } from './PaymentModals'
+import { MarkPaidModal, WaiveModal } from './PaymentModals'
 import { ConfirmModal, DeletePlanModal, EditRateModal, InviteModal, LeaveModal, PriceChangeModal, RenewModal, TransferModal } from './OwnerModals'
 
 const TONE = { pending: STATUS.pending.fill, paid: STATUS.paid.fill, due: STATUS.due.fill, info: '#14b3f2' }
@@ -195,7 +195,7 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
 
       <ul className="dashed-rows">
         {reservedInvites.map((inv) => (
-          <li key={inv.id} className="flex w-full flex-wrap items-center gap-3 py-3">
+          <li key={inv.id} className="owner-member-row flex w-full flex-wrap items-center gap-3 py-3">
             <div className="grid min-h-[2.75rem] min-w-[2.75rem] place-items-center rounded-full border-[0.1875rem] border-dashed border-black bg-[var(--color-cream)]">
               <Mail aria-hidden="true" className="size-5" />
             </div>
@@ -216,14 +216,16 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
           </li>
         ))}
         {list.map((m) => (
-          <li key={m.id} className="flex w-full flex-wrap items-center gap-3 py-3">
+          <li key={m.id} className="owner-member-row flex w-full flex-wrap items-center gap-3 py-3">
             <Avatar name={m.name} color={m.avatarColor} size="md" status={m.dueStatus ?? undefined} decorative />
             <div className="min-w-0 flex-[1_1_12rem]">
-              <p className="font-bold">
+              <p className="truncate font-bold" title={`${m.firstName}${m.isOwnerSeat ? ' (owner)' : ''}`}>
                 {m.firstName}
                 {m.isOwnerSeat ? ' (owner)' : ''}
               </p>
-              <p className="t-meta break-all">{m.email}</p>
+              <p className="t-meta break-all" title={m.email}>
+                {m.email}
+              </p>
               {m.leaveRequested && (
                 <button type="button" className="mt-1 text-[0.8rem] font-bold text-[#846ace] underline" onClick={() => onOpen('leave', m)}>
                   Asked to leave
@@ -231,14 +233,14 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
               )}
             </div>
             {m.dueStatus && <StatusDot status={m.dueStatus} />}
-            {m.isOwnerSeat && m.dueId && m.dueStatus !== 'due' ? (
-              <Button variant="solo-navy" size="sm" onClick={() => onOpen('setDue', m)}>
-                Set to Due
-              </Button>
-            ) : m.dueStatus === 'pending' ? (
+            {m.dueStatus === 'pending' ? (
               <LinkButton to={`/app/plans/${plan.id}/review`} variant="review" size="sm" icon={Eye}>
                 Review
               </LinkButton>
+            ) : m.isOwnerSeat && m.dueId && m.dueStatus === 'due' ? (
+              <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onOpen('markPaid', m)}>
+                Mark as paid
+              </Button>
             ) : (
               <Button
                 ref={(el) => {
@@ -596,10 +598,26 @@ function OwnerPlan({ plan }) {
             </Button>
           }
         />
+        {plan.joinLink && (
+          <div className="grid gap-2 mb-4">
+            {plan.joinLinkAvailable && canInvite ? (
+              <CopyField label="Plan invite link" value={plan.joinLink} />
+            ) : (
+              <div className="grid gap-1.5">
+                <p className="t-label">Plan invite link</p>
+                <code className="t-meta break-all opacity-60">{plan.joinLink}</code>
+                <p className="t-meta">All seats are taken. Copy is disabled until a seat opens.</p>
+              </div>
+            )}
+            {plan.joinLinkAvailable && canInvite && (
+              <p className="t-meta">Anyone with this link can sign up or log in and join while seats are free.</p>
+            )}
+          </div>
+        )}
         <p>
           {free <= 0
-            ? `All ${plan.seatsCap} seats are taken. If someone leaves, you can invite someone by email.`
-            : `${plural(free, 'free seat')}. Each invite works for one email, and comes with a single-use backup link you can copy.`}
+            ? `All ${plan.seatsCap} seats are taken. If someone leaves, you can share the plan link or invite by email.`
+            : `${plural(free, 'free seat')}. Share the plan link above, or invite one person by email (each email invite includes a backup link).`}
         </p>
         {plan.invites.length > 0 && (
           <ul className="dashed-rows mt-4">
@@ -677,8 +695,17 @@ function OwnerPlan({ plan }) {
       {modal?.type === 'transfer' && <TransferModal plan={plan} onClose={() => setModal(null)} />}
       {modal?.type === 'delete' && <DeletePlanModal plan={plan} onClose={() => setModal(null)} />}
       {modal?.type === 'price' && <PriceChangeModal plan={plan} onClose={() => setModal(null)} />}
-      {modal?.type === 'setDue' && <SetDueModal dueId={modal.member.dueId} name={modal.member.firstName} ownSeat={modal.member.isOwnerSeat} onClose={() => setModal(null)} />}
-      {modal?.type === 'markPaid' && <MarkPaidModal dueId={modal.member.dueId} name={modal.member.firstName} method={plan.method} onClose={() => setModal(null)} />}
+      {modal?.type === 'markPaid' && (
+        <MarkPaidModal
+          dueId={modal.member.dueId}
+          planId={plan.id}
+          name={modal.member.firstName}
+          method={plan.method}
+          ownSeat={modal.member.isOwnerSeat}
+          coverable={plan.coverable ?? []}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal?.type === 'waive' && <WaiveModal dueId={modal.member.dueId} name={modal.member.firstName} onClose={() => setModal(null)} />}
     </div>
   )

@@ -61,6 +61,10 @@ export function LoginPage() {
     })
   }
 
+  const planJoinBack = location.state?.from?.startsWith?.('/join/')
+    ? location.state.from
+    : null
+
   return (
     <AuthLayout
       title="Log in"
@@ -74,6 +78,11 @@ export function LoginPage() {
         </p>
       }
     >
+      {planJoinBack && (
+        <p className="neo-box neo-box--flat neo-box--highlight mb-4" role="status">
+          Seems like you got an invite — log in to join the plan.
+        </p>
+      )}
       <form
         className="grid gap-5"
         noValidate

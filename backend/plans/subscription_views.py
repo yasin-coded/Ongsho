@@ -24,9 +24,9 @@ ORDERING_WHITELIST = frozenset(
 
 
 def _domain_response(exc: DomainError) -> Response:
-    from core.exceptions import error_response
+    from core.exceptions import domain_error_response
 
-    return error_response(exc.code, exc.message, exc.fields, exc.status_code)
+    return domain_error_response(exc)
 
 
 def _list_params(request) -> dict:

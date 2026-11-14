@@ -47,7 +47,12 @@ export function BoxHead({ title, as: H = 'h2', tag, action, sub, className }) {
 export function StatCard({ label, value, valueClass = '', helper, visual, children, tone, className }) {
   return (
     <Box
-      className={cx('grid min-w-0 content-between gap-3', visual ? 'overflow-visible' : 'overflow-hidden', className)}
+      className={cx(
+        'grid min-w-0 gap-3',
+        children ? 'content-start' : 'content-between',
+        visual && !children ? 'overflow-visible' : 'overflow-hidden',
+        className,
+      )}
       aria-label={typeof label === 'string' ? label : undefined}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">

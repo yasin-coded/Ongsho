@@ -1,13 +1,21 @@
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.cookies import set_refresh_cookie
 from accounts.serializers import user_public_dict
 from core.dates import today_dhaka
+from core.throttles import (
+    InviteCreateUserThrottle,
+    InviteReplaceUserThrottle,
+    InviteSignupIpThrottle,
+    PlanJoinGetIpThrottle,
+    PlanJoinSignupIpThrottle,
+    PublicInviteGetIpThrottle,
+)
 from dues import selectors as dues_selectors
 from core.exceptions import DomainError
 from core.pagination import OngshoPageNumberPagination
@@ -37,15 +45,15 @@ def shared_plan_detail(request, pk: int):
         return _method_not_allowed()
     if request.method == "GET":
         shared = selectors.shared_plan_for_owner(request.user, pk)
-        return Response(
-            {
-                "plan_id": shared.subscription_id,
-                "split_type": shared.split_type,
-                "seats": shared.seats,
-                "member_count": selectors.member_count_active(shared),
-                "pending_invite_count": selectors.pending_invite_count(shared),
-            }
-        )
+        payload = {
+            "plan_id": shared.subscription_id,
+            "split_type": shared.split_type,
+            "seats": shared.seats,
+            "member_count": selectors.member_count_active(shared),
+            "pending_invite_count": selectors.pending_invite_count(shared),
+        }
+        payload.update(services.shared_plan_join_meta(shared))
+        return Response(payload)
     seats = request.data.get("seats")
     try:
         seats = int(seats)
@@ -97,6 +105,7 @@ def subscription_share(request, pk: int):
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InviteCreateUserThrottle])
 def shared_plan_invites(request, pk: int):
     shared = selectors.shared_plan_for_owner(request.user, pk)
     if request.method == "GET":
@@ -139,6 +148,50 @@ def invite_new_link(request, pk: int):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([PlanJoinGetIpThrottle])
+def plan_join_public(request, token: str):
+    try:
+        data = services.plan_join_public(token=token, user=request.user)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def plan_join_accept(request, token: str):
+    try:
+        result = services.join_via_plan_link(request.user, token=token, today=today_dhaka())
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(result)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PlanJoinSignupIpThrottle])
+def plan_join_signup(request, token: str):
+    try:
+        access, refresh, user, plan_id = services.signup_and_join_via_plan_link(
+            token=token,
+            email=request.data.get("email", ""),
+            name=request.data.get("name", ""),
+            password=request.data.get("password", ""),
+            today=today_dhaka(),
+        )
+    except DomainError as exc:
+        return _domain_response(exc)
+    response = Response(
+        {"access": access, "user": user_public_dict(user), "plan_id": plan_id},
+        status=status.HTTP_201_CREATED,
+    )
+    set_refresh_cookie(response, refresh)
+    return response
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([PublicInviteGetIpThrottle])
 def invite_public(request, token: str):
     try:
         invite = selectors.invite_by_token(token)
@@ -187,6 +240,7 @@ def invite_decline_token(request, token: str):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([InviteSignupIpThrottle])
 def invite_signup(request, token: str):
     try:
         access, refresh, user, plan_id = services.signup_via_invite(
@@ -325,6 +379,7 @@ def owner_leave_decision(request, pk: int):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([InviteReplaceUserThrottle])
 def member_replace(request, pk: int):
     try:
         invite, raw = services.replace_member(

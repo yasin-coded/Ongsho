@@ -9,13 +9,12 @@ import { useAuth } from '@/auth/auth-context'
 import { useAction } from '@/hooks/useAction'
 import { focusFirstInvalid } from '@/lib/formFocus'
 import { validateName, validatePassword } from '@/lib/validation'
-import { formatBDT } from '@/lib/money'
 import { fmtShort } from '@/lib/dates'
-import { perCycleLabel } from '@/mocks/schedule'
 import { Button } from '@/components/ui/Button'
 import { Input, PasswordInput } from '@/components/ui/Field'
 import { ServiceLogo } from '@/components/ui/ServiceLogo'
-import { ErrorBox, Skeleton } from '@/components/ui/Misc'
+import { ErrorBox, InvitePageSkeleton } from '@/components/ui/Misc'
+import { shouldShowInitialSkeleton } from '@/lib/queryLoading'
 import { AuthLayout } from './AuthLayout'
 
 export function InvitePage() {
@@ -23,7 +22,8 @@ export function InvitePage() {
   const { isAuthed, session, signInDirect, adoptSession } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: invite, isPending, error, refetch } = useQuery({ queryKey: ['invite', token], queryFn: () => getInvite(token) })
+  const query = useQuery({ queryKey: ['invite', token], queryFn: () => getInvite(token) })
+  const { data: invite, error, refetch } = query
   const [form, setForm] = useState({ name: '', password: '' })
   const [clientFields, setClientFields] = useState({})
 
@@ -42,10 +42,10 @@ export function InvitePage() {
   const decline = useAction(() => declineInvite(invite.id), { onSuccess: () => navigate('/app/notifications') })
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: isAuthed })
 
-  if (isPending) {
+  if (shouldShowInitialSkeleton(query)) {
     return (
       <AuthLayout title="Opening your invite">
-        <Skeleton className="h-24" />
+        <InvitePageSkeleton />
       </AuthLayout>
     )
   }
@@ -77,7 +77,7 @@ export function InvitePage() {
   const wrongAccount = isAuthed && !existingUser
 
   return (
-    <AuthLayout title={`Join ${invite.planName}`} subtitle={`Invited by ${invite.from}. Your share is about ${formatBDT(invite.share)} ${perCycleLabel(invite.cycle)}.`}>
+    <AuthLayout title={`Join ${invite.planName}`} subtitle={`Invited by ${invite.from}.`}>
       <div className="neo-box neo-box--flat neo-box--highlight row gap-4">
         <ServiceLogo serviceKey={invite.serviceKey} name={invite.planName} size="compact" />
         <div className="grid gap-1">
@@ -99,7 +99,11 @@ export function InvitePage() {
               Decline
             </Button>
           </div>
-          {accept.error && <p className="field__error">{accept.error.message}</p>}
+          {accept.error && (
+            <p className="field__error" role="alert">
+              {accept.error.message}
+            </p>
+          )}
         </div>
       )}
 

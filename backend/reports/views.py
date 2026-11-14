@@ -1,9 +1,10 @@
 from django.http import HttpResponse
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.dates import today_dhaka
+from core.throttles import StatementDownloadUserThrottle
 from core.exceptions import DomainError
 from reports import selectors
 from reports import services as report_services
@@ -48,6 +49,7 @@ def dashboard_forecast(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([StatementDownloadUserThrottle])
 def owner_statement(request, pk: int):
     today = today_dhaka()
     try:
@@ -59,6 +61,7 @@ def owner_statement(request, pk: int):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([StatementDownloadUserThrottle])
 def member_statement(request, pk: int):
     today = today_dhaka()
     try:

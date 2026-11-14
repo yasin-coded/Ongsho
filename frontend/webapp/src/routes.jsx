@@ -5,6 +5,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { LandingPage } from '@/features/landing/LandingPage'
 import { LoginPage, RegisterPage, VerifyEmailPage, ResetPasswordPage } from '@/features/auth/AuthPages'
 import { InvitePage } from '@/features/auth/InvitePage'
+import { PlanJoinPage } from '@/features/auth/PlanJoinPage'
 import { HomePage } from '@/features/dashboard/HomePage'
 import { MyPlansPage } from '@/features/plans/MyPlansPage'
 import { PlanFormPage } from '@/features/plans/PlanFormPage'
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
   { path: '/verify-email', element: <VerifyEmailPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/invite/:token', element: <InvitePage /> },
+  { path: '/join/:token', element: <PlanJoinPage /> },
   { path: '/kit', element: <KitPage /> },
   {
     path: '/app',

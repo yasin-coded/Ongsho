@@ -17,6 +17,14 @@ from accounts.constants import DEFAULT_AVATAR_ID
 from accounts.emails import send_email_change_verification, send_password_reset_email, send_verification_email
 from accounts.tokens import load_email_change_token, load_email_verification_token
 from core.exceptions import ConflictError, Forbidden, Unauthorized, ValidationFailed
+from core.lockout import (
+    assert_login_allowed,
+    assert_password_confirm_allowed,
+    clear_login_success,
+    clear_password_confirm_success,
+    record_login_failure,
+    record_password_confirm_failure,
+)
 
 User = get_user_model()
 
@@ -32,6 +40,7 @@ _RESEND_VERIFY_CACHE_PREFIX = "accounts:resend-verify:"
 
 
 def verify_current_password(user, password: str) -> None:
+    assert_password_confirm_allowed(user.pk)
     if not password:
         raise ValidationFailed(
             "Enter your password.",
@@ -39,12 +48,13 @@ def verify_current_password(user, password: str) -> None:
             fields={"password": ["Enter your password."]},
         )
     if not user.check_password(password):
-        # TODO: increment failed-password lockout counter for this user.
+        record_password_confirm_failure(user.pk)
         raise ValidationFailed(
             "The password is not correct.",
             code="invalid_password",
             fields={"password": ["The password is not correct."]},
         )
+    clear_password_confirm_success(user.pk)
 
 
 @transaction.atomic
@@ -99,11 +109,15 @@ def verify_email(token: str) -> None:
         user.save(update_fields=["email_verified"])
 
 
-def login_user(*, email: str, password: str) -> tuple[str, str, User]:
+def login_user(*, email: str, password: str, client_ip: str = "") -> tuple[str, str, User]:
+    from core.lockout import LOGIN_INVALID_MESSAGE
+
+    assert_login_allowed(email=email, ip=client_ip)
     user = authenticate(username=email, password=password)
     if user is None:
+        record_login_failure(email=email, ip=client_ip)
         raise Unauthorized(
-            "The email or password is incorrect.",
+            LOGIN_INVALID_MESSAGE,
             code="invalid_credentials",
         )
     if not user.email_verified:
@@ -111,6 +125,7 @@ def login_user(*, email: str, password: str) -> tuple[str, str, User]:
             "Verify your email before signing in.",
             code="email_not_verified",
         )
+    clear_login_success(email=email, ip=client_ip)
     refresh = RefreshToken.for_user(user)
     return str(refresh.access_token), str(refresh), user
 
@@ -304,12 +319,7 @@ def update_profile(user, validated: dict):
 @transaction.atomic
 def change_password(user, *, current_password: str, new_password: str) -> None:
     user = User.objects.select_for_update().get(pk=user.pk)
-    if not user.check_password(current_password):
-        raise ValidationFailed(
-            "The password is not correct.",
-            code="invalid_password",
-            fields={"password": ["The password is not correct."]},
-        )
+    verify_current_password(user, current_password)
     user.set_password(new_password)
     user.save(update_fields=["password"])
     audit_services.log(user, "password.changed", "User", user.pk, None, None)
@@ -319,12 +329,7 @@ def change_password(user, *, current_password: str, new_password: str) -> None:
 @transaction.atomic
 def request_email_change(user, *, new_email: str, password: str) -> None:
     user = User.objects.select_for_update().get(pk=user.pk)
-    if not user.check_password(password):
-        raise ValidationFailed(
-            "The password is not correct.",
-            code="invalid_password",
-            fields={"password": ["The password is not correct."]},
-        )
+    verify_current_password(user, password)
     previous_pending = user.pending_email or None
     user.pending_email = new_email
     user.save(update_fields=["pending_email"])

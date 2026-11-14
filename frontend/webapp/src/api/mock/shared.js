@@ -1,5 +1,5 @@
 import { db, ME, nextId } from '@/mocks/db'
-import { coverableDues, firstName, joinedPlans, memberPlanSummary, myMemberRow, planById, sharedTotals, userById } from '@/mocks/selectors'
+import { coverableDues, firstName, joinedPlans, memberPlanSummary, membersOf, myMemberRow, planById, seatShareNow, sharedTotals, userById } from '@/mocks/selectors'
 import { audit, generateMissingCharges, recalcUnlocked, resolveNotifications } from '@/mocks/engine'
 import { MOCK_TODAY, mockNow } from '@/lib/dates'
 import { ApiError, paginate, read, write } from '../client'
@@ -27,7 +27,7 @@ export function getMySharedPlan(id) {
   return read(() => {
     const plan = planById(id)
     if (!plan || !myMemberRow(id, ME) || plan.ownerId === ME) return { notFound: true }
-    return { ...memberPlanSummary(plan, ME), coverable: coverableDues(id, ME), mode: plan.mode }
+    return { ...memberPlanSummary(plan, ME), coverable: coverableDues(plan.id, ME), mode: plan.mode }
   })
 }
 
@@ -55,6 +55,90 @@ export function downloadMyStatement(planId, { month }) {
   return write(() => {
     if (!myMemberRow(planId, ME)) throw new ApiError('You are not in this plan.', { status: 404 })
     return { number: `ONG-${month.replace('-', '')}-${planId.slice(-4).toUpperCase()}-${String(db.audit.length + 201).padStart(4, '0')}` }
+  })
+}
+
+// ---------- plan join link ----------
+function parseMockJoinToken(token) {
+  const m = /^mock-(.+)$/.exec(token ?? '')
+  return m ? m[1] : null
+}
+
+export function getPlanJoin(token) {
+  return read(() => {
+    const planId = parseMockJoinToken(token)
+    const plan = planId ? planById(planId) : null
+    if (!plan || !plan.shared) return { notFound: true }
+    const members = membersOf(plan.id)
+    const pending = db.invites.filter((i) => i.planId === plan.id && i.status === 'pending' && !i.replaces).length
+    const planFull = members.length + pending >= plan.seats
+    const me = db.users.find((u) => u.id === ME)
+    const alreadyMember = me ? members.some((m) => m.userId === me.id && m.status !== 'left') : false
+    const { perSeat } = seatShareNow(plan)
+    const owner = userById(plan.ownerId)
+    return {
+      kind: 'plan',
+      token,
+      planId: plan.id,
+      planName: plan.planName,
+      serviceKey: plan.serviceKey,
+      seats: plan.seats,
+      seatsTaken: members.length,
+      canJoin: !planFull && !alreadyMember,
+      alreadyMember,
+      planFull,
+      from: firstName(owner),
+      share: perSeat,
+      cycle: plan.cycle,
+      notFound: false,
+    }
+  })
+}
+
+export function acceptPlanJoin(token) {
+  return write(() => {
+    const planId = parseMockJoinToken(token)
+    const plan = planId ? planById(planId) : null
+    if (!plan) throw new ApiError('This invite does not exist.', { status: 404 })
+    const members = membersOf(plan.id)
+    const pending = db.invites.filter((i) => i.planId === plan.id && i.status === 'pending' && !i.replaces).length
+    if (members.length + pending >= plan.seats) throw new ApiError('This plan is full.', { status: 409 })
+    if (members.some((m) => m.userId === ME && m.status !== 'left')) {
+      throw new ApiError('You are already in this plan.', { status: 409 })
+    }
+    db.members.push({
+      id: nextId('m'),
+      planId: plan.id,
+      userId: ME,
+      status: 'active',
+      joinedOn: MOCK_TODAY,
+      isOwnerSeat: false,
+      customShare: null,
+    })
+    generateMissingCharges(plan.id)
+    return { planId: plan.id, message: `You joined ${plan.planName}.` }
+  })
+}
+
+export function signupAndJoinPlan(token, { email, name, password }) {
+  return write(() => {
+    const planId = parseMockJoinToken(token)
+    const plan = planId ? planById(planId) : null
+    if (!plan) throw new ApiError('This invite does not exist.', { status: 404 })
+  if (db.users.some((u) => u.email === email)) throw new ApiError('An account already exists. Log in to join.', { status: 409 })
+    const user = { id: nextId('u'), name: name.trim(), email, avatarColor: null }
+    db.users.push(user)
+    db.members.push({
+      id: nextId('m'),
+      planId: plan.id,
+      userId: user.id,
+      status: 'active',
+      joinedOn: MOCK_TODAY,
+      isOwnerSeat: false,
+      customShare: null,
+    })
+    generateMissingCharges(plan.id)
+    return { access: 'mock-access', user: { id: user.id, name: user.name, email: user.email }, planId: plan.id }
   })
 }
 

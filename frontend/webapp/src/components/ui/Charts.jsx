@@ -18,11 +18,12 @@ const tooltipShell = {
 }
 
 /** Donut with the hard black outline and the small yellow centre from the wireframe. */
-export function Donut({ data, size = 9, label, center = true }) {
+export function Donut({ data, size = 9, label, center = true, compact }) {
   const total = data.reduce((a, d) => a + d.value, 0)
+  const rem = compact ? size * 0.78 : size
   return (
-    <figure className="m-0">
-      <div className="relative" style={{ width: `${size}rem`, height: `${size}rem` }} aria-hidden="true">
+    <figure className={compact ? 'chart-donut chart-donut--compact m-0' : 'chart-donut m-0'}>
+      <div className="relative chart-donut__frame" style={{ width: `${rem}rem`, height: `${rem}rem` }} aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={total ? data : [{ name: 'none', value: 1, fill: '#eeeccc' }]} dataKey="value" innerRadius="48%" outerRadius="88%" stroke="#000" strokeWidth={3} startAngle={90} endAngle={-270} isAnimationActive={false}>
@@ -50,20 +51,23 @@ export function Donut({ data, size = 9, label, center = true }) {
   )
 }
 
-export function ForecastBars({ data, colors, height = 15 }) {
+export function ForecastBars({ data, colors, height = 15, compact }) {
   const rows = data.map((d) => ({ ...d, value: d.total, fill: colors[d.kind] }))
+  const h = compact ? height * 0.7 : height
+  const margin = compact ? { top: 22, right: 4, left: 4, bottom: 0 } : { top: 28, right: 8, left: 8, bottom: 0 }
+  const tickSize = compact ? '0.75rem' : '0.875rem'
   return (
-    <figure className="m-0">
-      <div style={{ height: `${height}rem` }} aria-hidden="true">
+    <figure className={compact ? 'chart-bars chart-bars--compact m-0' : 'chart-bars m-0'}>
+      <div className="chart-bars__frame" style={{ height: `${h}rem` }} aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 28, right: 8, left: 8, bottom: 0 }} barCategoryGap="22%">
-            <XAxis dataKey="label" axisLine={{ stroke: '#000', strokeWidth: 3 }} tickLine={false} tick={{ fill: '#000', fontSize: '0.875rem', fontFamily: 'Bahnschrift', fontWeight: 700 }} />
+          <BarChart data={rows} margin={margin} barCategoryGap={compact ? '18%' : '22%'}>
+            <XAxis dataKey="label" axisLine={{ stroke: '#000', strokeWidth: 3 }} tickLine={false} interval={0} tick={{ fill: '#000', fontSize: tickSize, fontFamily: 'Bahnschrift', fontWeight: 700 }} />
             <Tooltip {...tooltipShell} cursor={{ fill: 'rgba(0,0,0,0.06)' }} content={<ChartTip />} />
             <Bar dataKey="value" stroke="#000" strokeWidth={3} radius={[10, 10, 0, 0]} isAnimationActive={false}>
               {rows.map((r) => (
                 <Cell key={r.key} fill={r.fill} />
               ))}
-              <LabelList dataKey="value" position="top" formatter={(v) => formatBDT(v, { compact: true })} style={{ fill: '#000', fontSize: '0.875rem', fontFamily: 'Bahnschrift', fontWeight: 700 }} />
+              <LabelList dataKey="value" position="top" formatter={(v) => formatBDT(v, { compact: true })} style={{ fill: '#000', fontSize: tickSize, fontFamily: 'Bahnschrift', fontWeight: 700 }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

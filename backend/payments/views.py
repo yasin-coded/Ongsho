@@ -1,9 +1,10 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.dates import today_dhaka
+from core.throttles import PaymentSubmitUserThrottle
 from core.exceptions import DomainError
 from payments import services
 
@@ -16,6 +17,7 @@ def _domain_response(exc: DomainError):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([PaymentSubmitUserThrottle])
 def payment_submit(request):
     data = request.data
     due_ids = data.get("due_ids") or []

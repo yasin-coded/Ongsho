@@ -65,17 +65,30 @@ def _collected_expected(member_dues: list[Due]) -> tuple[str | None, str | None]
     return str(quantize_money(collected)), str(quantize_money(expected))
 
 
-def _confirmed_so_far_amounts(member_dues: list[Due]) -> dict[str, str]:
-    paid = sum((d.amount_bdt for d in member_dues if d.status == DueStatus.PAID), Decimal("0"))
-    waived = sum((d.amount_bdt for d in member_dues if d.status == DueStatus.WAIVED), Decimal("0"))
-    pending = sum((d.amount_bdt for d in member_dues if d.status == DueStatus.PENDING), Decimal("0"))
-    active = [d for d in member_dues if d.status != DueStatus.WAIVED]
-    expected = sum((d.amount_bdt for d in active), Decimal("0"))
+def _cycle_dues_for_progress(
+    charge: Charge | None,
+    *,
+    sub: Subscription,
+    dues_by_charge: dict[int, list[Due]],
+) -> list[Due]:
+    """Dues counted toward the owner plan progress bar (full cycle, incl. owner seat)."""
+    if charge is None:
+        return []
+    dues = dues_by_charge.get(charge.pk, [])
+    if sub.plan_mode == PlanMode.RESELLER:
+        return [d for d in dues if d.member.user_id != sub.owner_id]
+    return dues
+
+
+def _confirmed_so_far_amounts(charge: Charge, cycle_dues: list[Due]) -> dict[str, str]:
+    paid = sum((d.amount_bdt for d in cycle_dues if d.status == DueStatus.PAID), Decimal("0"))
+    waived = sum((d.amount_bdt for d in cycle_dues if d.status == DueStatus.WAIVED), Decimal("0"))
+    pending = sum((d.amount_bdt for d in cycle_dues if d.status == DueStatus.PENDING), Decimal("0"))
     return {
         "paid": str(quantize_money(paid)),
         "waived": str(quantize_money(waived)),
         "pending": str(quantize_money(pending)),
-        "expected": str(quantize_money(expected)),
+        "expected": str(quantize_money(charge.amount_bdt)),
     }
 
 
@@ -320,8 +333,25 @@ def owner_detail_extra(sub: Subscription, today: date) -> dict:
     collected, expected = (
         _collected_expected(member_dues) if is_shared and charge and member_dues else (None, None)
     )
+    cycle_dues = (
+        _cycle_dues_for_progress(charge, sub=sub, dues_by_charge=dues_by_charge)
+        if charge
+        else []
+    )
     confirmed_so_far = (
-        _confirmed_so_far_amounts(member_dues) if is_shared and charge and member_dues else None
+        _confirmed_so_far_amounts(charge, cycle_dues) if is_shared and charge else None
+    )
+
+    owner_member = None
+    if shared:
+        for m in ctx.members_by_sub.get(sub.pk, []):
+            if sharing_selectors.is_owner_seat(m):
+                owner_member = m
+                break
+    from dues import selectors as dues_selectors
+
+    coverable_dues = (
+        dues_selectors.coverable_dues_for_viewer(owner_member, today) if owner_member else []
     )
 
     return {
@@ -331,4 +361,5 @@ def owner_detail_extra(sub: Subscription, today: date) -> dict:
         "collected": collected,
         "expected": expected,
         "confirmed_so_far": confirmed_so_far,
+        "coverable_dues": coverable_dues,
     }

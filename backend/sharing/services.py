@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -15,7 +16,7 @@ from audit import services as audit_services
 from accounts.constants import DEFAULT_AVATAR_ID
 from core.exceptions import ConflictError, Forbidden, NotFound, ValidationFailed
 from core.money import format_bdt, quantize_money
-from plans.models import PlanMode, PriceChange, Subscription
+from plans.models import PlanMode, PriceChange, Subscription, SubscriptionStatus
 from plans.selectors import owned_subscription, price_now_dict
 from sharing.emails import send_invite_email
 from sharing.models import Invite, InviteStatus, Member, MemberStatus, SharedPlan, SplitType
@@ -23,6 +24,7 @@ from sharing.tokens import hash_invite_token, new_invite_token
 
 User = get_user_model()
 EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
+PLAN_JOIN_SIGNING_SALT = "ongsho-plan-join-v1"
 
 
 def _first_name(user) -> str:
@@ -248,14 +250,182 @@ def _invite_link(raw_token: str) -> str:
     return f"{settings.FRONTEND_BASE_URL}/invite/{raw_token}"
 
 
+def make_plan_join_token(shared: SharedPlan) -> str:
+    return signing.dumps({"sp": shared.pk}, salt=PLAN_JOIN_SIGNING_SALT)
+
+
+def shared_plan_from_join_token(token: str) -> SharedPlan:
+    try:
+        payload = signing.loads(token, salt=PLAN_JOIN_SIGNING_SALT, max_age=None)
+    except signing.BadSignature as exc:
+        raise NotFound("Not found.") from exc
+    shared_id = payload.get("sp")
+    try:
+        return SharedPlan.objects.select_related(
+            "subscription",
+            "subscription__owner",
+            "subscription__service_name",
+            "subscription__category",
+        ).get(pk=shared_id)
+    except SharedPlan.DoesNotExist as exc:
+        raise NotFound("Not found.") from exc
+
+
+def _plan_join_link(token: str) -> str:
+    return f"{settings.FRONTEND_BASE_URL}/join/{token}"
+
+
+def _join_link_available(shared: SharedPlan) -> bool:
+    sub = shared.subscription
+    if sub.archived_on is not None:
+        return False
+    if sub.status not in {
+        SubscriptionStatus.ACTIVE,
+        SubscriptionStatus.TRIAL,
+        SubscriptionStatus.PAUSED,
+    }:
+        return False
+    return _seat_usage(shared) < shared.seats
+
+
+def shared_plan_join_meta(shared: SharedPlan) -> dict:
+    token = make_plan_join_token(shared)
+    return {
+        "join_link": _plan_join_link(token),
+        "join_link_available": _join_link_available(shared),
+    }
+
+
+def plan_join_public(*, token: str, user=None) -> dict:
+    shared = shared_plan_from_join_token(token)
+    sub = shared.subscription
+    per = _per_seat_bdt(shared)
+    can_join = _join_link_available(shared)
+    already_member = False
+    if user is not None and user.is_authenticated:
+        already_member = _not_left_members(shared).filter(user_id=user.pk).exists()
+    return {
+        "kind": "plan",
+        "plan_id": sub.pk,
+        "plan_name": sub.plan_name,
+        "seats": shared.seats,
+        "seats_taken": _not_left_members(shared).count(),
+        "can_join": can_join and not already_member,
+        "already_member": already_member,
+        "from": _first_name(sub.owner),
+        "share": str(per) if per is not None else None,
+        "cycle": {"unit": sub.cycle_unit, "count": sub.cycle_count},
+        "plan_full": not can_join,
+    }
+
+
+def _add_member_from_link(*, user, shared: SharedPlan, today: date) -> Member:
+    sub = shared.subscription
+    if user.pk == sub.owner_id and sub.plan_mode == PlanMode.OWNER:
+        raise ConflictError("You already belong to this plan as the owner.", code="already_member")
+    if _not_left_members(shared).filter(user_id=user.pk).exists():
+        raise ConflictError("You are already in this plan.", code="already_member")
+    if not _join_link_available(shared):
+        raise ConflictError("This plan is full.", code="plan_full")
+    member = Member.objects.create(
+        shared_plan=shared,
+        user=user,
+        share_type=shared.split_type,
+        share_value=None,
+        status=MemberStatus.ACTIVE,
+        joined_on=today,
+    )
+    from core.notify import notify
+    from core.signals import member_joined
+
+    taken = _not_left_members(shared).count()
+    notify(
+        sub.owner,
+        "invite_accepted",
+        f"{_first_name(user)} joined {sub.plan_name}",
+        f"{sub.plan_name} · {taken} of {shared.seats} seats taken",
+        link=f"/app/plans/{sub.pk}",
+        payload={"plan_id": sub.pk},
+    )
+    member_joined.send(sender=type(member), member=member, today=today)
+    _audit(
+        user,
+        "plan_link.joined",
+        "Member",
+        member.pk,
+        f"{user.name} joined via plan link",
+        plan_id=sub.pk,
+    )
+    return member
+
+
+@transaction.atomic
+def join_via_plan_link(user, *, token: str, today: date) -> dict:
+    shared = shared_plan_from_join_token(token)
+    SharedPlan.objects.select_for_update().get(pk=shared.pk)
+    if not user.email_verified:
+        raise Forbidden("Verify your email before joining a plan.", code="email_not_verified")
+    member = _add_member_from_link(user=user, shared=shared, today=today)
+    return {
+        "plan_id": shared.subscription_id,
+        "message": f"You joined {shared.subscription.plan_name}.",
+        "member_id": member.pk,
+    }
+
+
+@transaction.atomic
+def signup_and_join_via_plan_link(
+    *,
+    token: str,
+    email: str,
+    name: str,
+    password: str,
+    today: date,
+):
+    shared = shared_plan_from_join_token(token)
+    SharedPlan.objects.select_for_update().get(pk=shared.pk)
+    if not _join_link_available(shared):
+        raise ConflictError("This plan is full.", code="plan_full")
+    email = _validate_email_address(email)
+    if email == shared.subscription.owner.email.lower():
+        raise ValidationFailed(
+            "You cannot join your own plan with a new account.",
+            fields={"email": ["You cannot join your own plan with a new account."]},
+        )
+    if User.objects.filter(email__iexact=email).exists():
+        raise ConflictError(
+            "An account already exists for this email. Log in to join.",
+            code="account_exists",
+        )
+    name = (name or "").strip()
+    if not name:
+        raise ValidationFailed("Enter your name.", fields={"name": ["Enter your name."]})
+    try:
+        validate_password(password)
+    except DjangoValidationError as exc:
+        raise ValidationFailed("Invalid password.", fields={"password": list(exc.messages)}) from exc
+    user = User.objects.create_user(
+        email=email,
+        password=password,
+        name=name,
+        email_verified=True,
+        avatar_id=DEFAULT_AVATAR_ID,
+    )
+    _add_member_from_link(user=user, shared=shared, today=today)
+    from accounts import services as account_services
+
+    access, refresh, user = account_services.login_user(
+        email=user.email, password=password, client_ip=""
+    )
+    return access, refresh, user, shared.subscription_id
+
+
 def _notify_invite(user, invite: Invite, shared: SharedPlan) -> None:
     from core.notify import notify
 
     sub = shared.subscription
     inviter = invite.invited_by
-    message = (
-        f"{sub.plan_name} · shared plan · {shared.seats} seats · {_invite_share_message(shared)}"
-    )
+    message = f"{sub.plan_name} · shared plan · {shared.seats} seats"
     notify(
         user,
         "invite",
@@ -809,7 +979,8 @@ def gather_plan_delete_context(sub: Subscription) -> tuple[list[int], SharedPlan
     if shared is None:
         return [], None
     member_user_ids = list(
-        Member.objects.filter(shared_plan=shared)
+        _not_left_members(shared)
+        .filter(left_on__isnull=True)
         .exclude(user=sub.owner)
         .values_list("user_id", flat=True)
     )

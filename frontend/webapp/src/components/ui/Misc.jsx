@@ -124,6 +124,225 @@ export function SkeletonCard({ lines = 3, tall }) {
   )
 }
 
+function SkeletonBusy({ className, children }) {
+  return (
+    <div className={cx('min-w-0', className)} aria-busy="true" aria-live="polite" aria-label="Loading">
+      <span className="sr-only">Loading</span>
+      {children}
+    </div>
+  )
+}
+
+function PlanFormStepSkeleton({ tall, pair }) {
+  return (
+    <Box className="grid gap-5">
+      <div className="row gap-3">
+        <Skeleton className="size-9 shrink-0 rounded-full" />
+        <Skeleton className="h-6 w-[min(14rem,70%)]" />
+      </div>
+      {pair ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Skeleton className="h-[5.5rem]" />
+          <Skeleton className="h-[5.5rem]" />
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {tall ? (
+            <>
+              <div className="row flex-wrap gap-2">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Skeleton key={i} className="h-11 w-24 rounded-full" />
+                ))}
+              </div>
+              <Skeleton className="h-11" />
+              <Skeleton className="h-11" />
+              <Skeleton className="h-20" />
+            </>
+          ) : (
+            <>
+              <Skeleton className="h-11" />
+              <Skeleton className="h-11" />
+              <Skeleton className="h-16" />
+            </>
+          )}
+        </div>
+      )}
+    </Box>
+  )
+}
+
+/** Matches the create/edit plan form grid: six step cards + preview column. */
+export function PlanFormSkeleton() {
+  return (
+    <SkeletonBusy className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
+      <div className="stack">
+        <PlanFormStepSkeleton pair />
+        <PlanFormStepSkeleton tall />
+        <PlanFormStepSkeleton />
+        <PlanFormStepSkeleton />
+        <PlanFormStepSkeleton />
+        <PlanFormStepSkeleton tall />
+        <div className="row justify-end gap-3">
+          <Skeleton className="h-11 w-24" />
+          <Skeleton className="h-11 w-32" />
+        </div>
+      </div>
+      <div className="stack min-w-0">
+        <Box className="grid gap-4">
+          <Skeleton className="h-5 w-2/5" />
+          <div className="row gap-3">
+            <Skeleton className="size-12 shrink-0 rounded-xl" />
+            <div className="grid min-w-0 flex-1 gap-2">
+              <Skeleton className="h-5 w-4/5" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-8 w-24 rounded-full" />
+            </div>
+          </div>
+          {Array.from({ length: 5 }, (_, i) => (
+            <Skeleton key={i} className="h-4" style={{ width: `${88 - i * 8}%` }} />
+          ))}
+        </Box>
+        <Box className="grid gap-3">
+          <Skeleton className="h-5 w-1/2" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-[92%]" />
+          <Skeleton className="h-4 w-[85%]" />
+        </Box>
+      </div>
+    </SkeletonBusy>
+  )
+}
+
+/** Invite page body inside AuthLayout (highlight + fields). */
+export function InvitePageSkeleton() {
+  return (
+    <SkeletonBusy className="grid gap-6">
+      <div className="neo-box neo-box--flat neo-box--highlight row gap-4 !p-4">
+        <Skeleton className="size-12 shrink-0 rounded-xl" />
+        <div className="grid min-w-0 flex-1 gap-2">
+          <Skeleton className="h-5 w-[min(12rem,80%)]" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+      </div>
+      <div className="grid gap-5">
+        <Skeleton className="h-11" />
+        <Skeleton className="h-11" />
+        <Skeleton className="h-11" />
+        <Skeleton className="h-12 w-full" />
+      </div>
+    </SkeletonBusy>
+  )
+}
+
+/** One catalog panel (categories or service names). */
+export function CatalogPanelSkeleton() {
+  return (
+    <SkeletonBusy>
+    <div className="catalog-panel" aria-hidden="true">
+      <Skeleton className="h-6 w-36" />
+      <div className="catalog-panel__body">
+        <section className="grid gap-2">
+          <Skeleton className="h-4 w-16" />
+          <div className="catalog-built-in__wrap" style={{ maxHeight: '9rem' }}>
+            <div className="row flex-wrap gap-2">
+              {Array.from({ length: 8 }, (_, i) => (
+                <Skeleton key={i} className="h-8 w-[4.5rem] rounded-full" />
+              ))}
+            </div>
+          </div>
+        </section>
+        <section className="grid gap-2">
+          <Skeleton className="h-4 w-12" />
+          <div className="row flex-wrap gap-2">
+            <Skeleton className="h-8 w-20 rounded-full" />
+            <Skeleton className="h-8 w-24 rounded-full" />
+          </div>
+        </section>
+      </div>
+      <div className="catalog-panel__add row flex-wrap gap-3">
+        <Skeleton className="h-11 min-w-[min(14rem,100%)] flex-1" />
+        <Skeleton className="h-11 w-24" />
+      </div>
+    </div>
+    </SkeletonBusy>
+  )
+}
+
+function ReviewWaitingCardSkeleton() {
+  return (
+    <Box className="review-card-skeleton grid gap-5">
+      <div className="flex flex-wrap items-start gap-4">
+        <Skeleton className="size-11 shrink-0 rounded-full" />
+        <div className="grid min-w-0 flex-1 gap-2">
+          <Skeleton className="h-5 w-2/5" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+        <Skeleton className="h-8 w-24" />
+      </div>
+      <dl className="grid gap-4 sm:grid-cols-3">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="grid gap-1">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-8 w-20 rounded-full" />
+          </div>
+        ))}
+      </dl>
+      <Skeleton className="copy-field-skeleton h-[3.25rem] w-full" />
+      <div className="review-card__actions row justify-end gap-2">
+        <Skeleton className="h-11 w-20" />
+        <Skeleton className="h-11 w-20" />
+        <Skeleton className="h-11 w-24" />
+      </div>
+    </Box>
+  )
+}
+
+/** Review payments page layout: stats, waiting card(s), helper column. */
+export function ReviewPaymentsSkeleton() {
+  return (
+    <SkeletonBusy className="stack-lg">
+      <div className="grid gap-2">
+        <Skeleton className="h-4 w-1/2 max-w-xs" />
+        <div className="row flex-wrap items-start gap-4">
+          <Skeleton className="size-14 shrink-0 rounded-xl" />
+          <div className="grid min-w-0 flex-1 gap-2">
+            <Skeleton className="h-8 w-[min(16rem,90%)]" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+        </div>
+      </div>
+      <div className="stat-grid">
+        {Array.from({ length: 3 }, (_, i) => (
+          <Box key={i} className="grid gap-3">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-10 w-1/2" />
+            <Skeleton className="h-4 w-full" />
+          </Box>
+        ))}
+      </div>
+      <Skeleton className="h-8 w-56" />
+      <div className="two-col">
+        <div className="stack">
+          <ReviewWaitingCardSkeleton />
+        </div>
+        <Box variant="highlight" className="grid gap-4">
+          <Skeleton className="h-6 w-3/5" />
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="row gap-3">
+              <Skeleton className="size-4 shrink-0 rounded-full" />
+              <Skeleton className="h-4 flex-1" style={{ width: `${95 - i * 5}%` }} />
+            </div>
+          ))}
+        </Box>
+      </div>
+      <Box className="grid gap-4">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-16 w-full" />
+      </Box>
+    </SkeletonBusy>
+  )
+}
+
 export function ErrorBox({ error, onRetry, title = 'This did not load' }) {
   return (
     <Box variant="danger" className="grid justify-items-start gap-3" role="alert">
@@ -159,7 +378,7 @@ export function CopyField({ value, label, display }) {
     <div className="grid gap-1.5">
       {label && <p className="t-label">{label}</p>}
       <div className="copy-field">
-        <code>{display ?? value}</code>
+        <code title={value}>{display ?? value}</code>
         <Button size="sm" variant={copied ? 'accept' : 'ghost'} icon={copied ? Check : Copy} onClick={copy} aria-label={copied ? 'Copied' : `Copy ${label ?? 'value'}`}>
           {copied ? 'Copied' : 'Copy'}
         </Button>

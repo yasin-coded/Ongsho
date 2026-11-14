@@ -411,17 +411,21 @@ def review_data(shared: SharedPlan, today: date) -> dict:
 
     still_due = [
         {
-            "id": d.member_id,
+            "due_id": d.pk,
+            "member_id": d.member_id,
             "name": d.member.user.name,
             "first_name": _first_name(d.member.user),
+            "email": d.member.user.email,
             "avatar_id": d.member.user.avatar_id,
+            "amount": str(quantize_money(d.amount_bdt)),
+            "leave_requested": d.member.status == MemberStatus.LEAVE_REQUESTED,
         }
         for d in member_dues
         if d.status == DueStatus.DUE
     ]
 
-    paid_amt = sum((d.amount_bdt for d in member_dues if d.status == DueStatus.PAID), Decimal("0"))
-    expected = sum((d.amount_bdt for d in member_dues), Decimal("0"))
+    paid_amt = sum((d.amount_bdt for d in dues if d.status == DueStatus.PAID), Decimal("0"))
+    expected = charge.amount_bdt
 
     return {
         "plan": {

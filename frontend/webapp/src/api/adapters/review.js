@@ -72,6 +72,16 @@ export function mapReview(data) {
       members: data.confirmed?.members ?? 0,
     },
     stillDue: Array.isArray(data.still_due) ? data.still_due.length : data.still_due ?? 0,
+    unpaid: (data.still_due ?? []).map((m) => ({
+      dueId: idStr(m.due_id),
+      memberId: m.member_id != null ? idStr(m.member_id) : undefined,
+      name: m.name ?? '',
+      firstName: m.first_name ?? '',
+      email: m.email ?? '',
+      avatarColor: avatarColorFromId(m.avatar_id),
+      amount: moneyFromApi(m.amount),
+      leaveRequested: Boolean(m.leave_requested),
+    })),
     pending,
     decided,
   }

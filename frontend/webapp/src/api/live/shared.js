@@ -3,6 +3,7 @@ import { apiRequest, downloadFile } from '../http'
 import { mapUserFromApi } from '../adapters/me'
 import { idStr } from '../adapters/common'
 import { mapMySharedList, mapMySharedPlanDetail } from '../adapters/shared'
+import { mapPlanJoin } from '../adapters/planJoin'
 import { getMe } from './accounts'
 import { enrichTransferError } from '../adapters/transfers'
 import { enrichStatementError } from '../adapters/statements'
@@ -32,6 +33,29 @@ export async function downloadMyStatement(planId, { month }) {
   } catch (err) {
     throw enrichStatementError(err)
   }
+}
+
+export async function getPlanJoin(token) {
+  try {
+    const data = await apiRequest('get', `/api/join/${encodeURIComponent(token)}/`)
+    return mapPlanJoin(data, token)
+  } catch (err) {
+    if (err.status === 404) return { notFound: true }
+    throw err
+  }
+}
+
+export async function acceptPlanJoin(token) {
+  const data = await apiRequest('post', `/api/join/${encodeURIComponent(token)}/accept/`)
+  return { planId: idStr(data.plan_id), message: data.message ?? 'You joined the plan.' }
+}
+
+export async function signupAndJoinPlan(token, { email, name, password }) {
+  const data = await apiRequest('post', `/api/join/${encodeURIComponent(token)}/signup/`, {
+    data: { email, name, password },
+  })
+  setAccessToken(data.access)
+  return { access: data.access, user: mapUserFromApi(data.user), planId: idStr(data.plan_id) }
 }
 
 export async function acceptInvite(ref) {

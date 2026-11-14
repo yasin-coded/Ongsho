@@ -181,9 +181,18 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
         billing_from = next_renewal
         anchor_day = next_renewal.day
     else:
-        from core.schedule import first_bill_date
+        from core.schedule import Schedule as BillingSchedule, first_renewal_date
 
-        billing_from = first_bill_date(start_date, trial_end)
+        draft = BillingSchedule(
+            start_date=start_date,
+            trial_end_date=trial_end,
+            anchor_day=start_date.day,
+            cycle_unit=validated["cycle_unit"],
+            cycle_count=validated["cycle_count"],
+            renewal_type=validated["renewal_type"],
+            end_date=validated.get("end_date"),
+        )
+        billing_from = first_renewal_date(draft)
         anchor_day = billing_from.day
     status = (
         SubscriptionStatus.TRIAL
@@ -361,18 +370,9 @@ def _plan_has_confirmed_or_reversed_payment(sub: Subscription) -> bool:
 
 @transaction.atomic
 def delete_subscription(user, pk: int, password: str) -> None:
-    if not password:
-        raise ValidationFailed(
-            "Enter your password.",
-            code="invalid_password",
-            fields={"password": ["Enter your password."]},
-        )
-    if not user.check_password(password):
-        raise ValidationFailed(
-            "The password is not correct.",
-            code="invalid_password",
-            fields={"password": ["The password is not correct."]},
-        )
+    from accounts.services import verify_current_password
+
+    verify_current_password(user, password)
     sub = Subscription.objects.select_for_update().filter(owner=user, pk=pk).first()
     if sub is None:
         raise NotFound("Plan not found.")

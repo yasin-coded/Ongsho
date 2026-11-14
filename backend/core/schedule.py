@@ -36,6 +36,20 @@ def first_bill_date(start_date: date, trial_end_date: date | None) -> date:
     return start_date
 
 
+def first_renewal_date(schedule: Schedule) -> date:
+    """First date a member or owner is charged. Plan start itself is never a due date."""
+    first = first_bill_date(schedule.start_date, schedule.trial_end_date)
+    if schedule.trial_end_date:
+        return first
+    return nth_due_date(
+        first,
+        schedule.anchor_day,
+        schedule.cycle_unit,
+        schedule.cycle_count,
+        1,
+    )
+
+
 def _last_day(year: int, month: int) -> int:
     return monthrange(year, month)[1]
 

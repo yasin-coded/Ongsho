@@ -206,15 +206,16 @@ def _spend_rows(ctx: DashCtx, month_start: date) -> list[dict]:
                         "category": {"id": sub.category_id, "name": sub.category.name},
                     }
                 )
+    from dues.selectors import member_renewal_dates_in_month, member_share_on_renewal_date
+
     for mem in ctx.memberships:
         sub = mem.shared_plan.subscription
-        for d in _schedule_dates_in_range(sub, month_start, month_end, ctx.today):
-            if d < mem.joined_on:
+        prices = ctx.prices_by_sub.get(sub.pk, [])
+        for d in member_renewal_dates_in_month(mem, ctx.today):
+            if d < month_start or d > month_end:
                 continue
-            if mem.left_on and d > mem.left_on:
-                continue
-            amt = my_portion(ctx, sub=sub, role="member", on_date=d, member=mem)
-            if amt > 0:
+            amt = member_share_on_renewal_date(mem, d, ctx.today, prices)
+            if amt and amt > 0:
                 rows.append(
                     {
                         "plan_id": sub.pk,

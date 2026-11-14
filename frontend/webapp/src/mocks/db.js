@@ -199,16 +199,22 @@ function seed() {
   }
 
   const dueOf = (planId, date, memberId) => dues.find((d) => d.chargeId === `ch-${planId}-${date}` && d.memberId === memberId)
-  const paymentFor = (due) => payments.find((p) => p.allocations.some((a) => a.dueId === due.id))
+  const paymentFor = (due) => {
+    if (!due) return null
+    return payments.find((p) => p.allocations?.some((a) => a.dueId === due.id))
+  }
   const dropPayment = (due) => {
+    if (!due) return
     const p = paymentFor(due)
     if (p) payments.splice(payments.indexOf(p), 1)
   }
   const setPayment = (due, fields) => {
     const p = paymentFor(due)
+    if (!p) return
     Object.assign(p, fields)
   }
   const pending = (due, { method, tid, time, payer }) => {
+    if (!due) return
     dropPayment(due)
     due.status = 'pending'
     due.paidOn = null
@@ -223,10 +229,14 @@ function seed() {
   {
     const safaOct = dueOf('p-netflix', '2026-10-05', 'm-n-safa')
     const arafOct = dueOf('p-netflix', '2026-10-05', 'm-n-araf')
-    dropPayment(arafOct)
-    const p = paymentFor(safaOct)
-    p.amount = safaOct.amount + arafOct.amount
-    p.allocations.push({ dueId: arafOct.id, amount: arafOct.amount })
+    if (safaOct && arafOct) {
+      dropPayment(arafOct)
+      const p = paymentFor(safaOct)
+      if (p) {
+        p.amount = safaOct.amount + arafOct.amount
+        p.allocations.push({ dueId: arafOct.id, amount: arafOct.amount })
+      }
+    }
   }
   // Netflix, November cycle (renews today): Safa confirmed, Araf and Sami waiting for review.
   {
@@ -241,27 +251,31 @@ function seed() {
     pending(dueOf('p-netflix', '2026-11-05', 'm-n-araf'), { method: 'bkash', tid: '8K2L9QX4', time: '11:42' })
     pending(dueOf('p-netflix', '2026-11-05', 'm-n-sami'), { method: 'nagad', tid: '8K3YT9X4', time: '09:15' })
   }
-  // Canva Pro (Sameer owns): July waived, September Nagad, October bKash, November due on the 8th.
+  // Canva Pro (Sameer owns): first bill waived, then Nagad / bKash (no due on plan start).
   {
-    const jul = dueOf('p-canva', '2026-07-08', 'm-cv-yasin')
-    dropPayment(jul)
-    jul.status = 'waived'
-    jul.paidOn = null
-    jul.waiverNote = 'First month is on me.'
+    const aug = dueOf('p-canva', '2026-08-08', 'm-cv-yasin')
+    if (aug) {
+      dropPayment(aug)
+      aug.status = 'waived'
+      aug.paidOn = null
+      aug.waiverNote = 'First month is on me.'
+    }
     setPayment(dueOf('p-canva', '2026-09-08', 'm-cv-yasin'), { method: 'nagad', tid: '5U7M2RQ3' })
     setPayment(dueOf('p-canva', '2026-10-08', 'm-cv-yasin'), { method: 'bkash', tid: '5T7M2LQA' })
   }
-  // Apple Music Duo (Mehal owns): one ID rejected in September, then the right one confirmed.
+  // Apple Music Duo (Mehal owns): one ID rejected, then confirmed (first bill Oct 15).
   {
-    const sep = dueOf('p-apple', '2026-09-15', 'm-a-yasin')
-    setPayment(sep, { method: 'bkash', tid: 'AM4HX8PD', submittedAt: at('2026-09-14', '19:02') })
-    payments.push({
-      id: 'pay-apple-sep-rejected', planId: 'p-apple', payerMemberId: 'm-a-yasin', method: 'bkash', tid: 'AM4HX8BD', amount: sep.amount,
-      paidOn: null, recordedBy: ME, review: 'rejected', submittedAt: at('2026-09-13', '22:10'), reviewedAt: at('2026-09-14', '08:30'),
-      rejectionReason: 'The ID does not match my bKash history. Please check one letter.', allocations: [{ dueId: sep.id, amount: sep.amount }],
-    })
-    setPayment(dueOf('p-apple', '2026-10-15', 'm-a-yasin'), { method: 'nagad', tid: 'AM9RT2KC' })
-    pending(dueOf('p-apple', '2026-11-15', 'm-a-yasin'), { method: 'bkash', tid: 'AM7Q4KZ2', time: '10:05' })
+    const oct = dueOf('p-apple', '2026-10-15', 'm-a-yasin')
+    if (oct) {
+      setPayment(oct, { method: 'bkash', tid: 'AM4HX8PD', submittedAt: at('2026-10-14', '19:02') })
+      payments.push({
+        id: 'pay-apple-oct-rejected', planId: 'p-apple', payerMemberId: 'm-a-yasin', method: 'bkash', tid: 'AM4HX8BD', amount: oct.amount,
+        paidOn: null, recordedBy: ME, review: 'rejected', submittedAt: at('2026-10-13', '22:10'), reviewedAt: at('2026-10-14', '08:30'),
+        rejectionReason: 'The ID does not match my bKash history. Please check one letter.', allocations: [{ dueId: oct.id, amount: oct.amount }],
+      })
+    }
+    setPayment(dueOf('p-apple', '2026-11-15', 'm-a-yasin'), { method: 'nagad', tid: 'AM9RT2KC' })
+    pending(dueOf('p-apple', '2026-12-15', 'm-a-yasin'), { method: 'bkash', tid: 'AM7Q4KZ2', time: '10:05' })
   }
 
   const invites = [

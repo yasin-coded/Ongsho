@@ -121,15 +121,9 @@ def display_next_renewal(sub: Subscription):
         return None
     today = today_dhaka()
     schedule = schedule_for_subscription(sub)
-    first = first_bill_date(schedule.start_date, schedule.trial_end_date)
-    nxt = next_due_date(schedule, today)
-    if nxt is None:
-        return None
-    if nxt == first and today >= first:
-        follow = next_due_date(schedule, first + timedelta(days=1))
-        if follow:
-            return follow.isoformat()
-    return nxt.isoformat()
+    floor = sub.billing_from
+    nxt = next_due_date(schedule, max(today, floor))
+    return nxt.isoformat() if nxt else None
 
 
 def price_now_dict(sub: Subscription) -> dict | None:

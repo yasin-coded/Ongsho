@@ -34,7 +34,7 @@ export function AvatarStack({ people, max = 4, size = 'sm', showStatus = false }
   )
 }
 
-/** Owner views pass `status` to show a dot; member views never do, except on "You". */
+/** Pass `status` (due / pending / paid / waived) to show a coloured payment dot on the avatar. */
 export function MemberChip({ name, label, color, status }) {
   return (
     <span className="member-chip">

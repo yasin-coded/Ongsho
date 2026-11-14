@@ -25,7 +25,8 @@ import { Button } from '@/components/ui/Button'
 import { Input, Select, Textarea } from '@/components/ui/Field'
 import { LockedNote, RoleTag } from '@/components/ui/Pill'
 import { ServiceLogo } from '@/components/ui/ServiceLogo'
-import { NumberCircle, SkeletonCard } from '@/components/ui/Misc'
+import { NumberCircle, PlanFormSkeleton, Skeleton } from '@/components/ui/Misc'
+import { shouldShowInitialSkeleton } from '@/lib/queryLoading'
 import { Loadable } from '@/features/common/PlanBits'
 
 function emptyPlanForm() {
@@ -97,13 +98,6 @@ function Card({ n, title, children }) {
       {children}
     </Box>
   )
-}
-
-function planNameForTypedService(prev, serviceName) {
-  const priorService = (prev.serviceName ?? '').trim()
-  const plan = (prev.planName ?? '').trim()
-  if (!plan || plan.toLowerCase() === priorService.toLowerCase()) return serviceName
-  return prev.planName
 }
 
 function Preview({ form, names, editing }) {
@@ -271,7 +265,15 @@ function PlanForm({ initial, editing, planId }) {
           <div className="grid gap-5">
             <div>
               <p className="field__label mb-2">Service name</p>
-              <div className="row gap-2">
+              {shouldShowInitialSkeleton(names) ? (
+                <div className="row flex-wrap gap-2" aria-busy="true">
+                  <span className="sr-only">Loading</span>
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <Skeleton key={i} className="h-11 w-[4.75rem] rounded-full" />
+                  ))}
+                </div>
+              ) : (
+              <div className="row flex-wrap gap-2">
                 {serviceList.map((s) => (
                   <button
                     key={s.id}
@@ -290,23 +292,12 @@ function PlanForm({ initial, editing, planId }) {
                   </button>
                 ))}
               </div>
-              <Input
-                className="mt-3"
-                label="Service name"
-                hideLabel
-                value={form.serviceName}
-                onChange={(e) => {
-                  const serviceName = e.target.value
-                  set((f) => ({
-                    serviceName,
-                    planName: planNameForTypedService(f, serviceName),
-                  }))
-                }}
-                maxLength={255}
-                onBlur={blurValidate}
-                error={f.serviceName}
-                placeholder="Or type a name"
-              />
+              )}
+              {!form.serviceName.trim() && f.serviceName ? (
+                <p className="field__error mt-2" role="alert">
+                  {f.serviceName}
+                </p>
+              ) : null}
             </div>
             <Input label="Plan name" maxLength={255} value={form.planName} onChange={(e) => set({ planName: e.target.value })} onBlur={blurValidate} error={f.planName} placeholder='For example "Netflix Premium"' />
             <Select
@@ -561,7 +552,7 @@ export function PlanFormPage() {
   return (
     <div className="stack-lg">
       <TopBar breadcrumb={[{ label: 'My Plans', to: '/app/plans' }, { label: 'Edit plan' }]} title="Edit plan" subtitle="Mode stays locked. Price changes go on the plan page." />
-      <Loadable query={query} skeleton={<SkeletonCard lines={8} />}>
+      <Loadable query={query} skeleton={<PlanFormSkeleton />}>
         {(plan) => <PlanForm key={plan.id} initial={fromPlan(plan)} editing planId={plan.id} />}
       </Loadable>
     </div>

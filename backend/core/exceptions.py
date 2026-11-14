@@ -56,6 +56,23 @@ class Unauthorized(DomainError):
     status_code = 401
 
 
+class Locked(DomainError):
+    code = "locked"
+    status_code = 429
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after: int,
+        fields: dict[str, list[str]] | None = None,
+        code: str | None = None,
+        status_code: int | None = None,
+    ):
+        super().__init__(message, fields=fields, code=code, status_code=status_code)
+        self.retry_after = retry_after
+
+
 def _stringify_detail(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value]
@@ -77,16 +94,36 @@ def _detail_to_fields(detail: Any) -> tuple[str, dict[str, list[str]]]:
     return str(detail), {}
 
 
-def error_response(code: str, message: str, fields: dict[str, list[str]] | None, status: int) -> Response:
-    return Response(
+def error_response(
+    code: str,
+    message: str,
+    fields: dict[str, list[str]] | None,
+    status: int,
+    *,
+    retry_after: int | None = None,
+) -> Response:
+    response = Response(
         {"error": {"code": code, "message": message, "fields": fields or {}}},
         status=status,
+    )
+    if retry_after is not None:
+        response["Retry-After"] = str(int(retry_after))
+    return response
+
+
+def domain_error_response(exc: DomainError) -> Response:
+    return error_response(
+        exc.code,
+        exc.message,
+        exc.fields,
+        exc.status_code,
+        retry_after=getattr(exc, "retry_after", None),
     )
 
 
 def ongsho_exception_handler(exc, context):
     if isinstance(exc, DomainError):
-        return error_response(exc.code, exc.message, exc.fields, exc.status_code)
+        return domain_error_response(exc)
 
     if isinstance(exc, Http404):
         return error_response("not_found", "Not found.", {}, 404)

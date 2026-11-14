@@ -19,6 +19,7 @@ import { OwnerPlanPill, RoleTag, StatusPill } from '@/components/ui/Pill'
 import { ServiceLogo } from '@/components/ui/ServiceLogo'
 import { DashedDivider, EmptyState, SkeletonCard } from '@/components/ui/Misc'
 import { Donut, ForecastBars, Legend } from '@/components/ui/Charts'
+import { useViewport360 } from '@/hooks/useMediaQuery'
 import { EventList, Loadable, ownerMeta, Price, renewText } from '@/features/common/PlanBits'
 
 const HOME_PLAN_LIMIT = 5
@@ -203,6 +204,7 @@ function HomeSkeleton() {
 }
 
 export function HomePage() {
+  const narrow = useViewport360()
   const query = useQuery({
     queryKey: keys.dashboard,
     queryFn: getDashboard,
@@ -223,6 +225,7 @@ export function HomePage() {
                 visual={
                   <Donut
                     size={5.25}
+                    compact={narrow}
                     label="Spent this month"
                     data={[
                       { name: 'Plans you own', value: d.spend.owned, fill: CHART.owned },
@@ -234,8 +237,8 @@ export function HomePage() {
                 <Legend
                   compact
                   items={[
-                    { name: 'your seats in plans you own', value: d.spend.owned, fill: CHART.owned },
-                    { name: 'your shares in plans you joined', value: d.spend.joined, fill: CHART.joined },
+                    { name: 'Plans you own', value: d.spend.owned, fill: CHART.owned },
+                    { name: 'Plans you joined', value: d.spend.joined, fill: CHART.joined },
                   ]}
                 />
               </StatCard>
@@ -328,7 +331,7 @@ export function HomePage() {
                   <BoxHead title="Spend by category" sub="This month, your part only" />
                   {d.byCategory.length ? (
                     <div className="grid min-w-0 justify-items-center gap-4">
-                      <Donut size={6.5} label="Spend by category" data={d.byCategory.map((c) => ({ name: c.name, value: c.amount, fill: categoryColor(c.name) }))} />
+                      <Donut size={6.5} compact={narrow} label="Spend by category" data={d.byCategory.map((c) => ({ name: c.name, value: c.amount, fill: categoryColor(c.name) }))} />
                       <div className="w-full min-w-0">
                         <Legend compact items={d.byCategory.map((c) => ({ name: c.name, value: c.amount, fill: categoryColor(c.name) }))} />
                       </div>
@@ -344,8 +347,8 @@ export function HomePage() {
               <BoxHead title="Next 6 months" sub="What you pay each month, your part only. Yearly renewals stand out." />
               {d.forecast.some((m) => m.total > 0) ? (
                 <div className="grid gap-4">
-                  <ForecastBars data={d.forecast} colors={{ this: CHART.thisMonth, regular: CHART.regular, yearly: CHART.yearly }} />
-                  <div className="row gap-6">
+                  <ForecastBars compact={narrow} data={d.forecast} colors={{ this: CHART.thisMonth, regular: CHART.regular, yearly: CHART.yearly }} />
+                  <div className="chart-forecast-legend row flex-wrap gap-4 sm:gap-6">
                     <Legend items={[{ name: 'This month', fill: CHART.thisMonth }]} />
                     <Legend items={[{ name: 'Regular month', fill: CHART.regular }]} />
                     <Legend items={[{ name: 'Has a yearly renewal', fill: CHART.yearly }]} />

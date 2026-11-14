@@ -26,13 +26,13 @@ export function avatarColor(user) {
 export const STATUS = {
   due: { label: 'Due', fill: '#ff1a1a' },
   pending: { label: 'Pending', fill: '#fff200' },
-  paid: { label: 'Paid', fill: '#2fd600' },
+  paid: { label: 'Paid', fill: '#22c400' },
   waived: { label: 'Waived', fill: '#19c8f0' },
   trial: { label: 'Trial', fill: '#d9ccff' },
 }
 
 export const PLAN_STATUS = {
-  active: { label: 'Active', fill: '#2fd600' },
+  active: { label: 'Active', fill: '#22c400' },
   trial: { label: 'Trial', fill: '#d9ccff' },
   paused: { label: 'Paused', fill: '#c9c9c0' },
   cancelled: { label: 'Cancelled', fill: '#5c5c55' },

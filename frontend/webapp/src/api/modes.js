@@ -77,6 +77,9 @@ const LIVE_FUNCTIONS = new Set([
   'acceptInvite',
   'declineInvite',
   'acceptInviteAsNewUser',
+  'getPlanJoin',
+  'acceptPlanJoin',
+  'signupAndJoinPlan',
   'requestLeave',
   'cancelLeaveRequest',
 ])

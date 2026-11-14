@@ -130,7 +130,7 @@ export function validateDateOrder({ startDate, trialEnd, endDate, nextRenewal, t
 
 export function validatePlanForm(form, { editing = false, minSeats = 0 } = {}) {
   const fields = {}
-  if (!String(form.serviceName ?? '').trim()) fields.serviceName = 'Pick or type a service name.'
+  if (!String(form.serviceName ?? '').trim()) fields.serviceName = 'Pick a service.'
   const pn = validatePlanName(form.planName)
   if (pn) fields.planName = pn
   if (!form.categoryId) fields.categoryId = 'Pick a category.'

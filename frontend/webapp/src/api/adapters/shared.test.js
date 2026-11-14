@@ -57,6 +57,28 @@ describe('shared adapter', () => {
     expect(withTotals.totals.paidUpCount).toBe(2)
   })
 
+  it('labels weekly dues with the full date', () => {
+    const out = mapMySharedPlanDetail(
+      {
+        plan_id: 9,
+        plan_name: 'ChatGPT Pro',
+        service_name: { name: 'ChatGPT' },
+        owner: { name: 'Y', first_name: 'Y', avatar_id: 'sage' },
+        cycle: { unit: 'week', count: 1 },
+        my_share: '833.33',
+        my_status: 'due',
+        open_amount: '833.33',
+        pending_amount: '0.00',
+        open_dues: [{ due_id: 4, due_date: '2026-11-21', amount: '833.33' }],
+        members: [],
+        coverable: [],
+        history: [],
+      },
+      'u9',
+    )
+    expect(out.openDues[0].monthLabel).toBe('21 Nov 2026')
+  })
+
   it('maps member detail dues', () => {
     const out = mapMySharedPlanDetail(
       {
@@ -101,6 +123,7 @@ describe('shared adapter', () => {
       'u9',
     )
     expect(out.openDues[0].amount).toBe(25000)
+    expect(out.openDues[0].monthLabel).toBe('Feb 2026')
     expect(out.ious[0].youOwe).toBe(true)
     expect(out.nextRenewal).toBe('2026-12-13')
     expect(out.canRequestLeave).toBe(true)

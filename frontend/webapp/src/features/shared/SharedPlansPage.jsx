@@ -53,7 +53,7 @@ function SharedCard({ plan, onPay, onLeave }) {
       <div className="row gap-2">
         <span className="t-label">Members:</span>
         {plan.members.map((m) => (
-          <MemberChip key={m.id} name={m.name} label={m.firstName} color={m.avatarColor} status={m.isYou ? m.status : undefined} />
+          <MemberChip key={m.id} name={m.name} label={m.firstName} color={m.avatarColor} status={m.status} />
         ))}
       </div>
 

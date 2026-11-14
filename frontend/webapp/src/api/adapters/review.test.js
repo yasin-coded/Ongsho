@@ -13,7 +13,18 @@ describe('review adapter', () => {
       },
       waiting: { count: 1, total: '500.00' },
       confirmed: { amount: '0.00', expected: '500.00', members: 1 },
-      still_due: [{ id: 2 }],
+      still_due: [
+        {
+          due_id: 2,
+          member_id: 2,
+          name: 'Ann',
+          first_name: 'Ann',
+          email: 'a@example.com',
+          avatar_id: 'coral',
+          amount: '250.00',
+          leave_requested: false,
+        },
+      ],
       pending: [
         {
           payment_id: 9,
@@ -59,6 +70,8 @@ describe('review adapter', () => {
     expect(out.pending[0].covers[0].memberId).toBe('3')
     expect(out.pending[0].covers[1].self).toBe(false)
     expect(out.stillDue).toBe(1)
+    expect(out.unpaid[0].dueId).toBe('2')
+    expect(out.unpaid[0].amount).toBe(25000)
   })
 })
 

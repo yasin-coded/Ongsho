@@ -40,7 +40,7 @@ def run_daily(today) -> dict[str, int] | None:
         from notifications.reminders import send_reminders
 
         reminder_counts = send_reminders(today)
-        return {
+        result = {
             "members_closed": departed,
             "expired": expired,
             "trials_activated": trials,
@@ -51,5 +51,20 @@ def run_daily(today) -> dict[str, int] | None:
             "dues_ensured": dues_ensured,
             **reminder_counts,
         }
+        logger.info(
+            "run_daily members_closed=%s expired=%s trials_activated=%s plans_processed=%s "
+            "charges_created=%s charge_errors=%s charges_locked=%s dues_ensured=%s",
+            result["members_closed"],
+            result["expired"],
+            result["trials_activated"],
+            result["plans_processed"],
+            result["charges_created"],
+            result["charge_errors"],
+            result["charges_locked"],
+            result["dues_ensured"],
+        )
+        for key, value in reminder_counts.items():
+            logger.info("run_daily %s=%s", key, value)
+        return result
     finally:
         _advisory_unlock()

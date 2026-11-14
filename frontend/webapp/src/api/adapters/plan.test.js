@@ -64,12 +64,12 @@ describe('mapSubscriptionDetail', () => {
       plan_name: 'Family',
       service_name: { name: 'Spotify' },
       renewal_type: 'auto',
-      confirmed_so_far: { paid: '800.00', waived: '0.00', pending: '0.00', expected: '800.00' },
+      confirmed_so_far: { paid: '800.00', waived: '0.00', pending: '100.00', expected: '1200.00' },
       price_now: { amount: '1200.00', currency: 'BDT', amount_bdt: '1200.00' },
     })
-    expect(out.confirmedSoFar.total).toBe(80000)
+    expect(out.confirmedSoFar.total).toBe(120000)
     expect(out.confirmedSoFar.paid).toBe(80000)
-    expect(out.confirmedSoFar.pending).toBe(0)
+    expect(out.confirmedSoFar.pending).toBe(10000)
   })
 
   it('maps activity timestamps for fmtWhen', () => {

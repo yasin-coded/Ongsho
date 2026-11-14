@@ -13,7 +13,7 @@ import { Box, BoxHead, StatCard } from '@/components/ui/Box'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
 import { Select } from '@/components/ui/Field'
-import { MethodTag, RoleTag, StatusPill } from '@/components/ui/Pill'
+import { MethodTag, RoleTag, StatusDot, StatusPill } from '@/components/ui/Pill'
 import { ServiceLogo } from '@/components/ui/ServiceLogo'
 import { EmptyState, SkeletonCard, Stepper } from '@/components/ui/Misc'
 import { Loadable } from '@/features/common/PlanBits'
@@ -166,15 +166,18 @@ function MemberPlan({ plan }) {
           </Box>
 
           <Box>
-            <BoxHead title="In this plan" sub="You can see names and avatars only." />
+            <BoxHead title="In this plan" sub="Names and whether each person has paid this cycle (coloured dot)." />
             <ul className="dashed-rows">
               {plan.members.map((m) => (
                 <li key={m.id} className="row-between py-2.5">
                   <span className="row gap-3">
-                    <Avatar name={m.name} color={m.avatarColor} size="sm" status={m.isYou ? m.status : undefined} decorative={!m.isYou} />
+                    <Avatar name={m.name} color={m.avatarColor} size="sm" status={m.status} decorative />
                     <span className="font-bold">{m.isYou ? 'You' : m.name}</span>
                   </span>
-                  <RoleTag role={m.isOwner ? 'ownerTag' : 'member'} />
+                  <span className="row gap-2">
+                    {m.status && <StatusDot status={m.status} />}
+                    <RoleTag role={m.isOwner ? 'ownerTag' : 'member'} />
+                  </span>
                 </li>
               ))}
             </ul>
