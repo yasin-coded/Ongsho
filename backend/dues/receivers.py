@@ -31,8 +31,9 @@ def on_member_joined(sender, *, member, **kwargs):
     floor = max(member.joined_on, plan.billing_from)
     charges = Charge.objects.filter(
         subscription=plan,
-        period_start__gte=member.joined_on,
+        period_start__lte=member.joined_on,
         due_date__gte=floor,
+        period_end__gte=member.joined_on,
     )
     for charge in charges:
         dues_services.recalculate_dues(charge, today, force=True)

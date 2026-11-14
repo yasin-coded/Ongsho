@@ -467,6 +467,7 @@
   }
   .check input { width: 1.25rem; height: 1.25rem; accent-color: #000; flex: none; }
   .check:has(input:checked) { background: var(--color-cream); }
+  .check--readonly { cursor: default; background: var(--color-cream); }
 
   .radio-card {
     position: relative;
@@ -785,6 +786,13 @@
   .modal__body .modal__footer {
     margin-top: 0;
     padding: 0.5rem 0.875rem 0.875rem 0.5rem;
+  }
+  .modal__footer .neo-btn {
+    box-shadow: var(--shadow-neo-sm);
+  }
+  .shell .content .modal__footer .neo-btn:hover:not(:disabled) {
+    transform: translate(-0.125rem, -0.125rem);
+    box-shadow: var(--shadow-neo-lg);
   }
 
   /* ---------- toast ---------- */

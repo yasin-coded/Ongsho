@@ -150,6 +150,18 @@ def submit_payment(
             raise ConflictError("One of those dues is no longer open.", code="due_not_open")
         if due.status != DueStatus.DUE:
             raise ConflictError("One of those dues is no longer open.", code="due_not_open")
+    own = [d for d in dues if d.member_id == payer.pk]
+    if len(own) > 1:
+        raise ValidationFailed(
+            "Pay one billing cycle at a time.",
+            fields={"due_ids": ["Pay one billing cycle at a time."]},
+        )
+    charge_ids = {d.charge_id for d in own}
+    if len(charge_ids) > 1:
+        raise ValidationFailed(
+            "Pay one billing cycle at a time.",
+            fields={"due_ids": ["Pay one billing cycle at a time."]},
+        )
     if sub.owner_id == user.pk:
         for due in dues:
             if due.member.user_id == user.pk:

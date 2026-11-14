@@ -29,8 +29,14 @@ import { CatalogPanelSkeleton, SkeletonCard } from '@/components/ui/Misc'
 import { Loadable } from '@/features/common/PlanBits'
 
 function AvatarPicker({ me }) {
+  const queryClient = useQueryClient()
   const [color, setColor] = useState(me.avatarColor ?? AVATAR_COLORS[0])
-  const save = useAction(() => accounts.updateMe({ avatarColor: color }), { toastMessage: 'Avatar saved. It is updated everywhere.' })
+  const save = useAction(() => accounts.updateMe({ avatarColor: color }), {
+    toastMessage: 'Avatar saved. It is updated everywhere.',
+    onSuccess: (user) => {
+      if (user) queryClient.setQueryData(keys.me, user)
+    },
+  })
   return (
     <Box>
       <BoxHead title="Change avatar" sub="Pick a color for your letter circle." />

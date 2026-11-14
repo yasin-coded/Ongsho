@@ -40,8 +40,14 @@ def _split_blocked_notified(charge: Charge) -> bool:
 
 @transaction.atomic
 def create_dues_for_charge(charge: Charge) -> int:
+    from core.dates import today_dhaka
+
     shared = _shared_for_charge(charge)
     if shared is None:
+        return 0
+    sub = shared.subscription
+    today = today_dhaka()
+    if today < sub.billing_from or charge.due_date < sub.billing_from:
         return 0
     members = members_for_charge(shared, charge)
     if not members:

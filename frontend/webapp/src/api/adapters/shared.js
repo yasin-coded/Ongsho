@@ -65,8 +65,11 @@ function mapRosterMember(m, myStatus) {
 export function memberSharedStatus(plan) {
   if (plan.openDues?.length) return 'due'
   if (plan.pendingAmount) return 'pending'
-  if (plan.myStatus === 'paid' || plan.myStatus === 'none') return 'paid'
-  return plan.myStatus ?? 'paid'
+  if (plan.myStatus === 'paid' || plan.myStatus === 'waived') return 'paid'
+  if (plan.myStatus === 'none') return 'none'
+  if (plan.myStatus === 'due') return 'due'
+  if (plan.myStatus === 'pending') return 'pending'
+  return 'none'
 }
 
 export function mapMySharedSummary(row, meUserId) {

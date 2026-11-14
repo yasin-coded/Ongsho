@@ -68,6 +68,8 @@ export function mapReview(data) {
     },
     confirmed: {
       amount: moneyFromApi(data.confirmed?.amount) ?? 0,
+      paid: moneyFromApi(data.confirmed?.paid) ?? moneyFromApi(data.confirmed?.amount) ?? 0,
+      waived: moneyFromApi(data.confirmed?.waived) ?? 0,
       expected: moneyFromApi(data.confirmed?.expected) ?? 0,
       members: data.confirmed?.members ?? 0,
     },

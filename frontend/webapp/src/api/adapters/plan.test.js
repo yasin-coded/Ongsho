@@ -113,6 +113,34 @@ describe('mapListResponse', () => {
     expect(out.items[0].shared).toBe(true)
   })
 
+  it('shows not billed yet when members have no due on the current cycle', () => {
+    const out = mapListResponse({
+      results: [
+        {
+          id: 1,
+          plan_name: 'Apple Music',
+          status: 'active',
+          cycle_unit: 'month',
+          cycle_count: 1,
+          currency: 'BDT',
+          plan_mode: 'reseller',
+          seats_taken: 2,
+          seats: 4,
+          monthly_cost: '800.00',
+          price_now: { currency: 'BDT', amount_bdt: '800.00' },
+          per_seat: '200.00',
+          members: [
+            { id: 1, user_id: 10, name: 'A', first_name: 'A', due_status: null },
+            { id: 2, user_id: 11, name: 'B', first_name: 'B', due_status: null },
+          ],
+        },
+      ],
+      count: 1,
+    })
+    expect(out.items[0].statusPill).toEqual({ key: 'upcoming', label: 'Not billed yet' })
+    expect(out.items[0].perSeat).toBe(20000)
+  })
+
   it('maps live collection totals', () => {
     const out = mapListResponse({
       results: [],

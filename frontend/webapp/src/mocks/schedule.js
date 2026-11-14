@@ -42,11 +42,9 @@ export function firstBillDate(plan) {
   return plan.trialEnd ?? plan.startDate
 }
 
-/** First renewal that may create a charge — never on plan start unless that is the trial end. */
+/** When member billing starts (trial end or plan start). Dues run for the open cycle from here. */
 export function billingFromDate(plan) {
-  const first = firstBillDate(plan)
-  if (plan.trialEnd) return first
-  return nthDueDate(plan, 1)
+  return firstBillDate(plan)
 }
 
 /** The k-th due date counted from the first billed date. */
@@ -66,14 +64,35 @@ export function stopDate(plan) {
   return stops.length ? stops.sort()[0] : null
 }
 
-/** Every due date in [from, to], inclusive, following the plan's rules. */
+export function renewalKStart(plan) {
+  return plan.trialEnd ? 0 : 1
+}
+
+/** Billing cycles: start … renewal (inclusive); next cycle begins the day after renewal. */
+export function billingPeriodsBetween(plan, from, to) {
+  const first = firstBillDate(plan)
+  const startK = renewalKStart(plan)
+  const stop = stopDate(plan)
+  const out = []
+  for (let k = startK; k < 600; k += 1) {
+    const due = nthDueDate(plan, k)
+    if (stop && due >= stop) break
+    const periodStart = k === startK ? first : addDays(nthDueDate(plan, k - 1), 1)
+    const periodEnd = due
+    if (periodStart > to) break
+    if (periodEnd >= from) out.push({ periodStart, dueDate: due, periodEnd })
+  }
+  return out
+}
+
+/** Renewal (cycle-end) dates in [from, to] — plan start is not a renewal. */
 export function dueDatesBetween(plan, from, to) {
   const out = []
   const stop = stopDate(plan)
   const skipped = new Set(plan.skipDates ?? [])
   const billFrom = billingFromDate(plan)
   const effectiveFrom = from > billFrom ? from : billFrom
-  for (let k = 0; k < 600; k += 1) {
+  for (let k = renewalKStart(plan); k < 600; k += 1) {
     const date = nthDueDate(plan, k)
     if (date > to) break
     if (stop && date >= stop) break
@@ -84,7 +103,7 @@ export function dueDatesBetween(plan, from, to) {
 
 export function nextDueDate(plan, from) {
   const stop = stopDate(plan)
-  for (let k = 0; k < 600; k += 1) {
+  for (let k = renewalKStart(plan); k < 600; k += 1) {
     const date = nthDueDate(plan, k)
     if (stop && date >= stop) return null
     if (date >= from && !(plan.skipDates ?? []).includes(date)) return date
@@ -92,12 +111,8 @@ export function nextDueDate(plan, from) {
   return null
 }
 
-export function periodEndFor(plan, start) {
-  for (let k = 0; k < 600; k += 1) {
-    const date = nthDueDate(plan, k)
-    if (date > start) return addDays(date, -1)
-  }
-  return start
+export function periodEndFor(_plan, dueDate) {
+  return dueDate
 }
 
 /** Price in force on `date`. Later price changes never touch earlier charges. */

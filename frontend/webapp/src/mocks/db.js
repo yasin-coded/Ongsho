@@ -1,6 +1,6 @@
 import { MOCK_TODAY, addDays } from '@/lib/dates'
 import { hashIndex } from '@/lib/colors'
-import { dueDatesBetween, periodEndFor, priceAt, splitCharge } from './schedule'
+import { billingPeriodsBetween, periodEndFor, priceAt, splitCharge } from './schedule'
 
 export const ME = 'u-yasin'
 /** The next cycle's charge and dues appear this many days before the renewal date. */
@@ -162,17 +162,22 @@ function seed() {
 
   for (const plan of plans) {
     const until = plan.status === 'trial' ? addDays(plan.trialEnd, -1) : horizon
-    for (const date of dueDatesBetween(plan, plan.startDate, until)) {
-      if (plan.status === 'trial' && date > MOCK_TODAY) continue
-      const price = priceAt(plan, date)
+    for (const period of billingPeriodsBetween(plan, plan.startDate, until)) {
+      if (plan.status === 'trial' && period.dueDate > MOCK_TODAY) continue
+      const price = priceAt(plan, period.dueDate)
       const charge = {
-        id: `ch-${plan.id}-${date}`, planId: plan.id, periodStart: date, periodEnd: periodEndFor(plan, date), dueDate: date,
-        ...price, locked: date <= MOCK_TODAY,
+        id: `ch-${plan.id}-${period.periodStart}`,
+        planId: plan.id,
+        periodStart: period.periodStart,
+        periodEnd: periodEndFor(plan, period.dueDate),
+        dueDate: period.dueDate,
+        ...price,
+        locked: period.dueDate <= MOCK_TODAY,
       }
       charges.push(charge)
       if (!plan.shared) continue
       const planMembers = members.filter((x) => x.planId === plan.id)
-      for (const share of splitCharge(plan, planMembers, charge.amount, date)) {
+      for (const share of splitCharge(plan, planMembers, charge.amount, period.periodStart)) {
         const member = planMembers.find((x) => x.id === share.memberId)
         const due = {
           id: `due-${charge.id}-${member.id}`, chargeId: charge.id, planId: plan.id, memberId: member.id, amount: share.amount,
@@ -181,16 +186,16 @@ function seed() {
         dues.push(due)
         if (member.isOwnerSeat) {
           due.status = 'paid'
-          due.paidOn = date
+          due.paidOn = charge.dueDate
           continue
         }
-        if (date < MOCK_TODAY) {
+        if (charge.dueDate < MOCK_TODAY) {
           due.status = 'paid'
-          due.paidOn = addDays(date, -1)
+          due.paidOn = addDays(charge.dueDate, -1)
           payments.push({
             id: `pay-${due.id}`, planId: plan.id, payerMemberId: member.id, method: member.prefMethod,
             tid: makeTid(due.id), amount: share.amount, paidOn: null, recordedBy: member.userId,
-            review: 'confirmed', submittedAt: at(addDays(date, -1), '20:15'), reviewedAt: at(addDays(date, -1), '22:40'),
+            review: 'confirmed', submittedAt: at(addDays(charge.dueDate, -1), '20:15'), reviewedAt: at(addDays(charge.dueDate, -1), '22:40'),
             rejectionReason: null, allocations: [{ dueId: due.id, amount: share.amount }],
           })
         }
@@ -198,7 +203,10 @@ function seed() {
     }
   }
 
-  const dueOf = (planId, date, memberId) => dues.find((d) => d.chargeId === `ch-${planId}-${date}` && d.memberId === memberId)
+  const dueOf = (planId, dueDate, memberId) => {
+    const charge = charges.find((c) => c.planId === planId && c.dueDate === dueDate)
+    return charge ? dues.find((d) => d.chargeId === charge.id && d.memberId === memberId) : null
+  }
   const paymentFor = (due) => {
     if (!due) return null
     return payments.find((p) => p.allocations?.some((a) => a.dueId === due.id))

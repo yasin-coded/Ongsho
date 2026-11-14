@@ -1,9 +1,35 @@
 import { describe, expect, it } from 'vitest'
-import { mapMySharedList, mapMySharedPlanDetail } from './shared'
+import { mapMySharedList, mapMySharedPlanDetail, memberSharedStatus } from './shared'
 import { mapSubscriptionDetail } from './plan'
 import { mapOwnerTransfer } from './transfers'
 
 describe('shared adapter', () => {
+  it('does not treat pre-billing as paid', () => {
+    const plan = mapMySharedList(
+      {
+        results: [
+          {
+            plan_id: 10,
+            plan_name: 'Apple Music',
+            service_name: { name: 'Apple Music' },
+            owner: { name: 'O', first_name: 'O', avatar_id: 'sage' },
+            cycle: { unit: 'month', count: 1 },
+            my_share: '200.00',
+            my_status: 'none',
+            open_amount: '0.00',
+            pending_amount: '0.00',
+            open_dues: [],
+            members: [],
+          },
+        ],
+        count: 1,
+      },
+      'u9',
+    ).items[0]
+    expect(memberSharedStatus(plan)).toBe('none')
+    expect(plan.myShare).toBe(20000)
+  })
+
   it('list cards map members and payment method', () => {
     const out = mapMySharedList(
       {

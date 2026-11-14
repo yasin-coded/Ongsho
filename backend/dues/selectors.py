@@ -38,10 +38,15 @@ def current_charge(
     base = Charge.objects.filter(subscription=subscription)
     if min_due_date is not None:
         base = base.filter(due_date__gte=min_due_date)
-    past = base.filter(due_date__lte=today).order_by("-due_date", "-id").first()
+    in_cycle = (
+        base.filter(period_start__lte=today, due_date__gte=today).order_by("due_date", "id").first()
+    )
+    if in_cycle:
+        return in_cycle
+    past = base.filter(due_date__lt=today).order_by("-due_date", "-id").first()
     if past:
         return past
-    return base.filter(due_date__gt=today).order_by("due_date", "id").first()
+    return base.filter(due_date__gte=today).order_by("due_date", "id").first()
 
 
 def _first_name(user) -> str:
@@ -56,7 +61,9 @@ class _Period:
 
 def project_share_bdt(shared: SharedPlan, member: Member, on_date: date, prices: list) -> Decimal | None:
     amount = quantize_money(price_at(prices, on_date))
-    charge = Charge.objects.filter(subscription=shared.subscription_id, period_start=on_date).first()
+    charge = Charge.objects.filter(subscription=shared.subscription_id, due_date=on_date).first()
+    if charge is None:
+        charge = Charge.objects.filter(subscription=shared.subscription_id, period_start=on_date).first()
     if charge:
         period = charge
         total = charge.amount_bdt
@@ -206,9 +213,17 @@ def prefetch_member_payment_ctx(shared: SharedPlan, members: list[Member], today
 
     for m in members:
         due = dues.get(m.pk)
+        due_status = due.status if due else None
+        if (
+            due_status is None
+            and today >= sub.billing_from
+            and today >= m.joined_on
+            and charge.due_date >= sub.billing_from
+        ):
+            due_status = DueStatus.DUE
         ctx[m.pk] = {
             "due_id": due.pk if due else None,
-            "due_status": due.status if due else None,
+            "due_status": due_status,
             "due_amount": str(quantize_money(due.amount_bdt)) if due else None,
             "last_payment": _payment_brief(latest_payments.get(m.pk)),
             "pending_payment_id": pending_for_due.get(due.pk) if due else None,
@@ -312,35 +327,67 @@ def active_membership(user, plan_id: int) -> Member:
     return member
 
 
+def _share_projection_date(sub, member: Member, today: date) -> date | None:
+    from plans import selectors as plan_selectors
+
+    raw = plan_selectors.display_next_renewal(sub)
+    if not raw:
+        return None
+    on = raw if isinstance(raw, date) else date.fromisoformat(str(raw))
+    if on < member.joined_on:
+        return None
+    if sub.billing_from and on < sub.billing_from:
+        return None
+    return on
+
+
 def _member_money_snapshot(member: Member, today: date) -> dict:
     sub = member.shared_plan.subscription
     shared = member.shared_plan
     floor = _member_charge_floor(sub, member)
-    charge = current_charge(sub, today, min_due_date=floor)
-    due = None
-    if charge:
-        due = Due.objects.filter(charge=charge, member=member).first()
     prices = list(PriceChange.objects.filter(subscription=sub).order_by("effective_from", "id"))
-    if due:
-        my_share = str(quantize_money(due.amount_bdt))
-        my_status = due.status
-    elif charge:
-        proj = project_share_bdt(shared, member, charge.period_start, prices)
-        my_share = str(proj) if proj is not None else None
-        my_status = "none"
-    else:
-        my_share = None
-        my_status = "none"
-
-    open_dues = Due.objects.filter(
-        member=member,
-        status=DueStatus.DUE,
-        charge__due_date__gte=floor,
+    charge = current_charge(sub, today, min_due_date=floor)
+    in_cycle = (
+        charge is not None
+        and today >= member.joined_on
+        and charge.period_start <= today <= charge.due_date
     )
-    open_count = open_dues.count()
-    open_amount = open_dues.aggregate(s=Coalesce(Sum("amount_bdt"), Decimal("0")))["s"]
+    due_on_cycle = (
+        Due.objects.filter(charge=charge, member=member).first()
+        if charge and today >= member.joined_on
+        else None
+    )
+
     pending_dues = Due.objects.filter(member=member, status=DueStatus.PENDING)
     pending_amount = pending_dues.aggregate(s=Coalesce(Sum("amount_bdt"), Decimal("0")))["s"]
+    open_due = _payable_open_dues_qs(member).first()
+
+    if open_due:
+        my_share = str(quantize_money(open_due.amount_bdt))
+        my_status = DueStatus.DUE
+    elif pending_amount > 0:
+        row = pending_dues.order_by("charge__due_date", "id").first()
+        my_share = str(quantize_money(row.amount_bdt)) if row else None
+        my_status = DueStatus.PENDING
+    elif due_on_cycle:
+        my_share = str(quantize_money(due_on_cycle.amount_bdt))
+        my_status = due_on_cycle.status
+    elif in_cycle and today >= sub.billing_from:
+        proj = project_share_bdt(shared, member, charge.period_start, prices)
+        my_share = str(proj) if proj is not None else None
+        my_status = DueStatus.DUE
+    else:
+        on = _share_projection_date(sub, member, today)
+        if on:
+            proj = project_share_bdt(shared, member, on, prices)
+            my_share = str(quantize_money(proj)) if proj is not None else None
+        else:
+            my_share = None
+        my_status = "none"
+
+    open_dues = _payable_open_dues_qs(member)
+    open_count = open_dues.count()
+    open_amount = open_dues.aggregate(s=Coalesce(Sum("amount_bdt"), Decimal("0")))["s"]
 
     return {
         "my_share": my_share,
@@ -356,9 +403,13 @@ def _sync_member_dues(member: Member, today: date) -> None:
     from dues import services as dues_services
 
     sub = member.shared_plan.subscription
+    if today < sub.billing_from:
+        return
     floor = _member_charge_floor(sub, member)
     charge = current_charge(sub, today, min_due_date=floor)
     if charge is None:
+        return
+    if charge.due_date < sub.billing_from:
         return
     if charge.period_start < member.joined_on:
         return
@@ -367,16 +418,21 @@ def _sync_member_dues(member: Member, today: date) -> None:
     dues_services.recalculate_dues(charge, today, force=True)
 
 
+def _payable_open_dues_qs(member: Member):
+    """Earliest open due only — members pay one billing cycle at a time."""
+    sub = member.shared_plan.subscription
+    floor = _member_charge_floor(sub, member)
+    return (
+        Due.objects.filter(member=member, status=DueStatus.DUE, charge__due_date__gte=floor)
+        .select_related("charge")
+        .order_by("charge__due_date", "id")[:1]
+    )
+
+
 def _member_open_dues_rows(member: Member) -> list[dict]:
     from payments.selectors import settling_allocations_for_dues
 
-    sub = member.shared_plan.subscription
-    floor = _member_charge_floor(sub, member)
-    open_dues_qs = list(
-        Due.objects.filter(member=member, status=DueStatus.DUE, charge__due_date__gte=floor)
-        .select_related("charge")
-        .order_by("charge__due_date", "id")
-    )
+    open_dues_qs = list(_payable_open_dues_qs(member))
     alloc_by_due = settling_allocations_for_dues([d.pk for d in open_dues_qs])
     rows = []
     for due in open_dues_qs:
@@ -527,10 +583,10 @@ def member_share_on_renewal_date(
     shared = member.shared_plan
     if prices is None:
         prices = list(PriceChange.objects.filter(subscription=sub).order_by("effective_from", "id"))
-    due_row = Due.objects.filter(member=member, charge__period_start=due_date).first()
+    due_row = Due.objects.filter(member=member, charge__due_date=due_date).first()
     if due_row:
         return quantize_money(due_row.amount_bdt)
-    charge = Charge.objects.filter(subscription=sub, period_start=due_date).first()
+    charge = Charge.objects.filter(subscription=sub, due_date=due_date).first()
     if due_date > today and charge is None:
         return None
     share = project_share_bdt(shared, member, due_date, prices)
@@ -575,13 +631,14 @@ def me_shared_plan_totals(memberships: list[Member], today: date) -> dict:
         waiting += Decimal(snap["pending_amount"])
         open_amt = Decimal(snap["open_amount"])
         pend_amt = Decimal(snap["pending_amount"])
+        st = snap["my_status"]
         if open_amt > 0:
             due_names.append(sub.plan_name)
             due_count += 1
         if pend_amt > 0:
             waiting_names.append(sub.plan_name)
             pending_count += 1
-        if open_amt == 0 and pend_amt == 0:
+        if st == DueStatus.PAID and open_amt == 0 and pend_amt == 0:
             paid_up_count += 1
     return {
         "shares": str(quantize_money(shares)),

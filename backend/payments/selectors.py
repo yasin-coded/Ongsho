@@ -424,8 +424,10 @@ def review_data(shared: SharedPlan, today: date) -> dict:
         if d.status == DueStatus.DUE
     ]
 
-    paid_amt = sum((d.amount_bdt for d in dues if d.status == DueStatus.PAID), Decimal("0"))
-    expected = charge.amount_bdt
+    paid_amt = sum((d.amount_bdt for d in member_dues if d.status == DueStatus.PAID), Decimal("0"))
+    waived_amt = sum((d.amount_bdt for d in member_dues if d.status == DueStatus.WAIVED), Decimal("0"))
+    confirmed_amt = paid_amt + waived_amt
+    expected = sum((d.amount_bdt for d in member_dues), Decimal("0"))
 
     return {
         "plan": {
@@ -440,7 +442,9 @@ def review_data(shared: SharedPlan, today: date) -> dict:
         "charge_amount": str(quantize_money(charge.amount_bdt)),
         "waiting": {"count": len(pending), "total": str(quantize_money(waiting_total))},
         "confirmed": {
-            "amount": str(quantize_money(paid_amt)),
+            "amount": str(quantize_money(confirmed_amt)),
+            "paid": str(quantize_money(paid_amt)),
+            "waived": str(quantize_money(waived_amt)),
             "expected": str(quantize_money(expected)),
             "members": len(member_dues),
         },
@@ -463,7 +467,7 @@ def _empty_review(sub: Subscription) -> dict:
         "charge_due_date": None,
         "charge_amount": None,
         "waiting": {"count": 0, "total": "0.00"},
-        "confirmed": {"amount": "0.00", "expected": "0.00", "members": 0},
+        "confirmed": {"amount": "0.00", "paid": "0.00", "waived": "0.00", "expected": "0.00", "members": 0},
         "still_due": [],
         "pending": [],
         "decided": [],

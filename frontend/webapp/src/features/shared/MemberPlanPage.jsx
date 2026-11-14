@@ -76,7 +76,11 @@ function MemberPlan({ plan }) {
       </div>
 
       <Box roomy className="grid gap-6">
-        <Stepper current={status} />
+        {status !== 'none' && status !== 'paid' && status !== 'waived' ? (
+          <Stepper current={status} />
+        ) : status === 'paid' || status === 'waived' ? (
+          <Stepper current="paid" />
+        ) : null}
         {open && plan.lastRejection && (
           <div className="neo-box neo-box--flat neo-box--danger row gap-3 !p-4" role="alert">
             <TriangleAlert aria-hidden="true" className="size-6 flex-none" />
@@ -91,7 +95,13 @@ function MemberPlan({ plan }) {
               ? `Pay ${owner} ${formatBDT(openTotal, { trim: true })}, then add your transaction ID`
               : plan.pendingAmount
                 ? `Waiting for ${owner} to confirm${plan.pendingSince ? `, sent ${fmtWhen(plan.pendingSince)}` : ''}`
-                : 'You are paid up. Nothing to do.'}
+                : status === 'paid' || status === 'waived'
+                  ? `You are paid up for this cycle${plan.nextRenewal ? ` · next bill ${fmtShort(plan.nextRenewal)}` : ''}`
+                  : status === 'none'
+                    ? plan.nextRenewal
+                      ? `Nothing due yet. First bill on ${fmtShort(plan.nextRenewal)}`
+                      : 'Nothing due yet'
+                    : 'You are paid up. Nothing to do.'}
           </p>
           {open && (
             <Button variant="accept" icon={ReceiptText} onClick={() => setPaying(true)}>

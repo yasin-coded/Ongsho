@@ -454,29 +454,38 @@ function OwnerPlan({ plan }) {
         <StatCard label="Renews in" value={renewsInLabel(plan.nextRenewal)} helper={plan.nextRenewal ? fmtShort(plan.nextRenewal) : undefined} />
       </div>
 
-      <Box>
-        <div className="row-between mb-4">
-          <h2 className="t-card">Confirmed so far</h2>
-          <p className="t-num font-bold">
-            {formatBDT(plan.confirmedSoFar.paid + plan.confirmedSoFar.waived, { trim: true })} / {formatBDT(plan.confirmedSoFar.total, { trim: true })}
-          </p>
-        </div>
-        <ProgressBar
-          total={plan.confirmedSoFar.total}
-          label={[
-            `${formatBDT(plan.confirmedSoFar.paid + plan.confirmedSoFar.waived)} confirmed`,
-            plan.confirmedSoFar.waived > 0 && `${formatBDT(plan.confirmedSoFar.waived)} waived`,
-            `${formatBDT(plan.confirmedSoFar.pending)} pending`,
-          ]
-            .filter(Boolean)
-            .join(', ')}
-          parts={[
-            { key: 'paid', value: plan.confirmedSoFar.paid, fill: STATUS.paid.fill },
-            { key: 'waived', value: plan.confirmedSoFar.waived, fill: STATUS.waived.fill },
-            { key: 'pending', value: plan.confirmedSoFar.pending, fill: STATUS.pending.fill },
-          ]}
-        />
-      </Box>
+      {plan.confirmedSoFar ? (
+        <Box>
+          <div className="row-between mb-4">
+            <h2 className="t-card">Confirmed so far</h2>
+            <p className="t-num font-bold">
+              {formatBDT(plan.confirmedSoFar.paid + plan.confirmedSoFar.waived, { trim: true })} / {formatBDT(plan.confirmedSoFar.total, { trim: true })}
+            </p>
+          </div>
+          <ProgressBar
+            total={plan.confirmedSoFar.total}
+            label={[
+              `${formatBDT(plan.confirmedSoFar.paid + plan.confirmedSoFar.waived)} confirmed`,
+              plan.confirmedSoFar.waived > 0 && `${formatBDT(plan.confirmedSoFar.waived)} waived`,
+              `${formatBDT(plan.confirmedSoFar.pending)} pending`,
+            ]
+              .filter(Boolean)
+              .join(', ')}
+            parts={[
+              { key: 'paid', value: plan.confirmedSoFar.paid, fill: STATUS.paid.fill },
+              { key: 'waived', value: plan.confirmedSoFar.waived, fill: STATUS.waived.fill },
+              { key: 'pending', value: plan.confirmedSoFar.pending, fill: STATUS.pending.fill },
+            ]}
+          />
+        </Box>
+      ) : (
+        plan.shared && (
+          <Box>
+            <h2 className="t-card">Confirmed so far</h2>
+            <p className="t-meta">Nothing to collect yet. The start date is not a due date — first member bill is on the first renewal.</p>
+          </Box>
+        )
+      )}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
         <MembersCard

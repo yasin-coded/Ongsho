@@ -28,6 +28,7 @@ export const STATUS = {
   pending: { label: 'Pending', fill: '#fff200' },
   paid: { label: 'Paid', fill: '#22c400' },
   waived: { label: 'Waived', fill: '#19c8f0' },
+  none: { label: 'Not billed yet', fill: '#c9c9c0' },
   trial: { label: 'Trial', fill: '#d9ccff' },
 }
 

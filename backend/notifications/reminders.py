@@ -43,7 +43,9 @@ def _month_label(d: date) -> str:
 
 
 def _owner_amount(sub: Subscription, on_date: date, prices: list) -> Decimal:
-    charge = Charge.objects.filter(subscription=sub, period_start=on_date).first()
+    charge = Charge.objects.filter(subscription=sub, due_date=on_date).first()
+    if charge is None:
+        charge = Charge.objects.filter(subscription=sub, period_start=on_date).first()
     if charge:
         return quantize_money(charge.amount_bdt)
     raw = _bdt_at(sub, on_date, prices)

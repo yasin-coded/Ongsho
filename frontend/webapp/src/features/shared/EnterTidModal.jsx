@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight } from 'lucide-react'
 import { getMySharedPlan } from '@/api/shared'
@@ -24,19 +24,26 @@ function dueLabel(d, { name } = {}) {
 }
 
 function TidForm({ plan, onClose, othersOnly = false }) {
-  const mine = othersOnly ? [] : plan.openDues
+  const mine = othersOnly ? [] : plan.openDues.slice(0, 1)
   const coverable = plan.coverable ?? []
-  const [picked, setPicked] = useState(() => new Set(mine.map((d) => d.id)))
+  const [coverPicked, setCoverPicked] = useState(() => new Set())
   const [method, setMethod] = useState(plan.method)
   const [tid, setTid] = useState('')
   const [clientFields, setClientFields] = useState({})
   const send = useAction(submitPayment, { onSuccess: onClose })
-  const selectable = [...mine, ...coverable]
-  const amount = sum(selectable.filter((d) => picked.has(d.id)), (d) => d.amount)
+  const picked = useMemo(() => {
+    const ids = new Set(coverPicked)
+    for (const d of mine) ids.add(d.id)
+    return ids
+  }, [mine, coverPicked])
+  const amount = sum(
+    [...mine, ...coverable].filter((d) => picked.has(d.id)),
+    (d) => d.amount,
+  )
   const owner = plan.owner.firstName
-  const firstDue = mine.at(-1)?.dueDate
-  const toggle = (id) =>
-    setPicked((prev) => {
+  const firstDue = mine[0]?.dueDate
+  const toggleCover = (id) =>
+    setCoverPicked((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -63,7 +70,7 @@ function TidForm({ plan, onClose, othersOnly = false }) {
       }}
     >
       <div className="modal__form-scroll modal__scroll grid gap-5">
-      <Box variant="highlight" className="flex flex-wrap items-center gap-4 !p-4 !shadow-none">
+      <Box variant="highlight" className="neo-box--flat flex flex-wrap items-center gap-4 !p-4 !shadow-none">
         <ServiceLogo serviceKey={plan.serviceKey} name={plan.serviceName} size="small" />
         <div className="min-w-0 flex-1">
           <p className="t-sub">{plan.planName}</p>
@@ -74,26 +81,26 @@ function TidForm({ plan, onClose, othersOnly = false }) {
         </div>
         <p className="text-right">
           <span className="t-mid block">{formatBDT(amount, { trim: true })}</span>
-          <span className="t-meta">{mine.length > 1 ? 'selected total' : 'your share'}</span>
+          <span className="t-meta">{coverPicked.size ? 'selected total' : 'your share'}</span>
         </p>
       </Box>
 
       <fieldset className="grid gap-2">
         <legend className="field__label mb-2">{othersOnly ? 'Dues to cover' : 'Your open dues'}</legend>
         {mine.map((d) => (
-          <label key={d.id} className="check">
-            <input type="checkbox" checked={picked.has(d.id)} onChange={() => toggle(d.id)} />
+          <div key={d.id} className="check check--readonly" aria-readonly="true">
             <span className="flex-1 font-bold">{dueLabel(d)}</span>
             <span className="t-num">{formatBDT(d.amount)}</span>
-          </label>
+          </div>
         ))}
+        {!mine.length && !coverable.length && <p className="t-meta">Nothing due on this plan right now.</p>}
         {coverable.length > 0 && (
           <div className={`grid gap-2 ${mine.length ? 'mt-3' : ''}`}>
             <p className="t-label">Paying for someone else?</p>
             <p className="t-meta">Selected members will owe you. Confirm the ID on Review payments.</p>
             {coverable.map((d) => (
               <label key={d.id} className="check">
-                <input type="checkbox" checked={picked.has(d.id)} onChange={() => toggle(d.id)} />
+                <input type="checkbox" checked={coverPicked.has(d.id)} onChange={() => toggleCover(d.id)} />
                 <span className="flex-1">
                   <span className="font-bold">{dueLabel(d, { name: d.name })}</span>
                   <span className="t-meta block">They will owe you</span>

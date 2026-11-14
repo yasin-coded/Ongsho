@@ -1,6 +1,6 @@
 import { MOCK_TODAY, addDays, mockNow } from '@/lib/dates'
 import { db, ME, LEAD_DAYS, nextId } from './db'
-import { dueDatesBetween, periodEndFor, priceAt, splitCharge, isActiveOn } from './schedule'
+import { billingPeriodsBetween, periodEndFor, priceAt, splitCharge, isActiveOn } from './schedule'
 import { chargesOf, duesOfCharge, memberById } from './selectors'
 
 export function audit(entry) {
@@ -33,10 +33,20 @@ export function generateMissingCharges(plan) {
   const horizon = addDays(MOCK_TODAY, LEAD_DAYS)
   const until = plan.status === 'trial' ? MOCK_TODAY : horizon
   if (['paused', 'cancelled', 'expired'].includes(plan.status)) return
-  for (const date of dueDatesBetween(plan, plan.createdOnDate ?? plan.startDate, until)) {
-    const id = `ch-${plan.id}-${date}`
+  const from = plan.createdOnDate ?? plan.startDate
+  for (const period of billingPeriodsBetween(plan, from, until)) {
+    const id = `ch-${plan.id}-${period.periodStart}`
     if (db.charges.some((c) => c.id === id)) continue
-    db.charges.push({ id, planId: plan.id, periodStart: date, periodEnd: periodEndFor(plan, date), dueDate: date, ...priceAt(plan, date), locked: date <= MOCK_TODAY })
+    const pricing = priceAt(plan, period.dueDate)
+    db.charges.push({
+      id,
+      planId: plan.id,
+      periodStart: period.periodStart,
+      periodEnd: periodEndFor(plan, period.dueDate),
+      dueDate: period.dueDate,
+      ...pricing,
+      locked: period.dueDate <= MOCK_TODAY,
+    })
   }
   recalcUnlocked(plan)
 }

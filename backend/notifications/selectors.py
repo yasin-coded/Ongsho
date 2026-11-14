@@ -7,6 +7,17 @@ from notifications.kinds import PAYMENT_KINDS, PLAN_KINDS, REMINDER_KINDS, group
 from notifications.models import Notification
 
 LIST_FILTERS = frozenset({"all", "action", "payments", "plans", "reminders"})
+NOTIFICATION_VISIBLE_LIMIT = 30
+
+
+def visible_notifications_qs(user):
+    """Newest notifications the app surfaces (list, filters, nav unread badge)."""
+    ids = (
+        Notification.objects.filter(user=user)
+        .order_by("-created_at", "-id")
+        .values_list("pk", flat=True)[:NOTIFICATION_VISIBLE_LIMIT]
+    )
+    return Notification.objects.filter(pk__in=ids).order_by("-created_at", "-id")
 
 
 def _payments_by_id(ids: set[int]) -> dict[int, object]:
@@ -185,7 +196,7 @@ def notification_item_dict(note: Notification, *, resolved_value: str | None) ->
 
 
 def filter_queryset(user, filter_name: str):
-    qs = Notification.objects.filter(user=user).order_by("-created_at", "-id")
+    qs = visible_notifications_qs(user)
     if filter_name == "all":
         return qs
     if filter_name == "payments":
@@ -198,9 +209,7 @@ def filter_queryset(user, filter_name: str):
 
 
 def action_notification_queryset(user):
-    return Notification.objects.filter(user=user, payload__has_key="action").order_by(
-        "-created_at", "-id"
-    )
+    return visible_notifications_qs(user).filter(payload__has_key="action")
 
 
 def notifications_for_action_filter(user) -> list[Notification]:
@@ -210,7 +219,7 @@ def notifications_for_action_filter(user) -> list[Notification]:
 
 
 def notification_counts(user) -> tuple[dict[str, int], int]:
-    base = Notification.objects.filter(user=user)
+    base = visible_notifications_qs(user)
     counts = {
         "all": base.count(),
         "payments": base.filter(kind__in=PAYMENT_KINDS).count(),

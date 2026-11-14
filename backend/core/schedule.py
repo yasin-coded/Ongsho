@@ -37,7 +37,7 @@ def first_bill_date(start_date: date, trial_end_date: date | None) -> date:
 
 
 def first_renewal_date(schedule: Schedule) -> date:
-    """First date a member or owner is charged. Plan start itself is never a due date."""
+    """First cycle-end / provider renewal (plan start is not a renewal for non-trial plans)."""
     first = first_bill_date(schedule.start_date, schedule.trial_end_date)
     if schedule.trial_end_date:
         return first
@@ -48,6 +48,44 @@ def first_renewal_date(schedule: Schedule) -> date:
         schedule.cycle_count,
         1,
     )
+
+
+@dataclass(frozen=True)
+class BillingPeriod:
+    period_start: date
+    due_date: date
+    period_end: date
+
+
+def renewal_k_start(schedule: Schedule) -> int:
+    """Index of the first renewal due date (trial end is k=0; otherwise start date is not a renewal)."""
+    return 0 if schedule.trial_end_date else 1
+
+
+def billing_periods_between(schedule: Schedule, from_date: date, to_date: date) -> list[BillingPeriod]:
+    """Cycles from plan start: period_start … due_date inclusive; next period starts due_date + 1 day."""
+    first = first_bill_date(schedule.start_date, schedule.trial_end_date)
+    start_k = renewal_k_start(schedule)
+    end_before = stop_date(schedule)
+    out: list[BillingPeriod] = []
+    k = start_k
+    while k < 50000:
+        due = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k)
+        if end_before is not None and due >= end_before:
+            break
+        if k == start_k:
+            period_start = first
+        else:
+            period_start = nth_due_date(
+                first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k - 1
+            ) + timedelta(days=1)
+        period_end = period_end_for(schedule, due)
+        if period_start > to_date:
+            break
+        if period_end >= from_date:
+            out.append(BillingPeriod(period_start=period_start, due_date=due, period_end=period_end))
+        k += 1
+    return out
 
 
 def _last_day(year: int, month: int) -> int:
@@ -81,7 +119,7 @@ def nth_due_date(first: date, anchor_day: int, unit: str, count: int, k: int) ->
 
 
 def schedule_date_counts_for_user(on_date: date, *, today: date, billing_from: date) -> bool:
-    """Past renewals always count; future ones only on or after billing_from."""
+    """Past renewals always count; future ones only once member billing has started (billing_from)."""
     if on_date < today:
         return True
     return on_date >= billing_from
@@ -101,10 +139,11 @@ def stop_date(schedule: Schedule) -> date | None:
 
 
 def due_dates_between(schedule: Schedule, from_date: date, to_date: date) -> list[date]:
+    """Renewal (cycle-end) dates only — plan start is not a renewal."""
     first = first_bill_date(schedule.start_date, schedule.trial_end_date)
     end_before = stop_date(schedule)
     out: list[date] = []
-    k = 0
+    k = renewal_k_start(schedule)
     while True:
         due = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k)
         if due > to_date:
@@ -118,9 +157,10 @@ def due_dates_between(schedule: Schedule, from_date: date, to_date: date) -> lis
 
 
 def next_due_date(schedule: Schedule, from_date: date) -> date | None:
+    """Next renewal on or after from_date (plan start is never returned for non-trial plans)."""
     first = first_bill_date(schedule.start_date, schedule.trial_end_date)
     end_before = stop_date(schedule)
-    k = 0
+    k = renewal_k_start(schedule)
     while True:
         due = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k)
         if end_before is not None and due >= end_before:
@@ -133,16 +173,9 @@ def next_due_date(schedule: Schedule, from_date: date) -> date | None:
 
 
 def period_end_for(schedule: Schedule, due_date: date) -> date:
-    first = first_bill_date(schedule.start_date, schedule.trial_end_date)
-    k = 0
-    while True:
-        due = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k)
-        if due == due_date:
-            nxt = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k + 1)
-            return nxt - timedelta(days=1)
-        if due > due_date:
-            raise ValueError("due_date is not on the billing schedule")
-        k += 1
+    """Cycle ends on the renewal date; the following period begins the next calendar day."""
+    _ = schedule
+    return due_date
 
 
 def price_at(prices: Sequence[Any], on_date: date) -> Decimal:
@@ -179,8 +212,10 @@ def _first_on_or_after(
     unit: str,
     count: int,
     on_or_after: date,
+    *,
+    start_k: int = 0,
 ) -> date | None:
-    k = 0
+    k = start_k
     while True:
         due = nth_due_date(first, anchor_day, unit, count, k)
         if due >= on_or_after:
@@ -192,12 +227,15 @@ def _first_on_or_after(
 
 def validate_next_renewal(schedule: Schedule, target: date, today: date) -> bool:
     first = first_bill_date(schedule.start_date, schedule.trial_end_date)
+    start_k = renewal_k_start(schedule)
     unit = schedule.cycle_unit
     if unit in ("month", "year"):
         anchor = target.day
         if unit == "year" and target.month != first.month:
             return False
-        expected = _first_on_or_after(first, anchor, unit, schedule.cycle_count, today)
+        expected = _first_on_or_after(first, anchor, unit, schedule.cycle_count, today, start_k=start_k)
     else:
-        expected = _first_on_or_after(first, schedule.anchor_day, unit, schedule.cycle_count, today)
+        expected = _first_on_or_after(
+            first, schedule.anchor_day, unit, schedule.cycle_count, today, start_k=start_k
+        )
     return expected is not None and target == expected

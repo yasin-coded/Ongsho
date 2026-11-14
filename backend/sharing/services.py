@@ -36,13 +36,17 @@ def _audit(user, action: str, entity_type: str, entity_id: int, summary: str, *,
 
 
 def _per_seat_bdt(shared: SharedPlan) -> Decimal | None:
+    from dues.splitting import reseller_split_divisor
+
     data = price_now_dict(shared.subscription)
     if not data:
         return None
     amount_bdt = Decimal(str(data["amount_bdt"]))
     if shared.split_type != SplitType.EQUAL:
         return None
-    return quantize_money(amount_bdt / Decimal(shared.seats))
+    taken = _not_left_members(shared).count()
+    div = reseller_split_divisor(shared, taken)
+    return quantize_money(amount_bdt / Decimal(div))
 
 
 def _invite_share_message(shared: SharedPlan) -> str:

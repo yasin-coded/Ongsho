@@ -188,25 +188,107 @@ def my_portion(
     return quantize_money(proj) if proj is not None else Decimal("0")
 
 
-def _spend_rows(ctx: DashCtx, month_start: date) -> list[dict]:
-    month_end = _month_last_day(month_start)
-    rows = []
+def _charges_overlapping_month(
+    ctx: DashCtx, sub_id: int, month_start: date, month_end: date
+) -> list[Charge]:
+    return [
+        ch
+        for ch in ctx.charges_by_sub.get(sub_id, [])
+        if ch.period_start <= month_end and ch.due_date >= month_start
+    ]
+
+
+def _paid_amount_on_charge(ctx: DashCtx, member: Member, charge: Charge) -> Decimal | None:
+    for due in ctx.dues_by_charge.get(charge.pk, []):
+        if due.member_id == member.pk and due.status == DueStatus.PAID:
+            return quantize_money(due.amount_bdt)
+    return None
+
+
+def _append_spend_row(
+    rows: list[dict],
+    sub: Subscription,
+    *,
+    role: str,
+    on_date: date,
+    amt: Decimal,
+) -> None:
+    if amt <= 0:
+        return
+    rows.append(
+        {
+            "plan_id": sub.pk,
+            "plan_name": sub.plan_name,
+            "role": role,
+            "date": on_date.isoformat(),
+            "amount": str(amt),
+            "yearly": sub.cycle_unit == CycleUnit.YEAR,
+            "category": {"id": sub.category_id, "name": sub.category.name},
+        }
+    )
+
+
+def _paid_spend_rows(ctx: DashCtx, month_start: date, month_end: date) -> list[dict]:
+    """Confirmed spend: PAID member dues on cycles overlapping this month (not only renewal dates in-month)."""
+    rows: list[dict] = []
     for sub in ctx.subs_owned:
+        shared = ctx.shared_by_sub.get(sub.pk)
+        taken = len(ctx.members_by_sub.get(sub.pk, []))
+        is_shared = _is_shared(sub, shared, taken)
+        if sub.plan_mode == PlanMode.RESELLER:
+            continue
+        if is_shared:
+            seat = _owner_owner_seat(ctx, sub)
+            if seat is None:
+                continue
+            for ch in _charges_overlapping_month(ctx, sub.pk, month_start, month_end):
+                amt = _paid_amount_on_charge(ctx, seat, ch)
+                if amt:
+                    _append_spend_row(rows, sub, role="owner", on_date=ch.due_date, amt=amt)
+        else:
+            for ch in _charges_overlapping_month(ctx, sub.pk, month_start, month_end):
+                if ch.period_start > ctx.today:
+                    continue
+                _append_spend_row(
+                    rows,
+                    sub,
+                    role="owner",
+                    on_date=ch.due_date,
+                    amt=quantize_money(ch.amount_bdt),
+                )
+    for mem in ctx.memberships:
+        sub = mem.shared_plan.subscription
+        for ch in _charges_overlapping_month(ctx, sub.pk, month_start, month_end):
+            if ch.period_start < mem.joined_on:
+                continue
+            amt = _paid_amount_on_charge(ctx, mem, ch)
+            if amt:
+                _append_spend_row(rows, sub, role="member", on_date=ch.due_date, amt=amt)
+    return rows
+
+
+def _owner_owner_seat(ctx: DashCtx, sub: Subscription) -> Member | None:
+    for m in ctx.members_by_sub.get(sub.pk, []):
+        if m.user_id == sub.owner_id:
+            return m
+    return None
+
+
+def _spend_rows(ctx: DashCtx, month_start: date, *, paid_only: bool = False) -> list[dict]:
+    month_end = _month_last_day(month_start)
+    if paid_only:
+        return _paid_spend_rows(ctx, month_start, month_end)
+    rows = []
+    from dues.selectors import member_renewal_dates_in_month, member_share_on_renewal_date
+
+    for sub in ctx.subs_owned:
+        shared = ctx.shared_by_sub.get(sub.pk)
+        taken = len(ctx.members_by_sub.get(sub.pk, []))
+        is_shared = _is_shared(sub, shared, taken)
         for d in _schedule_dates_in_range(sub, month_start, month_end, ctx.today):
             amt = my_portion(ctx, sub=sub, role="owner", on_date=d, member=None)
             if amt > 0:
-                rows.append(
-                    {
-                        "plan_id": sub.pk,
-                        "plan_name": sub.plan_name,
-                        "role": "owner",
-                        "date": d.isoformat(),
-                        "amount": str(amt),
-                        "yearly": sub.cycle_unit == CycleUnit.YEAR,
-                        "category": {"id": sub.category_id, "name": sub.category.name},
-                    }
-                )
-    from dues.selectors import member_renewal_dates_in_month, member_share_on_renewal_date
+                _append_spend_row(rows, sub, role="owner", on_date=d, amt=amt)
 
     for mem in ctx.memberships:
         sub = mem.shared_plan.subscription
@@ -216,17 +298,7 @@ def _spend_rows(ctx: DashCtx, month_start: date) -> list[dict]:
                 continue
             amt = member_share_on_renewal_date(mem, d, ctx.today, prices)
             if amt and amt > 0:
-                rows.append(
-                    {
-                        "plan_id": sub.pk,
-                        "plan_name": sub.plan_name,
-                        "role": "member",
-                        "date": d.isoformat(),
-                        "amount": str(amt),
-                        "yearly": sub.cycle_unit == CycleUnit.YEAR,
-                        "category": {"id": sub.category_id, "name": sub.category.name},
-                    }
-                )
+                _append_spend_row(rows, sub, role="member", on_date=d, amt=amt)
     return rows
 
 
@@ -399,7 +471,7 @@ def _next7(ctx: DashCtx) -> list[dict]:
 
 def dashboard_summary(user, *, month: date, today: date) -> dict:
     ctx = DashCtx(user, today)
-    rows = _spend_rows(ctx, month)
+    rows = _spend_rows(ctx, month, paid_only=True)
     owned = sum((Decimal(r["amount"]) for r in rows if r["role"] == "owner"), Decimal("0"))
     joined = sum((Decimal(r["amount"]) for r in rows if r["role"] == "member"), Decimal("0"))
     month_key = month.strftime("%Y-%m")

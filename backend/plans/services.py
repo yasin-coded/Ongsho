@@ -178,10 +178,12 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
                 code="next_renewal_mismatch",
                 fields={"next_renewal_date": ["Next renewal date does not match the billing schedule."]},
             )
-        billing_from = next_renewal
         anchor_day = next_renewal.day
+        from core.schedule import first_bill_date
+
+        billing_from = first_bill_date(start_date, trial_end)
     else:
-        from core.schedule import Schedule as BillingSchedule, first_renewal_date
+        from core.schedule import Schedule as BillingSchedule, first_bill_date
 
         draft = BillingSchedule(
             start_date=start_date,
@@ -192,8 +194,8 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
             renewal_type=validated["renewal_type"],
             end_date=validated.get("end_date"),
         )
-        billing_from = first_renewal_date(draft)
-        anchor_day = billing_from.day
+        billing_from = first_bill_date(start_date, trial_end)
+        anchor_day = start_date.day
     status = (
         SubscriptionStatus.TRIAL
         if trial_end and today < trial_end
@@ -281,18 +283,17 @@ def apply_next_renewal_date(user, pk: int, target) -> Subscription:
             code="next_renewal_mismatch",
             fields={"next_renewal_date": ["Next renewal date does not match the billing schedule."]},
         )
-    old = {"anchor_day": sub.anchor_day, "billing_from": sub.billing_from.isoformat()}
+    old = {"anchor_day": sub.anchor_day}
     sub.anchor_day = target.day
-    sub.billing_from = target
     void_untouched_charges_on_or_after(sub, target)
-    sub.save(update_fields=["anchor_day", "billing_from"])
+    sub.save(update_fields=["anchor_day"])
     _plan_audit(
         user,
         "plan.next_renewal",
         "Subscription",
         sub.pk,
         old,
-        {"anchor_day": sub.anchor_day, "billing_from": sub.billing_from.isoformat()},
+        {"anchor_day": sub.anchor_day},
         sub,
         f"You changed the next renewal date to {target.isoformat()}",
     )

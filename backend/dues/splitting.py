@@ -38,10 +38,22 @@ def members_for_charge(shared: SharedPlan, charge: Charge) -> list[Member]:
     return list(qs)
 
 
+def reseller_split_divisor(shared: SharedPlan, active_members: int) -> int:
+    """Seat cap when full; otherwise split the plan price across joined members only."""
+    cap = shared.seats
+    if active_members >= cap:
+        return cap
+    return max(active_members, 1)
+
+
 def split_charge(shared: SharedPlan, members: list[Member], amount_bdt: Decimal) -> SplitResult:
     if not members:
         return SplitResult(ok=False, amounts=[], reason="no_members")
     total = quantize_money(Decimal(amount_bdt))
+    if shared.subscription.plan_mode == PlanMode.RESELLER:
+        div = reseller_split_divisor(shared, len(members))
+        per = quantize_money(total / Decimal(div))
+        return SplitResult(ok=True, amounts=[per] * len(members))
     if shared.split_type == SplitType.EQUAL:
         amounts = split_exact(total, len(members), 0)
         return SplitResult(ok=True, amounts=amounts)

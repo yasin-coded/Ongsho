@@ -11,11 +11,12 @@ from django.db.models import Count
 from billing.models import Charge
 from core.money import quantize_money
 from dues.models import Due, DueStatus
+from dues.splitting import reseller_split_divisor
 from payments.models import Payment, PaymentAllocation, ReviewStatus
 from plans.models import PlanMode, Subscription, SubscriptionStatus
 from plans.selectors import price_now_dict
 from sharing import selectors as sharing_selectors
-from sharing.models import Member, MemberStatus, SharedPlan
+from sharing.models import Member, MemberStatus, SharedPlan, SplitType
 
 
 def _first_name(user) -> str:
@@ -30,13 +31,23 @@ def _is_shared(sub: Subscription, shared: SharedPlan | None, seats_taken: int) -
     return seats_taken > 1
 
 
-def _per_seat_bdt(sub: Subscription, shared: SharedPlan | None, *, is_shared: bool) -> str | None:
+def _per_seat_bdt(
+    sub: Subscription,
+    shared: SharedPlan | None,
+    *,
+    is_shared: bool,
+    seats_taken: int | None = None,
+) -> str | None:
     if not is_shared or shared is None or not shared.seats:
         return None
     price = price_now_dict(sub)
     if price is None or not price.get("amount_bdt"):
         return None
     amount = Decimal(price["amount_bdt"])
+    taken = seats_taken if seats_taken is not None else sharing_selectors.member_count_active(shared)
+    if sub.plan_mode == PlanMode.RESELLER or shared.split_type == SplitType.EQUAL:
+        div = reseller_split_divisor(shared, taken)
+        return str(quantize_money(amount / Decimal(div)))
     return str(quantize_money(amount / Decimal(shared.seats)))
 
 
@@ -134,11 +145,15 @@ def prefetch_owner_plan_context(subscriptions: list[Subscription], today: date) 
 
     for sub in subscriptions:
         chs = ctx.charges_by_sub.get(sub.pk, [])
-        past = [c for c in chs if c.due_date <= today]
+        in_cycle = [c for c in chs if c.period_start <= today <= c.due_date]
+        if in_cycle:
+            ctx.current_charge_by_sub[sub.pk] = min(in_cycle, key=lambda c: (c.due_date, c.pk))
+            continue
+        past = [c for c in chs if c.due_date < today]
         if past:
             ctx.current_charge_by_sub[sub.pk] = max(past, key=lambda c: (c.due_date, c.pk))
         else:
-            future = [c for c in chs if c.due_date > today]
+            future = [c for c in chs if c.due_date >= today]
             ctx.current_charge_by_sub[sub.pk] = (
                 min(future, key=lambda c: (c.due_date, c.pk)) if future else None
             )
@@ -162,6 +177,9 @@ def prefetch_owner_plan_context(subscriptions: list[Subscription], today: date) 
 
 
 def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
+    from core.dates import today_dhaka
+
+    today = today_dhaka()
     shared = ctx.shared(sub.pk)
     taken = ctx.seats_taken(sub.pk)
     is_shared = _is_shared(sub, shared, taken)
@@ -177,18 +195,29 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
 
     members_out = []
     pending_count = 0
-    if charge and is_shared:
-        due_by_member = {d.member_id: d for d in ctx.dues_by_charge.get(charge.pk, [])}
+    if is_shared:
+        due_by_member = (
+            {d.member_id: d for d in ctx.dues_by_charge.get(charge.pk, [])} if charge else {}
+        )
         for m in ctx.members_by_sub.get(sub.pk, []):
             if sub.plan_mode == PlanMode.RESELLER and m.user_id == sub.owner_id:
                 continue
             due = due_by_member.get(m.pk)
             due_status = due.status if due else None
+            if (
+                due_status is None
+                and charge
+                and today >= m.joined_on
+                and charge.period_start <= today <= charge.due_date
+                and today >= sub.billing_from
+            ):
+                due_status = DueStatus.DUE
             if due_status == DueStatus.PENDING:
                 pending_count += 1
             members_out.append(
                 {
                     "id": m.pk,
+                    "user_id": m.user_id,
                     "name": m.user.name,
                     "first_name": _first_name(m.user),
                     "avatar_id": m.user.avatar_id,
@@ -200,7 +229,7 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
     return {
         "seats": seats,
         "seats_taken": taken if shared else None,
-        "per_seat": _per_seat_bdt(sub, shared, is_shared=is_shared),
+        "per_seat": _per_seat_bdt(sub, shared, is_shared=is_shared, seats_taken=taken),
         "members": members_out,
         "pending_count": pending_count if is_shared and charge else 0,
         "collected": collected,

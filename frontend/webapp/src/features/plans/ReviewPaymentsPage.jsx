@@ -200,7 +200,15 @@ function Review({ r }) {
       />
       <div className="stat-grid">
         <StatCard label="Waiting for you" value={r.waiting.count} helper={`${r.waiting.count === 1 ? 'transaction ID' : 'transaction IDs'}, ${formatBDT(r.waiting.total, { trim: true })} together`} />
-        <StatCard label="Confirmed from members" value={formatBDT(r.confirmed.amount, { trim: true })} helper={`of ${formatBDT(r.confirmed.expected, { trim: true })} from ${plural(r.confirmed.members, 'member')}`} />
+        <StatCard
+          label="Confirmed from members"
+          value={formatBDT(r.confirmed.amount, { trim: true })}
+          helper={
+            r.confirmed.waived > 0
+              ? `${formatBDT(r.confirmed.paid, { trim: true })} paid, ${formatBDT(r.confirmed.waived, { trim: true })} waived · of ${formatBDT(r.confirmed.expected, { trim: true })} from ${plural(r.confirmed.members, 'member')}`
+              : `of ${formatBDT(r.confirmed.expected, { trim: true })} from ${plural(r.confirmed.members, 'member')}`
+          }
+        />
         <StatCard label="Still Due" value={r.stillDue} tone={r.stillDue ? '#d40000' : undefined} helper={r.stillDue ? `${r.stillDue === 1 ? 'member has' : 'members have'} not paid or sent an ID` : 'everyone has either paid or sent an ID'} />
       </div>
 

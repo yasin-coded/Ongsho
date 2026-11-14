@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { BadgeCheck, HandCoins, RotateCcw, X } from 'lucide-react'
 import { markDuePaid, normalizeTid, rejectPayment, setDueBack, submitPayment, waiveDue, waivePayment } from '@/api/payments'
 import { METHODS, METHOD_KEYS } from '@/lib/colors'
-import { MOCK_TODAY, todayDhaka } from '@/lib/dates'
+import { todayDhaka } from '@/lib/dates'
 import { formatBDT } from '@/lib/money'
 import { useAction } from '@/hooks/useAction'
 import { focusFirstInvalid } from '@/lib/formFocus'
@@ -15,7 +15,11 @@ const methodOptions = METHOD_KEYS.map((k) => ({ value: k, label: METHODS[k].labe
 
 export function RejectPaymentModal({ paymentId, name, onClose }) {
   const [reason, setReason] = useState('')
-  const act = useAction(() => rejectPayment(paymentId, { reason }), { onSuccess: onClose, tone: 'due' })
+  const act = useAction(() => rejectPayment(paymentId, { reason }), {
+    onSuccess: onClose,
+    tone: 'due',
+    invalidate: ['plans', 'shared', 'dashboard', 'nav', 'calendar', 'notifications'],
+  })
   return (
     <Modal open onClose={onClose} title="Reject this payment?" subtitle={name ? `${name} will see your reason, and the due goes back to Due.` : 'The member will see your reason, and the due goes back to Due.'}>
       <form
@@ -47,7 +51,11 @@ export function RejectPaymentModal({ paymentId, name, onClose }) {
 /** Waive a pending payment (paymentId) or a due directly (dueId). */
 export function WaiveModal({ paymentId, dueId, name, onClose }) {
   const [note, setNote] = useState('')
-  const act = useAction(() => (paymentId ? waivePayment(paymentId, { note }) : waiveDue(dueId, { note })), { onSuccess: onClose, tone: 'waived' })
+  const act = useAction(() => (paymentId ? waivePayment(paymentId, { note }) : waiveDue(dueId, { note })), {
+    onSuccess: onClose,
+    tone: 'waived',
+    invalidate: ['plans', 'shared', 'dashboard', 'nav', 'calendar', 'notifications'],
+  })
   return (
     <Modal open onClose={onClose} title="Waive this due?" subtitle={`${name ? `${name} owes` : 'They owe'} nothing for it after this. The note stays in the history.`}>
       <form
@@ -78,7 +86,7 @@ export function WaiveModal({ paymentId, dueId, name, onClose }) {
 
 export function MarkPaidModal({ dueId, planId, name, method = 'bkash', ownSeat = false, coverable: coverableProp = [], onClose }) {
   const coverable = ownSeat ? coverableProp : []
-  const [form, setForm] = useState({ date: MOCK_TODAY, method, note: '' })
+  const [form, setForm] = useState({ date: todayDhaka(), method, note: '' })
   const [pickedMembers, setPickedMembers] = useState(() => new Set())
   const [tid, setTid] = useState('')
   const [clientFields, setClientFields] = useState({})
@@ -91,7 +99,7 @@ export function MarkPaidModal({ dueId, planId, name, method = 'bkash', ownSeat =
         await submitPayment({ planId, dueIds: memberDueIds, method: form.method, tid })
       }
     },
-    { onSuccess: onClose },
+    { onSuccess: onClose, invalidate: ['plans', 'shared', 'dashboard', 'nav', 'calendar', 'notifications'] },
   )
 
   const toggleMember = (id) =>
@@ -189,7 +197,11 @@ export function MarkPaidModal({ dueId, planId, name, method = 'bkash', ownSeat =
 }
 
 export function SetDueModal({ dueId, name, ownSeat, onClose }) {
-  const act = useAction(() => setDueBack(dueId), { onSuccess: onClose, tone: 'due' })
+  const act = useAction(() => setDueBack(dueId), {
+    onSuccess: onClose,
+    tone: 'due',
+    invalidate: ['plans', 'shared', 'dashboard', 'nav', 'calendar', 'notifications'],
+  })
   return (
     <Modal
       open

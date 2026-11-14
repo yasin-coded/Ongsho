@@ -11,7 +11,7 @@ from billing.selectors import schedule_for_subscription
 from core.choices import Currency
 from core.exceptions import ConflictError, NotFound, ValidationFailed
 from core.money import quantize_money, to_bdt
-from core.schedule import due_dates_between, first_bill_date, period_end_for, price_at
+from core.schedule import billing_periods_between, first_bill_date, price_at
 from core.signals import charge_amount_changed, charges_created
 from plans.models import ExchangeRate, PriceChange, Subscription, SubscriptionStatus
 
@@ -53,10 +53,9 @@ def generate_missing_charges(plan: Subscription, today) -> dict[str, int]:
 
     plan = Subscription.objects.select_for_update().get(pk=plan.pk)
     schedule = schedule_for_subscription(plan)
-    first = first_bill_date(plan.start_date, plan.trial_end_date)
-    window_end = today + timedelta(days=CHARGE_LEAD_DAYS)
-    from_date = max(plan.billing_from, first)
-    due_list = [d for d in due_dates_between(schedule, from_date, window_end) if d >= plan.billing_from]
+    window_end = max(today + timedelta(days=CHARGE_LEAD_DAYS), today)
+    cycle_floor = first_bill_date(plan.start_date, plan.trial_end_date)
+    periods = billing_periods_between(schedule, cycle_floor, window_end)
 
     prices = _prices_for_plan(plan.pk)
     if not prices:
@@ -69,24 +68,24 @@ def generate_missing_charges(plan: Subscription, today) -> dict[str, int]:
             return {"created": 0, "errors": 1}
 
     created_rows: list[Charge] = []
-    for due in due_list:
-        if Charge.objects.filter(subscription=plan, period_start=due).exists():
+    for period in periods:
+        if Charge.objects.filter(subscription=plan, period_start=period.period_start).exists():
             continue
-        amount = quantize_money(price_at(prices, due))
+        amount = quantize_money(price_at(prices, period.due_date))
         rate_used = None
         amount_bdt = amount
         if plan.currency == Currency.USD:
             rate_used = rate_row.usd_to_bdt
             amount_bdt = to_bdt(amount, rate_used)
-        period_end = period_end_for(schedule, due)
-        locked = due <= today
-        status = ChargeStatus.DUE if locked else ChargeStatus.UPCOMING
+        active = today >= period.period_start
+        locked = period.due_date <= today
+        status = ChargeStatus.DUE if (locked or active) else ChargeStatus.UPCOMING
         created_rows.append(
             Charge.objects.create(
                 subscription=plan,
-                period_start=due,
-                period_end=period_end,
-                due_date=due,
+                period_start=period.period_start,
+                period_end=period.period_end,
+                due_date=period.due_date,
                 amount=amount,
                 currency=plan.currency,
                 rate_used=rate_used,

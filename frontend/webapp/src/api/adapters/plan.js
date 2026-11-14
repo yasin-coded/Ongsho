@@ -36,19 +36,43 @@ function planHeadcount(sub, members = []) {
 }
 
 function isMultiMemberPlan(sub, members = []) {
-  return planHeadcount(sub, members) > 1 || (sub.pending_invites?.length ?? 0) > 0
+  const headcount = planHeadcount(sub, members)
+  if (sub.plan_mode === 'reseller') return headcount > 0 || (sub.pending_invites?.length ?? 0) > 0
+  return headcount > 1 || (sub.pending_invites?.length ?? 0) > 0
+}
+
+function billableMembers(sub, members) {
+  return members.filter((m) => !(sub.plan_mode === 'reseller' && m.isOwnerSeat))
+}
+
+function resellerOwnerPill(roster) {
+  const pending = roster.filter((m) => m.dueStatus === 'pending').length
+  const due = roster.filter((m) => m.dueStatus === 'due').length
+  if (pending) return { key: 'review', label: `${pending} to review`, count: pending }
+  if (due) return { key: 'due', label: `${due} due`, count: due }
+  const known = roster.filter((m) => m.dueStatus != null)
+  if (known.length && known.every((m) => m.dueStatus === 'paid' || m.dueStatus === 'waived')) {
+    return { key: 'allpaid', label: 'All paid' }
+  }
+  return { key: 'partial', label: 'Not all paid' }
 }
 
 function statusPill(sub, members = []) {
   if (sub.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (sub.status !== 'active') return { key: sub.status, label: sub.status }
   if (!isMultiMemberPlan(sub, members)) return { key: 'solo', label: 'Just me' }
-  const pending = members.filter((m) => m.dueStatus === 'pending').length
-  const due = members.filter((m) => m.dueStatus === 'due').length
+  const roster = billableMembers(sub, members)
+  if (!roster.length) return { key: 'empty', label: 'No members yet' }
+  if (sub.plan_mode === 'reseller') return resellerOwnerPill(roster)
+  const pending = roster.filter((m) => m.dueStatus === 'pending').length
+  const due = roster.filter((m) => m.dueStatus === 'due').length
   if (pending) return { key: 'review', label: `${pending} to review`, count: pending }
   if (due) return { key: 'due', label: `${due} due`, count: due }
-  if (!members.length) return { key: 'empty', label: 'No members yet' }
-  return { key: 'allpaid', label: 'All paid' }
+  if (roster.some((m) => m.dueStatus == null)) return { key: 'upcoming', label: 'Not billed yet' }
+  if (roster.every((m) => m.dueStatus === 'paid' || m.dueStatus === 'waived')) {
+    return { key: 'allpaid', label: 'All paid' }
+  }
+  return { key: 'upcoming', label: 'Not billed yet' }
 }
 
 export function mapMemberRow(row, meUserId) {
@@ -88,7 +112,16 @@ export function mapSubscriptionSummary(sub, members = [], meUserId = null) {
     cycle: cycleFromApi(sub.cycle_unit, sub.cycle_count),
     currency: sub.currency,
     price,
-    perSeat: sub.per_seat ? moneyFromApi(sub.per_seat) : shared && members.length ? Math.floor(price.amount / Math.max(members.length, 1)) : price.amount,
+    perSeat: sub.per_seat
+      ? moneyFromApi(sub.per_seat)
+      : shared && (sub.seats ?? sub.seats_taken)
+        ? (() => {
+            const cap = Math.max(Number(sub.seats) || 0, 1)
+            const taken = Math.max(Number(sub.seats_taken) || members.length, 1)
+            const div = taken >= cap ? cap : taken
+            return Math.floor(price.amount / div)
+          })()
+        : price.amount,
     seatsCap: sub.seats ?? members.length ?? 1,
     seatsTaken: sub.seats_taken ?? members.length,
     shared,
@@ -130,9 +163,11 @@ export function mapListResponse(body, membersByPlan = new Map(), meUserId = null
     reviewDetail: true,
   }
   const items = page.items.map((sub) => {
-    const members = (sub.members ?? membersByPlan.get(sub.id) ?? []).map((m) =>
-      m.user_id !== undefined ? mapMemberRow(m, meUserId) : m,
-    )
+    const members = (sub.members ?? membersByPlan.get(sub.id) ?? []).map((m) => {
+      const hasStatus = m.due_status != null || m.dueStatus != null
+      if (m.user_id === undefined && !hasStatus) return m
+      return mapMemberRow({ ...m, user_id: m.user_id ?? m.userId ?? m.id }, meUserId)
+    })
     return mapSubscriptionSummary(sub, members, meUserId)
   })
   return { ...page, items, counts, totals, totalsMeta }
@@ -201,18 +236,22 @@ export function mapSubscriptionDetail(sub, extras = {}) {
   })
   const csf = sub.confirmed_so_far
   const confirmedSoFar = csf
-    ? {
-        paid: moneyFromApi(csf.paid) ?? 0,
-        waived: moneyFromApi(csf.waived) ?? 0,
-        pending: moneyFromApi(csf.pending) ?? 0,
-        total: moneyFromApi(csf.expected) ?? 0,
-      }
-    : {
-        paid: collected ?? 0,
-        waived: 0,
-        pending: 0,
-        total: expected ?? price.amount,
-      }
+  ? {
+      paid: moneyFromApi(csf.paid) ?? 0,
+      waived: moneyFromApi(csf.waived) ?? 0,
+      pending: moneyFromApi(csf.pending) ?? 0,
+      total: moneyFromApi(csf.expected) ?? 0,
+    }
+  : csf === null
+    ? null
+    : collected != null || expected != null
+      ? {
+          paid: collected ?? 0,
+          waived: 0,
+          pending: 0,
+          total: expected ?? price.amount,
+        }
+      : null
   return {
     ...summary,
     startDate: sub.start_date,

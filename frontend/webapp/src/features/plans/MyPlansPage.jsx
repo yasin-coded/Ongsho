@@ -18,7 +18,10 @@ import { Loadable, ownerMeta } from '@/features/common/PlanBits'
 
 function seatsText(plan) {
   if (!plan.shared) return 'just you'
-  if (plan.mode === 'reseller') return plural(plan.seatsCap, 'buyer')
+  if (plan.mode === 'reseller') {
+    const n = plan.seatsTaken ?? plan.members.length
+    return n ? plural(n, 'buyer') : `up to ${plural(plan.seatsCap, 'buyer')}`
+  }
   return `${plural(plan.seatsCap, 'seat')} (1 is yours)`
 }
 
@@ -44,7 +47,8 @@ function PlanCard({ plan }) {
           <span className="t-mid block">{formatBDT(plan.price.amount, { trim: true })}</span>
           <span className="t-meta block">
             {perCycleLabel(plan.cycle)}
-            {plan.shared && ` · ${formatBDT(plan.perSeat, { trim: true })} per seat`}
+            {plan.shared &&
+              ` · ${formatBDT(plan.perSeat, { trim: true })} per ${reseller ? 'buyer' : 'seat'}`}
           </span>
         </p>
       </div>

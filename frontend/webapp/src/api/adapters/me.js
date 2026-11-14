@@ -3,12 +3,15 @@ import { idStr } from './common'
 
 export function avatarIdFromColor(color) {
   const idx = AVATAR_COLORS.indexOf(color)
-  if (idx < 0) return 1
-  return idx + 1
+  if (idx < 0) return 'avatar_1'
+  return `avatar_${idx + 1}`
 }
 
 export function avatarColorFromId(avatarId) {
-  const n = Number(avatarId) || 1
+  if (!avatarId) return AVATAR_COLORS[0]
+  const key = String(avatarId).trim()
+  const tagged = /^avatar_(\d+)$/i.exec(key)
+  const n = tagged ? Number(tagged[1]) : Number(key) || 1
   return AVATAR_COLORS[Math.min(Math.max(n - 1, 0), AVATAR_COLORS.length - 1)]
 }
 

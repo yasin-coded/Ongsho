@@ -51,5 +51,7 @@ def nav_counts(user) -> dict[str, int]:
     )
     dues = due_plans.count()
 
-    unread = Notification.objects.filter(user=user, read_at__isnull=True).count()
+    from notifications.selectors import visible_notifications_qs
+
+    unread = visible_notifications_qs(user).filter(read_at__isnull=True).count()
     return {"reviews": reviews, "dues": dues, "unread": unread}
