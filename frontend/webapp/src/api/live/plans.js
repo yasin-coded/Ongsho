@@ -12,7 +12,8 @@ import {
 } from '../adapters/plan'
 import * as catalogLive from './catalog'
 import { getMe } from './accounts'
-import * as mock from '../mock/plans'
+import { enrichTransferError } from '../adapters/transfers'
+import { enrichStatementError } from '../adapters/statements'
 
 async function resolveServiceNameId(serviceName, categoryId) {
   const names = await catalogLive.getServiceNames()
@@ -238,14 +239,30 @@ export async function replaceMember(memberId, { email }) {
   await apiRequest('post', `/api/members/${Number(memberId)}/replace/`, { data: { email } })
 }
 
-export function startTransfer(planId, payload) {
-  return mock.startTransfer(planId, payload)
+export async function startTransfer(planId, { memberId, password }) {
+  try {
+    await apiRequest('post', `/api/shared-plans/${Number(planId)}/transfer/`, {
+      data: { member_id: Number(memberId), password },
+    })
+    return { message: 'Request sent. Nothing changes until they accept.' }
+  } catch (err) {
+    throw enrichTransferError(err)
+  }
 }
 
-export function cancelTransfer(transferId) {
-  return mock.cancelTransfer(transferId)
+export async function cancelTransfer(transferId) {
+  try {
+    await apiRequest('post', `/api/transfers/${Number(transferId)}/cancel/`)
+    return { message: 'Transfer cancelled. Nothing changed.' }
+  } catch (err) {
+    throw enrichTransferError(err)
+  }
 }
 
 export async function downloadOwnerStatement(planId, { month }) {
-  return downloadFile(`/api/shared-plans/${Number(planId)}/statement/`, { params: { month } })
+  try {
+    return await downloadFile(`/api/shared-plans/${Number(planId)}/statement/`, { params: { month } })
+  } catch (err) {
+    throw enrichStatementError(err)
+  }
 }

@@ -29,14 +29,17 @@ describe('review adapter', () => {
           transaction_id: 'ABC123',
           amount: '500.00',
           submitted_at: '2026-01-01T10:00:00+06:00',
-          covers: [{ due_id: 5, member_first_name: 'M', month: 'February', amount: '500.00' }],
+          covers: [
+            { due_id: 5, member_id: 3, member_first_name: 'M', month: 'February', amount: '500.00', is_payer: true },
+            { due_id: 6, member_id: 4, member_first_name: 'A', month: 'February', amount: '100.00', is_payer: false },
+          ],
         },
       ],
       decided: [
         {
           due_id: 7,
           payment_id: 4,
-          member: { first_name: 'A', email: 'a@example.com', avatar_id: 'coral' },
+          member: { first_name: 'A', email: 'a@example.com', avatar_id: 'coral', is_owner_seat: true },
           status: 'waived',
           amount: '100.00',
           waiver_note: 'Birthday',
@@ -51,6 +54,10 @@ describe('review adapter', () => {
     expect(out.plan.nextRenewal).toBe('2026-12-13')
     expect(out.decided[0].waiverNote).toBe('Birthday')
     expect(out.decided[0].paymentId).toBe('4')
+    expect(out.decided[0].isOwnerSeat).toBe(true)
+    expect(out.pending[0].covers[0].self).toBe(true)
+    expect(out.pending[0].covers[0].memberId).toBe('3')
+    expect(out.pending[0].covers[1].self).toBe(false)
     expect(out.stillDue).toBe(1)
   })
 })

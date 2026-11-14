@@ -4,7 +4,8 @@ import { mapUserFromApi } from '../adapters/me'
 import { idStr } from '../adapters/common'
 import { mapMySharedList, mapMySharedPlanDetail } from '../adapters/shared'
 import { getMe } from './accounts'
-import * as mock from '../mock/shared'
+import { enrichTransferError } from '../adapters/transfers'
+import { enrichStatementError } from '../adapters/statements'
 
 export async function getMyShared({ filter = 'all', page = 1, size = 5 } = {}) {
   const data = await apiRequest('get', '/api/me/shared-plans/', {
@@ -26,7 +27,11 @@ export async function getMySharedPlan(id) {
 }
 
 export async function downloadMyStatement(planId, { month }) {
-  return downloadFile(`/api/me/shared-plans/${Number(planId)}/statement/`, { params: { month } })
+  try {
+    return await downloadFile(`/api/me/shared-plans/${Number(planId)}/statement/`, { params: { month } })
+  } catch (err) {
+    throw enrichStatementError(err)
+  }
 }
 
 export async function acceptInvite(ref) {
@@ -60,12 +65,25 @@ export async function cancelLeaveRequest(planId) {
   await apiRequest('delete', `/api/shared-plans/${Number(planId)}/leave-request/`)
 }
 
-export function acceptTransfer(transferId) {
-  return mock.acceptTransfer(transferId)
+export async function acceptTransfer(transferId) {
+  try {
+    const data = await apiRequest('post', `/api/transfers/${Number(transferId)}/accept/`)
+    return {
+      planId: idStr(data.plan_id),
+      message: data.message ?? 'You now own this plan. It moved to My Plans with all its history.',
+    }
+  } catch (err) {
+    throw enrichTransferError(err)
+  }
 }
 
-export function declineTransfer(transferId) {
-  return mock.declineTransfer(transferId)
+export async function declineTransfer(transferId) {
+  try {
+    const data = await apiRequest('post', `/api/transfers/${Number(transferId)}/decline/`)
+    return { message: data.message ?? 'Transfer declined. Nothing changed.', planId: data.plan_id != null ? idStr(data.plan_id) : undefined }
+  } catch (err) {
+    throw enrichTransferError(err)
+  }
 }
 
 export async function getPendingInvites() {

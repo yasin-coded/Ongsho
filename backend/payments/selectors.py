@@ -16,6 +16,7 @@ from dues import selectors as dues_selectors
 from payments.models import Payment, PaymentAllocation, ReviewStatus
 from plans.models import PlanMode, Subscription
 from plans import selectors as plan_selectors
+from sharing import selectors as sharing_selectors
 from sharing.models import Member, MemberStatus, SharedPlan
 
 _REVIEW_RANK = {
@@ -348,9 +349,11 @@ def review_data(shared: SharedPlan, today: date) -> dict:
             covers.append(
                 {
                     "due_id": due.pk,
+                    "member_id": due.member_id,
                     "member_first_name": _first_name(due.member.user),
                     "month": _month_label(due.charge),
                     "amount": str(quantize_money(alloc.amount_applied)),
+                    "is_payer": due.member_id == pay.member_id,
                 }
             )
             if due.member_id != pay.member_id:
@@ -394,6 +397,7 @@ def review_data(shared: SharedPlan, today: date) -> dict:
                     "email": due.member.user.email,
                     "avatar_id": due.member.user.avatar_id,
                     "leave_requested": due.member.status == MemberStatus.LEAVE_REQUESTED,
+                    "is_owner_seat": sharing_selectors.is_owner_seat(due.member),
                 },
                 "status": due.status,
                 "amount": str(quantize_money(due.amount_bdt)),

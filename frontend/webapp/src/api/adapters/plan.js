@@ -4,6 +4,7 @@ import { categoryColor } from '@/lib/colors'
 import { fmtMonth } from '@/lib/dates'
 import { idStr, moneyFromApi, moneyToApi, rateFromApi, rateToApi, paginatedBody } from './common'
 import { avatarColorFromId } from './me'
+import { mapOwnerTransfer } from './transfers'
 
 function cycleFromApi(unit, count) {
   if (count > 1) return { unit, count }
@@ -223,7 +224,7 @@ export function mapSubscriptionDetail(sub, extras = {}) {
       firstName: lr.first_name,
       leaveRequestedAt: lr.leave_requested_at,
     })),
-    transfer: null,
+    transfer: mapOwnerTransfer(sub.transfer),
     collected: collected ?? undefined,
     expected: expected ?? undefined,
   }

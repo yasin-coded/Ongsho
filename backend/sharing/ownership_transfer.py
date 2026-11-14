@@ -203,7 +203,7 @@ def accept_ownership_transfer(user, transfer_id: int, *, today: date) -> dict:
         raise NotFound("Not found.")
     _require_pending(transfer)
     shared = SharedPlan.objects.select_for_update().get(pk=transfer.shared_plan_id)
-    sub = Subscription.objects.select_for_update().get(pk=shared.subscription_id)
+    sub = Subscription.all_with_archived.select_for_update().get(pk=shared.subscription_id)
     if sub.archived_on is not None:
         raise ConflictError("This plan is no longer available.", code="transfer_closed")
     if sub.plan_mode != PlanMode.OWNER:

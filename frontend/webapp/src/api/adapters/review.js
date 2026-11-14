@@ -6,8 +6,9 @@ import { idStr, moneyFromApi, paginatedBody } from './common'
 function mapCovers(covers) {
   return (covers ?? []).map((c) => ({
     dueId: idStr(c.due_id),
+    memberId: c.member_id != null ? idStr(c.member_id) : undefined,
     name: c.member_first_name,
-    self: false,
+    self: Boolean(c.is_payer),
     amount: moneyFromApi(c.amount),
     monthLong: c.month,
   }))
@@ -40,7 +41,7 @@ export function mapReview(data) {
     firstName: d.member?.first_name ?? '',
     email: d.member?.email ?? '',
     avatarColor: avatarColorFromId(d.member?.avatar_id),
-    isOwnerSeat: false,
+    isOwnerSeat: Boolean(d.member?.is_owner_seat),
     amount: moneyFromApi(d.amount),
     status: d.status,
     method: d.method,

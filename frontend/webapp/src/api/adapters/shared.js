@@ -2,11 +2,39 @@ import { lookupServiceKey } from '@/lib/services'
 import { fmtMonth } from '@/lib/dates'
 import { avatarColorFromId } from './me'
 import { idStr, moneyFromApi, paginatedBody } from './common'
+import { mapIncomingTransfer } from './transfers'
 
 function cycleFromApi(cycle) {
   if (!cycle) return { unit: 'month', count: 1 }
   if (cycle.count > 1) return { unit: cycle.unit, count: cycle.count }
   return { unit: cycle.unit, count: 1 }
+}
+
+function mapMemberHistoryRow(h) {
+  const dueDate = h.due_date ?? (h.month ? `${h.month}-01` : null)
+  return {
+    id: idStr(h.due_id ?? h.id),
+    dueDate,
+    monthLabel: dueDate ? fmtMonth(dueDate) : h.month ? fmtMonth(`${h.month}-01`) : '',
+    amount: moneyFromApi(h.amount),
+    status: h.status,
+    method: h.method ?? null,
+    tid: h.transaction_id ?? null,
+    waiverNote: h.waiver_note ?? null,
+    rejectionReason: h.rejection_reason ?? null,
+    wasRejected: Boolean(h.rejection_reason),
+    paymentId: h.payment_id != null ? idStr(h.payment_id) : null,
+  }
+}
+
+function mapOpenDueRow(d) {
+  return {
+    id: idStr(d.due_id ?? d.id),
+    amount: moneyFromApi(d.amount),
+    dueDate: d.due_date,
+    monthLabel: d.due_date ? fmtMonth(d.due_date) : d.month ? fmtMonth(`${d.month}-01`) : '',
+    rejectionReason: d.rejection_reason ?? null,
+  }
 }
 
 function mapRosterMember(m, myStatus) {
@@ -34,12 +62,7 @@ export function mapMySharedSummary(row, meUserId) {
   const openAmount = moneyFromApi(row.open_amount) ?? 0
   const pendingAmount = moneyFromApi(row.pending_amount) ?? 0
   const myShare = moneyFromApi(row.my_share) ?? openAmount ?? 0
-  const openDues = (row.open_dues ?? []).map((d) => ({
-    id: idStr(d.due_id ?? d.id),
-    amount: moneyFromApi(d.amount),
-    dueDate: d.due_date,
-    monthLabel: d.due_date ? fmtMonth(d.due_date) : d.month,
-  }))
+  const openDues = (row.open_dues ?? []).map(mapOpenDueRow)
   if (!openDues.length && (row.open_dues_count ?? 0) > 0 && openAmount > 0) {
     openDues.push({ id: `${subId}-open`, amount: openAmount, dueDate: null, monthLabel: '' })
   }
@@ -106,24 +129,8 @@ export function mapMySharedList(body, meUserId) {
 
 export function mapMySharedPlanDetail(row, meUserId) {
   const base = mapMySharedSummary(row, meUserId)
-  const openDues = (row.open_dues ?? []).map((d) => ({
-    id: idStr(d.due_id),
-    amount: moneyFromApi(d.amount),
-    dueDate: d.due_date,
-    monthLabel: d.due_date ? fmtMonth(d.due_date) : d.month,
-  }))
-  const history = (row.history ?? []).map((h) => ({
-    id: idStr(h.due_id),
-    dueDate: h.month ? `${h.month}-01` : null,
-    monthLabel: h.month ? fmtMonth(`${h.month}-01`) : '',
-    amount: moneyFromApi(h.amount),
-    status: h.status,
-    method: null,
-    tid: null,
-    waiverNote: null,
-    rejectionReason: null,
-    wasRejected: false,
-  }))
+  const openDues = (row.open_dues ?? []).map(mapOpenDueRow)
+  const history = (row.history ?? []).map(mapMemberHistoryRow)
   const members = (row.members ?? []).map((m) => mapRosterMember(m, base.myStatus))
   const coverable = (row.coverable ?? []).map((c) => ({
     id: idStr(c.due_id),
@@ -148,6 +155,7 @@ export function mapMySharedPlanDetail(row, meUserId) {
     pendingSince: row.pending_since,
     lastRejection: row.last_rejection,
     canRequestLeave: row.can_request_leave ?? true,
+    incomingTransfer: mapIncomingTransfer(row.incoming_transfer),
     me: {
       ...base.me,
       memberId: row.me?.member_id != null ? idStr(row.me.member_id) : base.me.memberId,

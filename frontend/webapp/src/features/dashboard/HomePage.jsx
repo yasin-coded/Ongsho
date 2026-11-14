@@ -79,7 +79,9 @@ function AttentionItem({ item }) {
   const navigate = useNavigate()
   const acceptI = useAction(() => acceptInvite(item.inviteId))
   const declineI = useAction(() => declineInvite(item.inviteId), { tone: 'waived' })
-  const acceptT = useAction(() => acceptTransfer(item.transferId))
+  const acceptT = useAction(() => acceptTransfer(item.transferId), {
+    onSuccess: (data) => data?.planId && navigate(`/app/plans/${data.planId}`),
+  })
   const declineT = useAction(() => declineTransfer(item.transferId), { tone: 'waived' })
 
   const { icon: KindIcon, tile } = notificationLook(item)

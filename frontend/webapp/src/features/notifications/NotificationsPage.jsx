@@ -39,7 +39,9 @@ function Actions({ n, onReject }) {
   const approve = useAction(() => confirmPayment(a.paymentId))
   const acceptI = useAction(() => acceptInvite(a.inviteId))
   const declineI = useAction(() => declineInvite(a.inviteId), { tone: 'waived' })
-  const acceptT = useAction(() => acceptTransfer(a.transferId))
+  const acceptT = useAction(() => acceptTransfer(a.transferId), {
+    onSuccess: (data) => data?.planId && navigate(`/app/plans/${data.planId}`),
+  })
   const declineT = useAction(() => declineTransfer(a.transferId), { tone: 'waived' })
 
   if (n.resolved) return <span className="neo-pill neo-pill--sm neo-pill--plain">{n.resolved}</span>

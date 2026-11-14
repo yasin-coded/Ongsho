@@ -91,7 +91,7 @@ def active_member_for_user(user, plan_id: int) -> Member:
 
 
 def members_queryset(shared: SharedPlan, *, include_left: bool = False):
-    qs = Member.objects.filter(shared_plan=shared).select_related("user")
+    qs = Member.objects.filter(shared_plan=shared).select_related("user", "shared_plan__subscription")
     if not include_left:
         qs = qs.exclude(status=MemberStatus.LEFT)
     sub = shared.subscription

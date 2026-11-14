@@ -28,6 +28,8 @@ export const API_FIELD_TO_FORM = {
   date: 'date',
   effective_from: 'effectiveFrom',
   password: 'password',
+  member_id: 'memberId',
+  month: 'month',
 }
 
 export class ApiError extends Error {

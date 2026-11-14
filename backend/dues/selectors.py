@@ -212,17 +212,47 @@ def prefetch_member_payment_ctx(shared: SharedPlan, members: list[Member], today
     return ctx
 
 
+def _member_due_payment_row(due: Due, payment: Payment | None, *, extra: dict | None = None) -> dict:
+    row = {
+        "due_id": due.pk,
+        "month": due.charge.period_start.strftime("%Y-%m"),
+        "amount": str(quantize_money(due.amount_bdt)),
+        "status": due.status,
+        "method": payment.method if payment else None,
+        "transaction_id": payment.transaction_id if payment else None,
+        "waiver_note": due.waiver_note or None,
+        "rejection_reason": due.rejection_reason or None,
+        "payment_id": payment.pk if payment else None,
+    }
+    if extra:
+        row.update(extra)
+    return row
+
+
+def _member_dues_payment_rows(dues: list[Due], extras_by_due_id: dict[int, dict] | None = None) -> list[dict]:
+    from payments.selectors import settling_allocations_for_dues
+
+    if not dues:
+        return []
+    alloc_by_due = settling_allocations_for_dues([d.pk for d in dues])
+    rows = []
+    for due in dues:
+        alloc = alloc_by_due.get(due.pk)
+        payment = alloc.payment if alloc else None
+        extra = (extras_by_due_id or {}).get(due.pk)
+        rows.append(_member_due_payment_row(due, payment, extra=extra))
+    return rows
+
+
 def member_history_rows(member: Member, *, limit: int = 5) -> list[dict]:
-    dues = (
+    dues = list(
         Due.objects.filter(member=member)
         .select_related("charge")
         .order_by("-charge__due_date", "-id")[:limit]
     )
     from payments.selectors import settling_allocations_for_dues, _paid_on, _recorded_by_owner
 
-    due_ids = [d.pk for d in dues]
-    alloc_by_due = settling_allocations_for_dues(due_ids)
-
+    alloc_by_due = settling_allocations_for_dues([d.pk for d in dues])
     rows = []
     for due in dues:
         alloc = alloc_by_due.get(due.pk)
@@ -230,18 +260,11 @@ def member_history_rows(member: Member, *, limit: int = 5) -> list[dict]:
         covered_by = None
         if payment and payment.member_id != member.pk:
             covered_by = _first_name(payment.member.user)
-        rows.append(
-            {
-                "due_id": due.pk,
-                "month": due.charge.period_start.strftime("%Y-%m"),
-                "amount": str(quantize_money(due.amount_bdt)),
-                "status": due.status,
-                "method": payment.method if payment else None,
-                "paid_on": _paid_on(payment),
-                "recorded_by_owner": _recorded_by_owner(payment),
-                "covered_by": covered_by,
-            }
-        )
+        row = _member_due_payment_row(due, payment)
+        row["paid_on"] = _paid_on(payment)
+        row["recorded_by_owner"] = _recorded_by_owner(payment)
+        row["covered_by"] = covered_by
+        rows.append(row)
     return rows
 
 
@@ -324,29 +347,52 @@ def _sync_member_dues(member: Member, today: date) -> None:
     from dues import services as dues_services
 
     sub = member.shared_plan.subscription
-    for charge in Charge.objects.filter(subscription=sub, period_start__gte=member.joined_on):
-        if Due.objects.filter(charge=charge, member=member).exists():
+    charges = list(
+        Charge.objects.filter(subscription=sub, period_start__gte=member.joined_on).order_by(
+            "period_start", "id"
+        )
+    )
+    if not charges:
+        return
+    have_due = set(
+        Due.objects.filter(member=member, charge_id__in=[c.pk for c in charges]).values_list(
+            "charge_id", flat=True
+        )
+    )
+    for charge in charges:
+        if charge.pk in have_due:
             continue
         dues_services.recalculate_dues(charge, today, force=True)
 
 
 def _member_open_dues_rows(member: Member) -> list[dict]:
-    open_dues_qs = (
+    from payments.selectors import settling_allocations_for_dues
+
+    open_dues_qs = list(
         Due.objects.filter(member=member, status=DueStatus.DUE)
         .select_related("charge")
         .order_by("charge__due_date", "id")
     )
-    return [
-        {
-            "due_id": d.pk,
-            "charge_id": d.charge_id,
-            "month": d.charge.period_start.strftime("%Y-%m"),
-            "due_date": d.charge.due_date.isoformat(),
-            "amount": str(quantize_money(d.amount_bdt)),
-            "rejection_reason": d.rejection_reason,
-        }
-        for d in open_dues_qs
-    ]
+    alloc_by_due = settling_allocations_for_dues([d.pk for d in open_dues_qs])
+    rows = []
+    for due in open_dues_qs:
+        alloc = alloc_by_due.get(due.pk)
+        payment = (
+            alloc.payment
+            if alloc and alloc.payment.review_status == ReviewStatus.PENDING
+            else None
+        )
+        rows.append(
+            _member_due_payment_row(
+                due,
+                payment,
+                extra={
+                    "charge_id": due.charge_id,
+                    "due_date": due.charge.due_date.isoformat(),
+                },
+            )
+        )
+    return rows
 
 
 def _member_roster_rows(member: Member) -> list[dict]:
@@ -513,8 +559,6 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
     row["recommended_method"] = sub.recommended_method
     row["mode"] = sub.plan_mode
 
-    row["open_dues"] = _member_open_dues_rows(member)
-
     pending_pay = (
         Payment.objects.filter(
             shared_plan=shared,
@@ -542,21 +586,15 @@ def me_shared_plan_detail(member: Member, today: date) -> dict:
     )["s"]
     row["total_spent"] = str(quantize_money(paid_sum))
 
-    history = Due.objects.filter(
-        member=member,
-        status__in=(DueStatus.PAID, DueStatus.WAIVED),
-    ).select_related("charge").order_by("-charge__due_date", "-id")
-    row["history"] = [
-        {
-            "due_id": d.pk,
-            "month": d.charge.period_start.strftime("%Y-%m"),
-            "amount": str(quantize_money(d.amount_bdt)),
-            "status": d.status,
-        }
-        for d in history
-    ]
-
-    row["members"] = _member_roster_rows(member)
+    history = list(
+        Due.objects.filter(
+            member=member,
+            status__in=(DueStatus.PAID, DueStatus.WAIVED),
+        )
+        .select_related("charge")
+        .order_by("-charge__due_date", "-id")
+    )
+    row["history"] = _member_dues_payment_rows(history)
 
     from sharing.selectors import incoming_transfer_for_member
     from sharing.serializers import incoming_transfer_row

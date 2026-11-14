@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mapMySharedList, mapMySharedPlanDetail } from './shared'
+import { mapSubscriptionDetail } from './plan'
+import { mapOwnerTransfer } from './transfers'
 
 describe('shared adapter', () => {
   it('list cards map members and payment method', () => {
@@ -71,7 +73,24 @@ describe('shared adapter', () => {
         members: [],
         coverable: [],
         ious: [{ you_owe: true, other: { first_name: 'Sam' }, amount: '100.00' }],
-        history: [],
+        history: [
+          {
+            due_id: 8,
+            month: '2026-01',
+            amount: '250.00',
+            status: 'paid',
+            method: 'bkash',
+            transaction_id: 'TX1',
+            waiver_note: null,
+            rejection_reason: null,
+            payment_id: 2,
+          },
+        ],
+        incoming_transfer: {
+          id: 5,
+          created_at: '2026-11-01T12:00:00+06:00',
+          from: { name: 'Sam', first_name: 'Sam', avatar_id: 'sage' },
+        },
         total_spent: '500.00',
         next_renewal: '2026-12-13',
         leave_requested: false,
@@ -87,5 +106,23 @@ describe('shared adapter', () => {
     expect(out.canRequestLeave).toBe(true)
     expect(out.me.memberId).toBe('9')
     expect(out.me.joinedOn).toBe('2026-01-01')
+    expect(out.history[0].method).toBe('bkash')
+    expect(out.history[0].tid).toBe('TX1')
+    expect(out.history[0].paymentId).toBe('2')
+    expect(out.incomingTransfer.id).toBe('5')
+    expect(out.incomingTransfer.from.firstName).toBe('Sam')
+  })
+})
+
+describe('owner transfer on plan detail', () => {
+  it('is wired through mapSubscriptionDetail', () => {
+    const sub = {
+      id: 1,
+      plan_name: 'Family',
+      service_name: { name: 'Spotify' },
+      renewal_type: 'auto',
+      transfer: { id: 9, status: 'pending', to: { id: 44, first_name: 'Lee' } },
+    }
+    expect(mapSubscriptionDetail(sub).transfer).toEqual(mapOwnerTransfer(sub.transfer))
   })
 })
