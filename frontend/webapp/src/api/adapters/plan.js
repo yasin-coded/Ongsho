@@ -54,6 +54,7 @@ function resellerOwnerPill(roster) {
   if (known.length && known.every((m) => m.dueStatus === 'paid' || m.dueStatus === 'waived')) {
     return { key: 'allpaid', label: 'All paid' }
   }
+  if (roster.some((m) => m.dueStatus == null)) return { key: 'upcoming', label: 'Not billed yet' }
   return { key: 'partial', label: 'Not all paid' }
 }
 

@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ArrowRightLeft, Ban, BadgeCheck, ChevronDown, Download, Eye, Mail, Pause, Play, RotateCcw, Trash2, UserPlus } from 'lucide-react'
 import { canSendInvite, freeSeats, inviteReservesSeat, pendingInvitesReservingSeats } from '@/lib/planSeats'
 import * as plansApi from '@/api/plans'
+import { keys } from '@/api/keys'
 import { METHODS, STATUS } from '@/lib/colors'
 import { MOCK_TODAY, fmtFull, fmtShort, fmtWhen, monthKey, plural, renewsInLabel } from '@/lib/dates'
 import { formatBDT, formatRate, formatUSD, parseTaka } from '@/lib/money'
@@ -722,7 +723,7 @@ function OwnerPlan({ plan }) {
 
 export function OwnerPlanPage() {
   const { id } = useParams()
-  const query = useQuery({ queryKey: ['plan', id], queryFn: () => plansApi.getSubscription(id) })
+  const query = useQuery({ queryKey: keys.subscription(id), queryFn: () => plansApi.getSubscription(id) })
   return (
     <Loadable query={query} skeleton={<SkeletonCard lines={6} />}>
       {(plan) => (plan.notFound ? <NotFoundPage inApp /> : <OwnerPlan plan={plan} />)}

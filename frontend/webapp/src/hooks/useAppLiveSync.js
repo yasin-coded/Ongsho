@@ -4,7 +4,7 @@ import { isLive } from '@/api/modes'
 import { keys } from '@/api/keys'
 
 /** How often to pull fresh nav counts / notifications while the tab is open (live API only). */
-export const LIVE_SYNC_MS = 45_000
+export const LIVE_SYNC_MS = 60_000
 
 /** Extra React Query options for endpoints backed by the Django API. */
 export function liveQueryOptions(apiName, { interval = LIVE_SYNC_MS } = {}) {
@@ -37,7 +37,6 @@ export function useAppLiveSync(pathname) {
       }
       if (pathname.startsWith('/app/plans')) {
         queryClient.invalidateQueries({ queryKey: ['subscriptions'], refetchType: 'active' })
-        queryClient.invalidateQueries({ queryKey: ['plan'], refetchType: 'active' })
         queryClient.invalidateQueries({ queryKey: ['subscription'], refetchType: 'active' })
         queryClient.invalidateQueries({ queryKey: ['review'], refetchType: 'active' })
       }

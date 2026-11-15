@@ -27,8 +27,13 @@ if "pytest" in sys.argv[0] or any(arg == "pytest" or arg.endswith("pytest") for 
     os.environ.setdefault("REFRESH_COOKIE_SECURE", "False")
     os.environ.setdefault("REFRESH_COOKIE_SAMESITE", "Lax")
     os.environ.setdefault("FRONTEND_ORIGINS", "http://localhost:5173")
+    os.environ.setdefault("CSRF_TRUSTED_ORIGINS", "http://localhost:5173")
     os.environ.setdefault("CACHE_BACKEND", "locmem")
     os.environ.setdefault("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
+    os.environ.setdefault("ADMIN_ENABLED", "True")
+    os.environ.setdefault("ADMIN_URL", "admin/")
+    os.environ.setdefault("SECURE_SSL_REDIRECT", "False")
+    os.environ.setdefault("TRUST_PROXY_SSL", "False")
 
 
 def _env_bool(name: str) -> bool:
@@ -49,6 +54,20 @@ def _env_str(name: str) -> str:
     raw = os.environ.get(name)
     if raw is None:
         raise RuntimeError(f"Missing required environment variable: {name}")
+    return raw.strip()
+
+
+def _env_bool_default(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_str_default(name: str, default: str) -> str:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
     return raw.strip()
 
 
@@ -76,8 +95,19 @@ def _use_direct_database_url() -> bool:
         "flush",
         "sqlmigrate",
         "squashmigrations",
+        "run_daily",
+        "seed_perf",
+        "shell",
+        "dbshell",
     }
     return any(cmd in sys.argv for cmd in management_cmds)
+
+
+def _db_conn_max_age(*, pooled_runtime: bool) -> int:
+    if not pooled_runtime:
+        return 0
+    raw = os.environ.get("DB_CONN_MAX_AGE", "60")
+    return int(raw.strip())
 
 
 def _database_config() -> dict:
@@ -85,6 +115,7 @@ def _database_config() -> dict:
         test_url = os.environ.get("TEST_DATABASE_URL")
         if test_url:
             return dj_database_url.parse(test_url, conn_max_age=0)
+    pooled_runtime = not _use_direct_database_url()
     if _use_direct_database_url():
         url_var = "DATABASE_URL"
     else:
@@ -92,7 +123,10 @@ def _database_config() -> dict:
     url = os.environ.get(url_var)
     if not url:
         raise RuntimeError(f"Missing required environment variable: {url_var}")
-    config = dj_database_url.parse(url, conn_max_age=0)
+    max_age = _db_conn_max_age(pooled_runtime=pooled_runtime)
+    config = dj_database_url.parse(url, conn_max_age=max_age)
+    if max_age > 0:
+        config["CONN_HEALTH_CHECKS"] = True
     if url_var == "DATABASE_URL_POOLED":
         # Top-level Django setting (not a libpq connect kwarg); required for PgBouncer transaction mode.
         config["DISABLE_SERVER_SIDE_CURSORS"] = True
@@ -102,6 +136,14 @@ def _database_config() -> dict:
 SECRET_KEY = os.environ["SECRET_KEY"]
 DEBUG = _env_bool("DEBUG")
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS")
+ADMIN_ENABLED = _env_bool_default("ADMIN_ENABLED", True)
+_admin_raw = _env_str_default("ADMIN_URL", "admin/").strip("/")
+ADMIN_URL = f"{_admin_raw}/" if _admin_raw else "admin/"
+
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS") if os.environ.get("CSRF_TRUSTED_ORIGINS") else []
+else:
+    CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
 if _running_pytest() and "testserver" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS = [*ALLOWED_HOSTS, "testserver"]
 
@@ -140,6 +182,7 @@ MIDDLEWARE = [
     "core.logging.RequestLogMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.ApiSecurityHeadersMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -181,7 +224,21 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
 
-REST_FRAMEWORK = {
+def apply_production_rest_framework(config: dict, *, debug: bool) -> dict:
+    if debug:
+        return config
+    return {
+        **config,
+        "DEFAULT_RENDERER_CLASSES": [
+            "rest_framework.renderers.JSONRenderer",
+        ],
+        "DEFAULT_PARSER_CLASSES": [
+            "rest_framework.parsers.JSONParser",
+        ],
+    }
+
+
+_REST_FRAMEWORK_BASE = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -190,6 +247,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 25,
     "EXCEPTION_HANDLER": "core.exceptions.ongsho_exception_handler",
 }
+REST_FRAMEWORK = apply_production_rest_framework(_REST_FRAMEWORK_BASE, debug=DEBUG)
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
@@ -257,6 +315,8 @@ else:
         }
     }
 
+SLOW_REQUEST_MS = int(os.environ.get("SLOW_REQUEST_MS", "800"))
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -288,3 +348,17 @@ LOGGING = {
         },
     },
 }
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1_048_576
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = _env_bool_default("SECURE_SSL_REDIRECT", True)
+    SECURE_HSTS_SECONDS = 31_536_000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+    SECURE_REFERRER_POLICY = "same-origin"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    if _env_bool_default("TRUST_PROXY_SSL", False):
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

@@ -102,7 +102,11 @@ def subscription_list_create(request):
         qs = selectors.owned_subscriptions(request.user, params)
         counts = selectors.subscription_list_counts(request.user)
         today = today_dhaka()
-        all_owned = list(selectors.owned_subscriptions(request.user, {}))
+        from plans.models import Subscription
+
+        all_owned = list(
+            Subscription.objects.filter(owner=request.user).select_related("service_name", "category")
+        )
         ctx = owner_selectors.prefetch_owner_plan_context(all_owned, today)
         paginator = OngshoPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=None)

@@ -1,28 +1,22 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router'
 import { ToastProvider } from '@/components/ui/Toast'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { forceMockMode } from '@/api/modes'
+import { createQueryClient } from '@/lib/queryClient'
 import { router } from './routes'
 
 const liveApi = !forceMockMode()
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      refetchOnWindowFocus: liveApi,
-      refetchOnReconnect: liveApi,
-      retry: (count, err) => (err?.status === 0 || !err?.status) && count < 1,
-    },
-  },
-})
+const queryClient = createQueryClient({ liveApi })
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }

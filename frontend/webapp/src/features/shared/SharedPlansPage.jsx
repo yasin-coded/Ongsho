@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Inbox, LogOut, ReceiptText } from 'lucide-react'
 import { getMyShared } from '@/api/shared'
+import { keys } from '@/api/keys'
 import { memberSharedStatus } from '@/api/adapters/shared'
 import { METHODS } from '@/lib/colors'
 import { fmtShort, plural } from '@/lib/dates'
@@ -124,7 +125,11 @@ export function SharedPlansPage() {
   const [page, setPage] = useState(1)
   const [payFor, setPayFor] = useState(null)
   const [leaving, setLeaving] = useState(null)
-  const query = useQuery({ queryKey: ['shared', { filter, page }], queryFn: () => getMyShared({ filter, page }), placeholderData: keepPreviousData })
+  const query = useQuery({
+    queryKey: keys.myShared({ filter, page }),
+    queryFn: () => getMyShared({ filter, page }),
+    placeholderData: keepPreviousData,
+  })
   const pick = (f) => {
     setFilter(f)
     setPage(1)

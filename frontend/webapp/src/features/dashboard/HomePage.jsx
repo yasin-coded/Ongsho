@@ -12,13 +12,14 @@ import { CHART, categoryColor } from '@/lib/colors'
 import { fmtShort, plural } from '@/lib/dates'
 import { formatBDT } from '@/lib/money'
 import { TopBar } from '@/components/layout/TopBar'
-import { Box, BoxHead, LinkBox, StatCard } from '@/components/ui/Box'
+import { Box, BoxHead, StatCard } from '@/components/ui/Box'
 import { Button, LinkButton } from '@/components/ui/Button'
 import { Avatar, AvatarStack } from '@/components/ui/Avatar'
 import { OwnerPlanPill, RoleTag, StatusPill } from '@/components/ui/Pill'
 import { ServiceLogo } from '@/components/ui/ServiceLogo'
 import { DashedDivider, EmptyState, SkeletonCard } from '@/components/ui/Misc'
-import { Donut, ForecastBars, Legend } from '@/components/ui/Charts'
+import { HomeDonut, HomeForecastBars, HomeLegend } from '@/features/dashboard/HomeCharts'
+import { PrefetchLink } from '@/components/ui/PrefetchLink'
 import { useViewport360 } from '@/hooks/useMediaQuery'
 import { EventList, Loadable, ownerMeta, Price, renewText } from '@/features/common/PlanBits'
 
@@ -27,7 +28,12 @@ const HOME_PLAN_LIMIT = 5
 function OwnerRow({ plan }) {
   return (
     <li>
-      <LinkBox to={`/app/plans/${plan.id}`} className="neo-box--flat flex flex-wrap items-center gap-4 !p-4">
+      <PrefetchLink
+        to={`/app/plans/${plan.id}`}
+        prefetchKind="owner"
+        prefetchId={plan.id}
+        className="neo-box neo-box--flat flex flex-wrap items-center gap-4 !p-4"
+      >
         <ServiceLogo serviceKey={plan.serviceKey} name={plan.serviceName} size="compact" />
         <div className="grid min-w-0 flex-[1_1_12rem] gap-1.5">
           <p className="t-sub truncate">{plan.planName}</p>
@@ -39,7 +45,7 @@ function OwnerRow({ plan }) {
           </div>
         </div>
         <Price amount={plan.price.amount} cycle={plan.cycle} />
-      </LinkBox>
+      </PrefetchLink>
     </li>
   )
 }
@@ -54,7 +60,12 @@ function MemberRow({ plan }) {
   }))
   return (
     <li>
-      <LinkBox to={`/app/shared/${plan.id}`} className="neo-box--flat flex flex-wrap items-center gap-4 !p-4">
+      <PrefetchLink
+        to={`/app/shared/${plan.id}`}
+        prefetchKind="shared"
+        prefetchId={plan.id}
+        className="neo-box neo-box--flat flex flex-wrap items-center gap-4 !p-4"
+      >
         <ServiceLogo serviceKey={plan.serviceKey} name={plan.serviceName} size="compact" />
         <div className="grid min-w-0 flex-[1_1_12rem] gap-1.5">
           <p className="t-sub truncate">{plan.planName}</p>
@@ -71,7 +82,7 @@ function MemberRow({ plan }) {
           </div>
         </div>
         <Price amount={plan.myShare} cycle={plan.cycle} />
-      </LinkBox>
+      </PrefetchLink>
     </li>
   )
 }
@@ -223,7 +234,7 @@ export function HomePage() {
                 label="You spent this month"
                 value={formatBDT(d.spend.total, { trim: true })}
                 visual={
-                  <Donut
+                  <HomeDonut
                     size={5.25}
                     compact={narrow}
                     label="Spent this month"
@@ -234,7 +245,7 @@ export function HomePage() {
                   />
                 }
               >
-                <Legend
+                <HomeLegend
                   compact
                   items={[
                     { name: 'Plans you own', value: d.spend.owned, fill: CHART.owned },
@@ -331,9 +342,9 @@ export function HomePage() {
                   <BoxHead title="Spend by category" sub="This month, your part only" />
                   {d.byCategory.length ? (
                     <div className="grid min-w-0 justify-items-center gap-4">
-                      <Donut size={6.5} compact={narrow} label="Spend by category" data={d.byCategory.map((c) => ({ name: c.name, value: c.amount, fill: categoryColor(c.name) }))} />
+                      <HomeDonut size={6.5} compact={narrow} label="Spend by category" data={d.byCategory.map((c) => ({ name: c.name, value: c.amount, fill: categoryColor(c.name) }))} />
                       <div className="w-full min-w-0">
-                        <Legend compact items={d.byCategory.map((c) => ({ name: c.name, value: c.amount, fill: categoryColor(c.name) }))} />
+                        <HomeLegend compact items={d.byCategory.map((c) => ({ name: c.name, value: c.amount, fill: categoryColor(c.name) }))} />
                       </div>
                     </div>
                   ) : (
@@ -347,11 +358,11 @@ export function HomePage() {
               <BoxHead title="Next 6 months" sub="What you pay each month, your part only. Yearly renewals stand out." />
               {d.forecast.some((m) => m.total > 0) ? (
                 <div className="grid gap-4">
-                  <ForecastBars compact={narrow} data={d.forecast} colors={{ this: CHART.thisMonth, regular: CHART.regular, yearly: CHART.yearly }} />
+                  <HomeForecastBars compact={narrow} data={d.forecast} colors={{ this: CHART.thisMonth, regular: CHART.regular, yearly: CHART.yearly }} />
                   <div className="chart-forecast-legend row flex-wrap gap-4 sm:gap-6">
-                    <Legend items={[{ name: 'This month', fill: CHART.thisMonth }]} />
-                    <Legend items={[{ name: 'Regular month', fill: CHART.regular }]} />
-                    <Legend items={[{ name: 'Has a yearly renewal', fill: CHART.yearly }]} />
+                    <HomeLegend items={[{ name: 'This month', fill: CHART.thisMonth }]} />
+                    <HomeLegend items={[{ name: 'Regular month', fill: CHART.regular }]} />
+                    <HomeLegend items={[{ name: 'Has a yearly renewal', fill: CHART.yearly }]} />
                   </div>
                 </div>
               ) : (

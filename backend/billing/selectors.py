@@ -187,13 +187,24 @@ def _member_schedule_events(
 
 
 def calendar_events(user, *, today: date, month_start: date) -> list[dict]:
+    from collections import defaultdict
+
+    from plans.models import PriceChange
+
     range_start = month_start
     month_end = _month_last_day(month_start)
     range_end = max(month_end, today + timedelta(days=6))
     events: list[dict] = []
-    owned = Subscription.objects.filter(owner=user, archived_on__isnull=True).order_by("plan_name")
+    owned = list(Subscription.objects.filter(owner=user, archived_on__isnull=True).order_by("plan_name"))
+    sub_ids = [s.pk for s in owned]
+    prices_by_sub: dict[int, list] = defaultdict(list)
+    if sub_ids:
+        for pc in PriceChange.objects.filter(subscription_id__in=sub_ids).order_by(
+            "subscription_id", "effective_from", "id"
+        ):
+            prices_by_sub[pc.subscription_id].append(pc)
     for sub in owned:
-        prices = list(PriceChange.objects.filter(subscription=sub).order_by("effective_from", "id"))
+        prices = prices_by_sub.get(sub.pk, [])
         if not prices:
             continue
         events.extend(_owner_schedule_events(sub, today, range_start, range_end, prices))

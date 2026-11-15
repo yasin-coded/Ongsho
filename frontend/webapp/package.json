@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "check:dist": "node scripts/check-dist.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

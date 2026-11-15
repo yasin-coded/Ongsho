@@ -77,11 +77,18 @@ function PlanCard({ plan }) {
         </div>
         <div className="row">
           {plan.pendingCount > 0 && (
-            <LinkButton to={`/app/plans/${plan.id}/review`} variant="yellow" size="sm" icon={Eye}>
+            <LinkButton
+              to={`/app/plans/${plan.id}/review`}
+              prefetchKind="review"
+              prefetchId={plan.id}
+              variant="yellow"
+              size="sm"
+              icon={Eye}
+            >
               Review payments
             </LinkButton>
           )}
-          <LinkButton to={`/app/plans/${plan.id}`} variant="ghost" size="sm">
+          <LinkButton to={`/app/plans/${plan.id}`} prefetchKind="owner" prefetchId={plan.id} variant="ghost" size="sm">
             Open plan
           </LinkButton>
         </div>

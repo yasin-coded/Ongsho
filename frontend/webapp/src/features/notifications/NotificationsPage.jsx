@@ -128,7 +128,7 @@ export function NotificationsPage() {
     queryKey: keys.notifications({ filter, page }),
     queryFn: () => getNotifications({ filter, page }),
     placeholderData: keepPreviousData,
-    ...liveQueryOptions('getNotifications', { interval: 30_000 }),
+    ...liveQueryOptions('getNotifications'),
   })
   const allRead = useAction(markAllRead, { toastMessage: 'All caught up. Everything is marked as read.' })
   const action = query.data?.counts.action ?? 0

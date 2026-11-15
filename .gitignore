@@ -7,7 +7,6 @@ docs/
 !.env.example
 !**/.env.example
 env/
-backend/.env
 
 # Python bytecode and caches
 __pycache__/
@@ -38,17 +37,26 @@ htmlcov/
 .ruff_cache/
 .dmypy.json
 
-# Django local DB and uploads
+# Backend (Django) — local DB, uploads, runtime
 *.sqlite3
 db.sqlite3
 backend/db.sqlite3
+backend/db.sqlite3-journal
 staticfiles/
 media/
 backend/staticfiles/
 backend/media/
-*.log
+backend/local_settings.py
+backend/**/*.log
+celerybeat-schedule
+celerybeat.pid
 
-# Backend tests (local pytest layout; keep app code committable)
+# Backend secrets (keep .env.example)
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Backend tests (separate nested git repo — do not track here)
 backend/tests/
 backend/conftest.py
 backend/pytest.ini
@@ -97,3 +105,5 @@ frontend/**/yarn-error.log*
 frontend/**/pnpm-debug.log*
 frontend/**/.eslintcache
 frontend/**/coverage/
+
+backend/.test

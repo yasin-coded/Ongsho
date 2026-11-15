@@ -155,8 +155,30 @@ def price_now_dict(sub: Subscription) -> dict | None:
 
 
 def subscription_list_totals(user) -> dict:
-    qs = owned_subscriptions(user, {}).filter(
+    today = today_dhaka()
+    current_amount = Subquery(
+        PriceChange.objects.filter(subscription_id=OuterRef("pk"), effective_from__lte=today)
+        .order_by("-effective_from")
+        .values("amount")[:1]
+    )
+    earliest_amount = Subquery(
+        PriceChange.objects.filter(subscription_id=OuterRef("pk")).order_by("effective_from").values("amount")[:1]
+    )
+    latest_rate = Subquery(
+        ExchangeRate.objects.filter(user_id=OuterRef("owner_id"), rate_date__lte=today)
+        .order_by("-rate_date", "-id")
+        .values("usd_to_bdt")[:1]
+    )
+    qs = Subscription.objects.filter(
+        owner=user,
         status__in=(SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL),
+    ).annotate(
+        current_amount=Coalesce(
+            current_amount,
+            earliest_amount,
+            output_field=DecimalField(max_digits=12, decimal_places=2),
+        ),
+        latest_usd_rate=latest_rate,
     )
     total = Decimal("0")
     count = 0

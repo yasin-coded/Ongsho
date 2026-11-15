@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { configureHttp } from '@/api/http'
 import { clearAccessToken } from '@/auth/tokenStore'
+import { clearSessionHint } from '@/auth/sessionHint'
+import { safeReturnPath } from '@/lib/safeReturnPath'
 import { useToast } from '@/components/ui/toast-context'
 
 export function HttpProvider({ children }) {
@@ -12,15 +14,12 @@ export function HttpProvider({ children }) {
     configureHttp({
       onAuthFailure: () => {
         clearAccessToken()
+        clearSessionHint()
         queryClient.clear()
         const returnTo = window.location.pathname + window.location.search
-        try {
-          sessionStorage.setItem('ongsho:return', returnTo)
-          sessionStorage.setItem('ongsho:authMessage', 'Your session ended. Please sign in again.')
-        } catch {
-          /* ignore */
-        }
-        window.location.assign(`/login?next=${encodeURIComponent(returnTo)}`)
+        const safe = safeReturnPath(returnTo) ?? '/app'
+        const next = encodeURIComponent(safe)
+        window.location.assign(`/login?next=${next}&reason=session-ended`)
       },
       onToast429: (retryAfter) => {
         toast(

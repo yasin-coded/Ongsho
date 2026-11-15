@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import { Link } from 'react-router'
+import { PrefetchLink } from '@/components/ui/PrefetchLink'
 import { LoaderCircle } from 'lucide-react'
 import { cx } from './Box'
 
@@ -32,11 +33,13 @@ export const Button = forwardRef(function Button({ variant, size, block, italic,
   )
 })
 
-export function LinkButton({ to, variant, size, block, italic, icon: Icon, className, children, ...rest }) {
+export function LinkButton({ to, variant, size, block, italic, icon: Icon, className, children, prefetchKind, prefetchId, ...rest }) {
+  const Cmp = prefetchKind && prefetchId ? PrefetchLink : Link
+  const prefetchProps = prefetchKind && prefetchId ? { prefetchKind, prefetchId } : {}
   return (
-    <Link to={to} className={classes({ variant, size, block, italic, className })} {...rest}>
+    <Cmp to={to} className={classes({ variant, size, block, italic, className })} {...prefetchProps} {...rest}>
       {Icon && <Icon aria-hidden="true" />}
       {children}
-    </Link>
+    </Cmp>
   )
 }

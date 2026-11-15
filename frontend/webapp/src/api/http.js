@@ -2,7 +2,14 @@ import axios from 'axios'
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/auth/tokenStore'
 import { ApiError, normalizeApiError } from './errors'
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+function resolveApiBaseUrl() {
+  const fromEnv = import.meta.env.VITE_API_URL
+  if (fromEnv === '') return ''
+  if (fromEnv) return fromEnv
+  return import.meta.env.PROD ? '' : 'http://localhost:8000'
+}
+
+const baseURL = resolveApiBaseUrl()
 
 import { onceRefresh } from './refreshQueue'
 let onUnauthorized = null

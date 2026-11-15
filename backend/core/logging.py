@@ -6,6 +6,8 @@ import time
 import uuid
 from typing import Any
 
+from django.conf import settings
+
 _REQUEST_ID_ATTR = "_ongsho_request_id"
 
 _EMAIL_RE = re.compile(
@@ -61,8 +63,7 @@ class RequestLogMiddleware:
         if getattr(request, "resolver_match", None):
             route = request.resolver_match.url_name or request.resolver_match.view_name or route
 
-        self.logger.info(
-            "request_id=%s user_id=%s route=%s method=%s status=%s duration_ms=%s",
+        log_kwargs = (
             request_id,
             user_id,
             route,
@@ -70,6 +71,13 @@ class RequestLogMiddleware:
             response.status_code,
             duration_ms,
         )
+        self.logger.info(
+            "request_id=%s user_id=%s route=%s method=%s status=%s duration_ms=%s",
+            *log_kwargs,
+        )
+        threshold = getattr(settings, "SLOW_REQUEST_MS", 800)
+        if duration_ms >= threshold:
+            self.logger.warning("slow_request route=%s duration_ms=%s", route, duration_ms)
         return response
 
 

@@ -9,6 +9,8 @@ import { validateEmail, validatePassword, validateName, validatePasswordRepeat }
 import { Button } from '@/components/ui/Button'
 import { Input, PasswordInput } from '@/components/ui/Field'
 import { AuthLayout } from './AuthLayout'
+import { safeReturnPath } from '@/lib/safeReturnPath'
+import { authBannerForReason } from '@/lib/authBanners'
 
 function maskEmail(email) {
   const [name, domain] = (email ?? '').split('@')
@@ -31,20 +33,13 @@ export function LoginPage() {
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
   const [clientFields, setClientFields] = useState({})
-  const [banner, setBanner] = useState(() => {
-    try {
-      const msg = sessionStorage.getItem('ongsho:authMessage')
-      if (msg) sessionStorage.removeItem('ongsho:authMessage')
-      return msg
-    } catch {
-      return null
-    }
-  })
+  const [searchParams] = useSearchParams()
+  const banner = authBannerForReason(searchParams.get('reason')) ?? location.state?.authMessage ?? null
   const m = useMutation({
     mutationFn: login,
     onSuccess: () => {
-      const fromQuery = new URLSearchParams(location.search).get('next')
-      const fromState = location.state?.from
+      const fromQuery = safeReturnPath(new URLSearchParams(location.search).get('next'))
+      const fromState = safeReturnPath(location.state?.from)
       navigate(fromQuery ?? fromState ?? '/app', { replace: true })
     },
   })

@@ -5,6 +5,8 @@ import * as accounts from '@/api/accounts'
 import { keys } from '@/api/keys'
 import { forceMockMode } from '@/api/modes'
 import { clearAccessToken, setAccessToken } from '@/auth/tokenStore'
+import { clearSessionHint, hasSessionHint, markHasSession } from '@/auth/sessionHint'
+import { shouldAttemptSessionRefresh } from '@/auth/sessionBootstrap'
 import { BootSplash } from '@/components/layout/BootSplash'
 import { cx } from '@/components/ui/Box'
 import { AuthContext, useAuth } from './auth-context'
@@ -32,7 +34,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      if (forceMockMode()) {
+      const mock = forceMockMode()
+      if (!shouldAttemptSessionRefresh({ forceMock: mock, hasSessionHint: hasSessionHint() })) {
         if (!cancelled) setStatus('anonymous')
         return
       }
@@ -48,6 +51,7 @@ export function AuthProvider({ children }) {
       } catch {
         if (!cancelled) {
           clearAccessToken()
+          clearSessionHint()
           setSession(null)
           setStatus('anonymous')
         }
@@ -63,6 +67,7 @@ export function AuthProvider({ children }) {
     const result = await accounts.login(credentials)
     setSession({ token: result.access, user: result.user })
     setStatus('authed')
+    markHasSession()
     queryClient.setQueryData(keys.me, result.user)
     return result
   }, [queryClient])
@@ -73,6 +78,7 @@ export function AuthProvider({ children }) {
       setAccessToken(access)
       setSession({ token: access, user })
       setStatus('authed')
+      markHasSession()
       queryClient.setQueryData(keys.me, user)
     },
     [queryClient],
@@ -85,6 +91,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     await accounts.logout()
+    clearSessionHint()
     setSession(null)
     setStatus('anonymous')
     queryClient.clear()

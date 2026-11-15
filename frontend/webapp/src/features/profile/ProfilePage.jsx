@@ -211,13 +211,8 @@ function PasswordCard() {
     onSuccess: async (data) => {
       setForm(empty)
       if (data?.revoked) {
-        try {
-          sessionStorage.setItem('ongsho:authMessage', 'Password updated. Sign in with your new password.')
-        } catch {
-          /* ignore */
-        }
         await logout()
-        navigate('/login', { replace: true, state: { from: '/app/profile' } })
+        navigate('/login?reason=password-updated', { replace: true, state: { from: '/app/profile' } })
       }
     },
   })
