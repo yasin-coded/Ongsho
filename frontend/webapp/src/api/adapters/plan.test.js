@@ -20,7 +20,7 @@ describe('buildCreatePayload', () => {
     endDate: '',
     method: 'bkash',
     rarelyUsed: false,
-    nextRenewalDate: '2026-04-01',
+    nextRenewalDate: '2026-03-15',
     seats: 2,
     split: 'equal',
     invites: ['friend@example.com'],

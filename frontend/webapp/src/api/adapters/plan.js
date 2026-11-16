@@ -62,7 +62,7 @@ function statusPill(sub, members = []) {
   if (sub.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (sub.status !== 'active') return { key: sub.status, label: sub.status }
   if (!isMultiMemberPlan(sub, members)) return { key: 'solo', label: 'Just me' }
-  const roster = billableMembers(sub, members)
+  const roster = members.filter((m) => !m.isOwnerSeat)
   if (!roster.length) return { key: 'empty', label: 'No members yet' }
   if (sub.plan_mode === 'reseller') return resellerOwnerPill(roster)
   const pending = roster.filter((m) => m.dueStatus === 'pending').length
@@ -193,6 +193,7 @@ function mapIouRow(row) {
     debtor: row.debtor?.first_name ?? row.debtor?.name,
     creditor: row.creditor?.first_name ?? row.creditor?.name,
     amount: moneyFromApi(row.amount),
+    youOwe: Boolean(row.you_owe),
   }
 }
 
@@ -233,6 +234,8 @@ export function mapSubscriptionDetail(sub, extras = {}) {
       amount: moneyFromApi(c.amount),
       dueDate,
       monthLabel: dueDate ? fmtCycleDueLabel(dueDate, summary.cycle) : '',
+      isOwnerSeat: Boolean(c.is_owner_seat),
+      ownerFirstName: c.owner_first_name ?? null,
     }
   })
   const csf = sub.confirmed_so_far

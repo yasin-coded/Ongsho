@@ -50,21 +50,25 @@ def split_charge(shared: SharedPlan, members: list[Member], amount_bdt: Decimal)
     if not members:
         return SplitResult(ok=False, amounts=[], reason="no_members")
     total = quantize_money(Decimal(amount_bdt))
-    if shared.subscription.plan_mode == PlanMode.RESELLER:
-        div = reseller_split_divisor(shared, len(members))
-        per = quantize_money(total / Decimal(div))
-        return SplitResult(ok=True, amounts=[per] * len(members))
-    if shared.split_type == SplitType.EQUAL:
+    split_type = getattr(shared, "split_type", None)
+    if split_type == SplitType.CUSTOM:
+        running = Decimal("0")
+        amounts: list[Decimal] = []
+        for m in members:
+            if m.share_value is None or m.share_value <= 0:
+                return SplitResult(ok=False, amounts=[], reason="missing_share")
+            val = quantize_money(m.share_value)
+            amounts.append(val)
+            running += val
+        if running != total:
+            return SplitResult(ok=False, amounts=[], reason="sum_mismatch")
+        return SplitResult(ok=True, amounts=amounts)
+    sub = shared.subscription
+    if sub.plan_mode == PlanMode.RESELLER:
+        n = len(members)
+        amounts = split_exact(total, n, 0)
+        return SplitResult(ok=True, amounts=amounts)
+    if split_type == SplitType.EQUAL or split_type is None:
         amounts = split_exact(total, len(members), 0)
         return SplitResult(ok=True, amounts=amounts)
-    running = Decimal("0")
-    amounts: list[Decimal] = []
-    for m in members:
-        if m.share_value is None or m.share_value <= 0:
-            return SplitResult(ok=False, amounts=[], reason="missing_share")
-        val = quantize_money(m.share_value)
-        amounts.append(val)
-        running += val
-    if running != total:
-        return SplitResult(ok=False, amounts=[], reason="sum_mismatch")
-    return SplitResult(ok=True, amounts=amounts)
+    return SplitResult(ok=False, amounts=[], reason="sum_mismatch")

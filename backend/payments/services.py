@@ -132,6 +132,12 @@ def submit_payment(
     shared = payer.shared_plan
     sub = shared.subscription
 
+    if sub.owner_id == user.pk:
+        raise Forbidden(
+            "Use mark as paid for member payments you receive.",
+            code="owner_cannot_submit",
+        )
+
     if method not in PaymentMethod.values:
         raise ValidationFailed("Pick a payment method.", fields={"method": ["Pick a payment method."]})
     if paid_on is not None and paid_on > today:
@@ -150,25 +156,18 @@ def submit_payment(
             raise ConflictError("One of those dues is no longer open.", code="due_not_open")
         if due.status != DueStatus.DUE:
             raise ConflictError("One of those dues is no longer open.", code="due_not_open")
+    for due in dues:
+        if due.member.shared_plan_id != shared.pk:
+            raise ConflictError("One of those dues is no longer open.", code="due_not_open")
     own = [d for d in dues if d.member_id == payer.pk]
-    if len(own) > 1:
-        raise ValidationFailed(
-            "Pay one billing cycle at a time.",
-            fields={"due_ids": ["Pay one billing cycle at a time."]},
-        )
-    charge_ids = {d.charge_id for d in own}
-    if len(charge_ids) > 1:
-        raise ValidationFailed(
-            "Pay one billing cycle at a time.",
-            fields={"due_ids": ["Pay one billing cycle at a time."]},
-        )
-    if sub.owner_id == user.pk:
-        for due in dues:
-            if due.member.user_id == user.pk:
-                raise Forbidden(
-                    "Use mark as paid for your own seat.",
-                    code="owner_cannot_submit",
-                )
+    seen_charges: set[int] = set()
+    for d in own:
+        if d.charge_id in seen_charges:
+            raise ValidationFailed(
+                "Pay one billing cycle at a time.",
+                fields={"due_ids": ["Pay one billing cycle at a time."]},
+            )
+        seen_charges.add(d.charge_id)
     total = sum((quantize_money(d.amount_bdt) for d in dues), Decimal("0"))
     if amount is not None and quantize_money(amount) != total:
         raise ValidationFailed(

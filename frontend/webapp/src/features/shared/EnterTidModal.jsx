@@ -102,8 +102,14 @@ function TidForm({ plan, onClose, othersOnly = false }) {
               <label key={d.id} className="check">
                 <input type="checkbox" checked={coverPicked.has(d.id)} onChange={() => toggleCover(d.id)} />
                 <span className="flex-1">
-                  <span className="font-bold">{dueLabel(d, { name: d.name })}</span>
-                  <span className="t-meta block">They will owe you</span>
+                  <span className="font-bold">
+                    {d.isOwnerSeat
+                      ? `${d.ownerFirstName ?? owner}'s owner share`
+                      : dueLabel(d, { name: d.name })}
+                  </span>
+                  <span className="t-meta block">
+                    {d.isOwnerSeat ? `${owner} will owe you this amount` : 'They will owe you'}
+                  </span>
                 </span>
                 <span className="t-num">{formatBDT(d.amount)}</span>
               </label>

@@ -7,13 +7,42 @@ export function isPresetCycleUnit(unit) {
   return PRESET_CYCLE_UNITS.has(unit)
 }
 
-/** Next renewal one full period after the start date (weekly / monthly / yearly chips). */
-export function presetNextRenewalFromStart(startDate, cycleUnit) {
+/** First renewal due date: trial end, or one full billing cycle after the start (start is not a renewal). */
+export function firstBillDate(plan) {
+  if (plan.trialEnd) return plan.trialEnd
+  const anchor = plan.anchorDay ?? dayOfMonth(plan.startDate)
+  const { unit, count } = plan.cycle ?? { unit: 'month', count: 1 }
+  if (unit === 'month') return addMonthsAnchored(plan.startDate, count, anchor)
+  if (unit === 'year') return addYearsAnchored(plan.startDate, count, anchor)
+  if (unit === 'week') return addDays(plan.startDate, count * 7)
+  return addDays(plan.startDate, count)
+}
+
+export const firstRenewalDate = firstBillDate
+
+/** Default next-renewal field on the form when it still matches the schedule (omit from API). */
+export function defaultNextRenewalForForm(form) {
+  const cycle = cycleFromForm(form)
+  const plan = {
+    startDate: form.startDate,
+    trialEnd: form.trialEnd || null,
+    cycle,
+    anchorDay: dayOfMonth(form.trialEnd || form.startDate),
+  }
+  return firstBillDate(plan)
+}
+
+/** Preset chips: first renewal after start (trial uses trial end as first bill; chip default is still one period after start until trial is set). */
+export function presetNextRenewalFromStart(startDate, cycleUnit, trialEnd = null) {
   if (!startDate || !isPresetCycleUnit(cycleUnit)) return ''
-  const anchor = dayOfMonth(startDate)
-  if (cycleUnit === 'week') return addDays(startDate, 7)
-  if (cycleUnit === 'month') return addMonthsAnchored(startDate, 1, anchor)
-  return addYearsAnchored(startDate, 1, anchor)
+  if (trialEnd) {
+    const anchor = dayOfMonth(trialEnd)
+    if (cycleUnit === 'week') return addDays(trialEnd, 7)
+    if (cycleUnit === 'month') return addMonthsAnchored(trialEnd, 1, anchor)
+    return addYearsAnchored(trialEnd, 1, anchor)
+  }
+  const plan = { startDate, trialEnd: null, cycle: { unit: cycleUnit, count: 1 }, anchorDay: dayOfMonth(startDate) }
+  return firstBillDate(plan)
 }
 
 /** Send `next_renewal_date` only when the user aligned billing (custom or edited date). */
@@ -21,36 +50,38 @@ export function nextRenewalDateForApi(form) {
   if (form.renewal === 'fixed') return null
   const value = (form.nextRenewalDate || '').trim()
   if (!value) return null
+  const auto = defaultNextRenewalForForm(form)
+  if (auto && value === auto) return null
   if (isPresetCycleUnit(form.cycleUnit)) {
-    const auto = presetNextRenewalFromStart(form.startDate, form.cycleUnit)
-    if (auto && value === auto) return null
+    const chipAuto = presetNextRenewalFromStart(form.startDate, form.cycleUnit, form.trialEnd || null)
+    if (chipAuto && value === chipAuto) return null
   }
   return value
 }
 
-/** Custom billing: length in days between first bill date and the chosen next renewal. */
+/** Custom billing: length in days between first renewal and the chosen next renewal. */
 export function cycleFromForm(form) {
-  if (form.cycleUnit !== 'custom') return { unit: form.cycleUnit, count: 1 }
-  const first = form.trialEnd || form.startDate
+  if (form.cycleUnit !== 'custom') return { unit: form.cycleUnit, count: Number(form.cycleCount) || 1 }
+  const first = firstBillDate({
+    startDate: form.startDate,
+    trialEnd: form.trialEnd || null,
+    cycle: { unit: 'month', count: 1 },
+    anchorDay: dayOfMonth(form.trialEnd || form.startDate),
+  })
   const renewal = form.nextRenewalDate || form.endDate
   if (!first || !renewal) return { unit: 'day', count: 1 }
   return { unit: 'day', count: Math.max(1, diffDays(renewal, first)) }
 }
 
-/** Anchor for the billing schedule (trial end or plan start). */
-export function firstBillDate(plan) {
-  return plan.trialEnd ?? plan.startDate
-}
-
-/** When member billing starts (trial end or plan start). Dues run for the open cycle from here. */
+/** When charge/dues generation may begin (mock plans may set billingFrom; else first renewal). */
 export function billingFromDate(plan) {
-  return firstBillDate(plan)
+  return plan.billingFrom ?? firstBillDate(plan)
 }
 
-/** The k-th due date counted from the first billed date. */
+/** The k-th due date counted from the first billed date (k = 0 is first renewal). */
 export function nthDueDate(plan, k) {
   const first = firstBillDate(plan)
-  const anchor = plan.anchorDay ?? dayOfMonth(first)
+  const anchor = plan.anchorDay ?? dayOfMonth(plan.trialEnd ?? plan.startDate)
   const { unit, count } = plan.cycle
   if (unit === 'month') return addMonthsAnchored(first, k * count, anchor)
   if (unit === 'year') return addYearsAnchored(first, k * count, anchor)
@@ -65,18 +96,20 @@ export function stopDate(plan) {
 }
 
 export function renewalKStart(plan) {
-  return plan.trialEnd ? 0 : 1
+  return 0
 }
 
 /** Billing cycles: start … renewal (inclusive); next cycle begins the day after renewal. */
 export function billingPeriodsBetween(plan, from, to) {
-  const first = firstBillDate(plan)
   const startK = renewalKStart(plan)
   const stop = stopDate(plan)
+  const billFrom = billingFromDate(plan)
   const out = []
   for (let k = startK; k < 600; k += 1) {
     const due = nthDueDate(plan, k)
     if (stop && due >= stop) break
+    if (due < billFrom) continue
+    const first = nthDueDate(plan, startK)
     const periodStart = k === startK ? first : addDays(nthDueDate(plan, k - 1), 1)
     const periodEnd = due
     if (periodStart > to) break

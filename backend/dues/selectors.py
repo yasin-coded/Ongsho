@@ -419,13 +419,13 @@ def _sync_member_dues(member: Member, today: date) -> None:
 
 
 def _payable_open_dues_qs(member: Member):
-    """Earliest open due only — members pay one billing cycle at a time."""
+    """Open dues the member can pay (submit still enforces one cycle at a time)."""
     sub = member.shared_plan.subscription
     floor = _member_charge_floor(sub, member)
     return (
         Due.objects.filter(member=member, status=DueStatus.DUE, charge__due_date__gte=floor)
         .select_related("charge")
-        .order_by("charge__due_date", "id")[:1]
+        .order_by("charge__due_date", "id")
     )
 
 

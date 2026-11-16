@@ -161,8 +161,11 @@ function seed() {
   const horizon = addDays(MOCK_TODAY, LEAD_DAYS)
 
   for (const plan of plans) {
+    if (!plan.billingFrom) {
+      plan.billingFrom = plan.createdAt?.slice(0, 10) ?? plan.startDate
+    }
     const until = plan.status === 'trial' ? addDays(plan.trialEnd, -1) : horizon
-    for (const period of billingPeriodsBetween(plan, plan.startDate, until)) {
+    for (const period of billingPeriodsBetween(plan, plan.billingFrom, until)) {
       if (plan.status === 'trial' && period.dueDate > MOCK_TODAY) continue
       const price = priceAt(plan, period.dueDate)
       const charge = {
@@ -184,11 +187,6 @@ function seed() {
           status: 'due', waiverNote: null, rejectionReason: null, paidOn: null, recordedByOwner: false, note: null,
         }
         dues.push(due)
-        if (member.isOwnerSeat) {
-          due.status = 'paid'
-          due.paidOn = charge.dueDate
-          continue
-        }
         if (charge.dueDate < MOCK_TODAY) {
           due.status = 'paid'
           due.paidOn = addDays(charge.dueDate, -1)

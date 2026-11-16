@@ -21,7 +21,7 @@ import { CopyField, EmptyState, FilterChip, Pagination, ProgressBar, SkeletonCar
 import { Loadable, ownerMeta } from '@/features/common/PlanBits'
 import { NotFoundPage } from '@/features/NotFoundPage'
 import { FloatingMember } from './FloatingMember'
-import { MarkPaidModal, WaiveModal } from './PaymentModals'
+import { MarkPaidModal, SetDueModal, WaiveModal } from './PaymentModals'
 import { ConfirmModal, DeletePlanModal, EditRateModal, InviteModal, LeaveModal, PriceChangeModal, RenewModal, TransferModal } from './OwnerModals'
 
 const TONE = { pending: STATUS.pending.fill, paid: STATUS.paid.fill, due: STATUS.due.fill, info: '#14b3f2' }
@@ -164,11 +164,43 @@ function SeatSplitCard({ plan }) {
   )
 }
 
+function YourSeatCard({ plan, onOpen }) {
+  if (plan.mode !== 'owner' || !plan.shared) return null
+  const seat = plan.members.find((m) => m.isOwnerSeat)
+  if (!seat) return null
+  const statusLabel = STATUS[seat.dueStatus]?.label ?? seat.dueStatus ?? '—'
+  return (
+    <Box>
+      <BoxHead title="Your seat" sub="Your share in the split — not a member to chase." />
+      <div className="row-between flex-wrap gap-3 py-1">
+        <div>
+          <p className="font-bold">
+            Your share: {seat.dueAmount != null ? formatBDT(seat.dueAmount, { trim: true }) : formatBDT(plan.perSeat, { trim: true })} · {statusLabel}
+          </p>
+          <p className="t-meta">Mark paid yourself, or a member can pay for you and you will owe them.</p>
+        </div>
+        <div className="row gap-2">
+          {seat.dueId && seat.dueStatus === 'due' ? (
+            <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onOpen('markPaid', seat)}>
+              Mark my seat paid
+            </Button>
+          ) : null}
+          {seat.dueId && seat.dueStatus === 'paid' ? (
+            <Button variant="ghost" size="sm" onClick={() => onOpen('setDue', seat)}>
+              Set back to Due
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </Box>
+  )
+}
+
 function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, cancelInviteBusy }) {
   const reservedInvites = pendingInvitesReservingSeats(plan.invites)
   const free = freeSeats(plan)
   const reseller = plan.mode === 'reseller'
-  const list = reseller ? plan.members.filter((m) => !m.isOwnerSeat) : plan.members
+  const list = plan.members.filter((m) => !m.isOwnerSeat)
   const inviteLabel = reseller ? 'Invite buyer' : 'Invite member'
   const canInvite = canSendInvite(plan)
   const seatsFullReason =
@@ -238,10 +270,6 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
               <LinkButton to={`/app/plans/${plan.id}/review`} variant="review" size="sm" icon={Eye}>
                 Review
               </LinkButton>
-            ) : m.isOwnerSeat && m.dueId && m.dueStatus === 'due' ? (
-              <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onOpen('markPaid', m)}>
-                Mark as paid
-              </Button>
             ) : (
               <Button
                 ref={(el) => {
@@ -455,10 +483,12 @@ function OwnerPlan({ plan }) {
         <StatCard label="Renews in" value={renewsInLabel(plan.nextRenewal)} helper={plan.nextRenewal ? fmtShort(plan.nextRenewal) : undefined} />
       </div>
 
+      {plan.shared && plan.mode === 'owner' ? <YourSeatCard plan={plan} onOpen={(type, member) => setModal({ type, member })} /> : null}
+
       {plan.confirmedSoFar ? (
         <Box>
           <div className="row-between mb-4">
-            <h2 className="t-card">Confirmed so far</h2>
+            <h2 className="t-card">{plan.shared ? 'Collected from members' : 'Confirmed so far'}</h2>
             <p className="t-num font-bold">
               {formatBDT(plan.confirmedSoFar.paid + plan.confirmedSoFar.waived, { trim: true })} / {formatBDT(plan.confirmedSoFar.total, { trim: true })}
             </p>
@@ -483,7 +513,7 @@ function OwnerPlan({ plan }) {
         plan.shared && (
           <Box>
             <h2 className="t-card">Confirmed so far</h2>
-            <p className="t-meta">Nothing to collect yet. The start date is not a due date — first member bill is on the first renewal.</p>
+            <p className="t-meta">Nothing to collect from members yet — first member bill is on the first renewal date.</p>
           </Box>
         )
       )}
@@ -584,7 +614,7 @@ function OwnerPlan({ plan }) {
                 {plan.ious.map((i) => (
                   <li key={`${i.debtorId}-${i.creditorId}`} className="row-between py-2.5">
                     <span className="font-bold">
-                      {i.debtor} owes {i.creditor}
+                      {i.youOwe ? `You owe ${i.creditor}` : `${i.debtor} owes ${i.creditor}`}
                     </span>
                     <span className="t-num font-bold">{formatBDT(i.amount, { trim: true })}</span>
                   </li>
@@ -717,6 +747,9 @@ function OwnerPlan({ plan }) {
         />
       )}
       {modal?.type === 'waive' && <WaiveModal dueId={modal.member.dueId} name={modal.member.firstName} onClose={() => setModal(null)} />}
+      {modal?.type === 'setDue' && (
+        <SetDueModal dueId={modal.member.dueId} name={modal.member.firstName} ownSeat onClose={() => setModal(null)} />
+      )}
     </div>
   )
 }

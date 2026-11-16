@@ -55,6 +55,8 @@ def generate_missing_charges(plan: Subscription, today) -> dict[str, int]:
     schedule = schedule_for_subscription(plan)
     window_end = max(today + timedelta(days=CHARGE_LEAD_DAYS), today)
     cycle_floor = first_bill_date(plan.start_date, plan.trial_end_date)
+    bill_from = plan.billing_from or today
+    cycle_floor = max(cycle_floor, bill_from)
     periods = billing_periods_between(schedule, cycle_floor, window_end)
 
     prices = _prices_for_plan(plan.pk)
@@ -69,6 +71,12 @@ def generate_missing_charges(plan: Subscription, today) -> dict[str, int]:
 
     created_rows: list[Charge] = []
     for period in periods:
+        if period.due_date > window_end:
+            continue
+        if period.due_date < bill_from:
+            continue
+        if period.due_date < today:
+            continue
         if Charge.objects.filter(subscription=plan, period_start=period.period_start).exists():
             continue
         amount = quantize_money(price_at(prices, period.due_date))

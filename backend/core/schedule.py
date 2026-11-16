@@ -37,16 +37,14 @@ def first_bill_date(start_date: date, trial_end_date: date | None) -> date:
 
 
 def first_renewal_date(schedule: Schedule) -> date:
-    """First cycle-end / provider renewal (plan start is not a renewal for non-trial plans)."""
+    """First billable renewal on the schedule grid."""
     first = first_bill_date(schedule.start_date, schedule.trial_end_date)
-    if schedule.trial_end_date:
-        return first
     return nth_due_date(
         first,
         schedule.anchor_day,
         schedule.cycle_unit,
         schedule.cycle_count,
-        1,
+        renewal_k_start(schedule),
     )
 
 
@@ -58,8 +56,13 @@ class BillingPeriod:
 
 
 def renewal_k_start(schedule: Schedule) -> int:
-    """Index of the first renewal due date (trial end is k=0; otherwise start date is not a renewal)."""
-    return 0 if schedule.trial_end_date else 1
+    """Index of the first billable renewal (trial end is k=0; plan start day is never a due date)."""
+    if schedule.trial_end_date:
+        return 0
+    first = first_bill_date(schedule.start_date, schedule.trial_end_date)
+    start = _as_date(schedule.start_date)
+    due0 = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, 0)
+    return 1 if due0 <= start else 0
 
 
 def billing_periods_between(schedule: Schedule, from_date: date, to_date: date) -> list[BillingPeriod]:
@@ -173,8 +176,20 @@ def next_due_date(schedule: Schedule, from_date: date) -> date | None:
 
 
 def period_end_for(schedule: Schedule, due_date: date) -> date:
-    """Cycle ends on the renewal date; the following period begins the next calendar day."""
-    _ = schedule
+    """Inclusive period end: day before the next renewal (or due_date when there is no later cycle)."""
+    first = first_bill_date(schedule.start_date, schedule.trial_end_date)
+    k = 0
+    while k < 50000:
+        d = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k)
+        if d == due_date:
+            end_before = stop_date(schedule)
+            nxt = nth_due_date(first, schedule.anchor_day, schedule.cycle_unit, schedule.cycle_count, k + 1)
+            if end_before is not None and nxt >= end_before:
+                return due_date
+            return nxt - timedelta(days=1)
+        if d > due_date:
+            break
+        k += 1
     return due_date
 
 

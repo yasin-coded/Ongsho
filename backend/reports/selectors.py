@@ -229,7 +229,7 @@ def _append_spend_row(
 
 
 def _paid_spend_rows(ctx: DashCtx, month_start: date, month_end: date) -> list[dict]:
-    """Confirmed spend: PAID member dues on cycles overlapping this month (not only renewal dates in-month)."""
+    """Spend rows: confirmed PAID amounts where they exist, else projected share for the cycle."""
     rows: list[dict] = []
     for sub in ctx.subs_owned:
         shared = ctx.shared_by_sub.get(sub.pk)
@@ -241,14 +241,25 @@ def _paid_spend_rows(ctx: DashCtx, month_start: date, month_end: date) -> list[d
             seat = _owner_owner_seat(ctx, sub)
             if seat is None:
                 continue
+            saw = False
             for ch in _charges_overlapping_month(ctx, sub.pk, month_start, month_end):
+                saw = True
                 amt = _paid_amount_on_charge(ctx, seat, ch)
+                if not amt:
+                    amt = my_portion(ctx, sub=sub, role="owner", on_date=ch.due_date, member=None)
                 if amt:
                     _append_spend_row(rows, sub, role="owner", on_date=ch.due_date, amt=amt)
+            if not saw:
+                for d in _schedule_dates_in_range(sub, month_start, month_end, ctx.today):
+                    amt = my_portion(ctx, sub=sub, role="owner", on_date=d, member=None)
+                    if amt:
+                        _append_spend_row(rows, sub, role="owner", on_date=d, amt=amt)
         else:
+            saw = False
             for ch in _charges_overlapping_month(ctx, sub.pk, month_start, month_end):
                 if ch.period_start > ctx.today:
                     continue
+                saw = True
                 _append_spend_row(
                     rows,
                     sub,
@@ -256,14 +267,33 @@ def _paid_spend_rows(ctx: DashCtx, month_start: date, month_end: date) -> list[d
                     on_date=ch.due_date,
                     amt=quantize_money(ch.amount_bdt),
                 )
+            if not saw:
+                for d in _schedule_dates_in_range(sub, month_start, month_end, ctx.today):
+                    amt = my_portion(ctx, sub=sub, role="owner", on_date=d, member=None)
+                    if amt:
+                        _append_spend_row(rows, sub, role="owner", on_date=d, amt=amt)
+    from dues.selectors import member_renewal_dates_in_month, member_share_on_renewal_date
+
     for mem in ctx.memberships:
         sub = mem.shared_plan.subscription
+        prices = ctx.prices_by_sub.get(sub.pk, [])
+        saw = False
         for ch in _charges_overlapping_month(ctx, sub.pk, month_start, month_end):
             if ch.period_start < mem.joined_on:
                 continue
+            saw = True
             amt = _paid_amount_on_charge(ctx, mem, ch)
+            if not amt:
+                amt = member_share_on_renewal_date(mem, ch.due_date, ctx.today, prices)
             if amt:
                 _append_spend_row(rows, sub, role="member", on_date=ch.due_date, amt=amt)
+        if not saw:
+            for d in member_renewal_dates_in_month(mem, ctx.today):
+                if d < month_start or d > month_end or d < mem.joined_on:
+                    continue
+                amt = member_share_on_renewal_date(mem, d, ctx.today, prices)
+                if amt:
+                    _append_spend_row(rows, sub, role="member", on_date=d, amt=amt)
     return rows
 
 

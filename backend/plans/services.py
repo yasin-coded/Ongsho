@@ -59,9 +59,19 @@ def _plan_audit(
     )
 
 
+def _delete_charge_if_untouched(charge, owner_id: int) -> None:
+    from dues.models import DueStatus
+
+    dues = list(charge.dues.all())
+    if dues and not all(
+        due.status == DueStatus.DUE or due.member.user_id == owner_id for due in dues
+    ):
+        return
+    charge.delete()
+
+
 def void_untouched_charges_on_or_after(subscription: Subscription, from_date) -> None:
     from billing.models import Charge
-    from dues.models import DueStatus
 
     owner_id = subscription.owner_id
     charges = (
@@ -70,12 +80,25 @@ def void_untouched_charges_on_or_after(subscription: Subscription, from_date) ->
         .order_by("id")
     )
     for charge in charges:
-        dues = list(charge.dues.all())
-        if dues and not all(
-            due.status == DueStatus.DUE or due.member.user_id == owner_id for due in dues
-        ):
-            continue
-        charge.delete()
+        _delete_charge_if_untouched(charge, owner_id)
+
+
+def void_untouched_charges_before(subscription: Subscription, before_date) -> None:
+    from billing.models import Charge
+
+    floor = subscription.billing_from or before_date
+    owner_id = subscription.owner_id
+    charges = (
+        Charge.objects.filter(
+            subscription=subscription,
+            due_date__gte=floor,
+            due_date__lt=before_date,
+        )
+        .prefetch_related("dues__member__user")
+        .order_by("id")
+    )
+    for charge in charges:
+        _delete_charge_if_untouched(charge, owner_id)
 
 
 def void_upcoming_untouched_charges(subscription: Subscription) -> None:
@@ -179,11 +202,9 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
                 fields={"next_renewal_date": ["Next renewal date does not match the billing schedule."]},
             )
         anchor_day = next_renewal.day
-        from core.schedule import first_bill_date
-
-        billing_from = first_bill_date(start_date, trial_end)
+        billing_from = next_renewal
     else:
-        from core.schedule import Schedule as BillingSchedule, first_bill_date
+        from core.schedule import Schedule as BillingSchedule
 
         draft = BillingSchedule(
             start_date=start_date,
@@ -194,8 +215,8 @@ def create_subscription(user, validated: dict) -> tuple[Subscription, str | None
             renewal_type=validated["renewal_type"],
             end_date=validated.get("end_date"),
         )
-        billing_from = first_bill_date(start_date, trial_end)
-        anchor_day = start_date.day
+        billing_from = today
+        anchor_day = trial_end.day if trial_end else start_date.day
     status = (
         SubscriptionStatus.TRIAL
         if trial_end and today < trial_end
@@ -285,8 +306,10 @@ def apply_next_renewal_date(user, pk: int, target) -> Subscription:
         )
     old = {"anchor_day": sub.anchor_day}
     sub.anchor_day = target.day
+    void_untouched_charges_before(sub, target)
+    sub.billing_from = target
     void_untouched_charges_on_or_after(sub, target)
-    sub.save(update_fields=["anchor_day"])
+    sub.save(update_fields=["anchor_day", "billing_from"])
     _plan_audit(
         user,
         "plan.next_renewal",
@@ -610,7 +633,8 @@ def renew_subscription(user, pk: int, *, end_date) -> Subscription:
     old_end = sub.end_date.isoformat() if sub.end_date else None
     sub.end_date = end_date
     sub.status = _status_for_trial_rule(sub)
-    sub.save(update_fields=["end_date", "status"])
+    sub.billing_from = today
+    sub.save(update_fields=["end_date", "status", "billing_from"])
     _emit_status_changed(sub)
     _plan_audit(
         user,

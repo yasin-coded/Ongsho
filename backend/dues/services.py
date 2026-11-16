@@ -13,17 +13,11 @@ from core.notify import notify
 from dues.models import Due, DueStatus
 from dues.splitting import members_for_charge, split_charge
 from dues.state import transition
-from plans.models import PlanMode
 from sharing.models import Member, SharedPlan
 
 
 def _shared_for_charge(charge: Charge) -> SharedPlan | None:
     return SharedPlan.objects.filter(subscription_id=charge.subscription_id).select_related("subscription").first()
-
-
-def _is_owner_seat(member: Member) -> bool:
-    sub = member.shared_plan.subscription
-    return sub.plan_mode == PlanMode.OWNER and member.user_id == sub.owner_id
 
 
 def _month_label(charge: Charge) -> str:
@@ -145,11 +139,6 @@ def recalculate_dues(charge: Charge, today, *, force: bool = False) -> None:
                     link=f"/app/shared/{sub.pk}",
                     payload={"plan_id": sub.pk, "charge_id": charge.pk},
                 )
-        elif due.status == DueStatus.PAID and _is_owner_seat(due.member):
-            if due.amount_bdt != new_amount:
-                due.amount_bdt = new_amount
-                due.save(update_fields=["amount_bdt"])
-
     for member in members:
         if member.pk not in existing:
             Due.objects.create(
@@ -184,24 +173,9 @@ def apply_leave_unpaid(member: Member, *, today, unpaid: str, actor) -> None:
 
 
 @transaction.atomic
-@transaction.atomic
 def adjust_dues_after_ownership_transfer(shared: SharedPlan, old_owner, new_owner, today, *, actor) -> None:
-    from payments.models import PaymentAllocation
-
-    old_member = Member.objects.filter(shared_plan=shared, user=old_owner).first()
-    new_member = Member.objects.filter(shared_plan=shared, user=new_owner).first()
-    if old_member is None or new_member is None:
-        return
-    charges = Charge.objects.filter(subscription=shared.subscription, due_date__gt=today)
-    for charge in charges:
-        if charge.locked:
-            continue
-        old_due = Due.objects.filter(charge=charge, member=old_member).first()
-        if old_due and old_due.status == DueStatus.PAID and not PaymentAllocation.objects.filter(due=old_due).exists():
-            transition(old_due, DueStatus.DUE, actor)
-        new_due = Due.objects.filter(charge=charge, member=new_member).first()
-        if new_due and new_due.status == DueStatus.DUE:
-            transition(new_due, DueStatus.PAID, actor)
+    """Ownership moves with the plan; due statuses are not auto-flipped."""
+    _ = (shared, old_owner, new_owner, today, actor)
 
 
 def ensure_dues(today) -> int:

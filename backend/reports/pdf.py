@@ -270,7 +270,7 @@ def build_member_statement(data: dict, compress: bool = True) -> bytes:
     )
     story = _header_block(data, styles)
     if data.get("own_rows"):
-        story.append(Paragraph("Your Dues this month", styles["section"]))
+        story.append(Paragraph("Your dues this month", styles["section"]))
         rows = [["Amount", "Status", "Method", "Transaction ID", "Paid", "Notes"]]
         for row in data["own_rows"]:
             rows.append(

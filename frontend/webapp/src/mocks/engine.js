@@ -23,8 +23,8 @@ export function notifyMe(fields) {
 function newDue(charge, member, amount) {
   return {
     id: `due-${charge.id}-${member.id}`, chargeId: charge.id, planId: charge.planId, memberId: member.id, amount,
-    status: member.isOwnerSeat ? 'paid' : 'due', waiverNote: null, rejectionReason: null,
-    paidOn: member.isOwnerSeat ? charge.dueDate : null, recordedByOwner: false, note: null,
+    status: 'due', waiverNote: null, rejectionReason: null,
+    paidOn: null, recordedByOwner: false, note: null,
   }
 }
 
@@ -33,7 +33,7 @@ export function generateMissingCharges(plan) {
   const horizon = addDays(MOCK_TODAY, LEAD_DAYS)
   const until = plan.status === 'trial' ? MOCK_TODAY : horizon
   if (['paused', 'cancelled', 'expired'].includes(plan.status)) return
-  const from = plan.createdOnDate ?? plan.startDate
+  const from = plan.billingFrom ?? plan.createdOnDate ?? plan.startDate
   for (const period of billingPeriodsBetween(plan, from, until)) {
     const id = `ch-${plan.id}-${period.periodStart}`
     if (db.charges.some((c) => c.id === id)) continue

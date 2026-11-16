@@ -117,7 +117,7 @@ export function MarkPaidModal({ dueId, planId, name, method = 'bkash', ownSeat =
       open
       onClose={onClose}
       wide={ownSeat && coverable.length > 0}
-      title={ownSeat ? 'Mark your seat as paid' : 'Mark as paid'}
+      title={ownSeat ? 'Mark my seat paid' : 'Mark as paid'}
       subtitle={
         ownSeat
           ? 'Record your share for this cycle. Optionally cover other members — they will owe you; confirm on Review payments.'
@@ -220,7 +220,7 @@ export function SetDueModal({ dueId, name, ownSeat, onClose }) {
     >
       <p>
         {ownSeat
-          ? 'Your own seat starts as Paid. Setting it to Due is only a reminder for you; nobody else is told.'
+          ? 'Your seat goes back to Due. Use this if you marked it paid by mistake.'
           : `${name}'s due goes back to Due. A confirmed payment for it is reversed, and ${name} is told.`}
       </p>
     </Modal>

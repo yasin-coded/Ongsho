@@ -11,6 +11,7 @@ import {
   cycleFromForm,
   cycleLabel,
   firstBillDate,
+  firstRenewalDate,
   isPresetCycleUnit,
   nextDueDate,
   perCycleLabel,
@@ -109,6 +110,14 @@ function Preview({ form, names, editing }) {
   const seats = Math.max(1, Number(form.seats) || 1)
   const seatCountForSplit = form.mode === 'reseller' ? seats : form.mode === 'owner' && (seats > 1 || form.invites.length > 0) ? seats : 1
   const per = amount ? splitExact(amount, seatCountForSplit, 0)[0] : 0
+  const firstRenewal = firstRenewalDate({
+    startDate: form.startDate,
+    trialEnd: form.trialEnd || null,
+    cycle,
+    anchorDay: dayOfMonth(form.trialEnd || form.startDate),
+    renewal: form.renewal,
+    endDate: form.endDate || null,
+  })
   const next = (form.renewal === 'fixed' ? form.endDate : form.nextRenewalDate) || nextRenewalOf(form)
   const usd = form.currency === 'USD' && parseTaka(form.price) > 0 && parseTaka(form.rate) > 0
   return (
@@ -143,7 +152,7 @@ function Preview({ form, names, editing }) {
           {form.mode === 'owner' ? (
             <div className="row-between py-2.5">
               <dt className="t-label">Your seat</dt>
-              <dd>starts as Paid</dd>
+              <dd>starts as Due (you mark it paid)</dd>
             </div>
           ) : (
             <div className="row-between py-2.5">
@@ -160,7 +169,10 @@ function Preview({ form, names, editing }) {
             <dd>{METHODS[form.method]?.label}</dd>
           </div>
         </dl>
-        {!editing && <p className="t-meta">Nothing is charged until the first due date.</p>}
+        {form.startDate && firstRenewal ? (
+          <p className="t-meta">First renewal: {fmtShort(firstRenewal)}</p>
+        ) : null}
+        {!editing && <p className="t-meta">Nothing is charged until the first renewal date.</p>}
       </div>
     </Box>
   )
@@ -330,7 +342,7 @@ function PlanForm({ initial, editing, planId }) {
                       set((f) => {
                         const patch = { cycleUnit: u }
                         if (u !== 'custom' && f.renewal !== 'fixed' && f.startDate) {
-                          patch.nextRenewalDate = presetNextRenewalFromStart(f.startDate, u)
+                          patch.nextRenewalDate = presetNextRenewalFromStart(f.startDate, u, f.trialEnd || null)
                           patch.cycleCount = '1'
                         }
                         return patch
@@ -344,15 +356,16 @@ function PlanForm({ initial, editing, planId }) {
             </fieldset>
             <div className="plan-date-pair sm:col-span-2">
               <Input
-                label="Start date"
+                label="Started on"
                 type="date"
                 value={form.startDate}
+                help="The day you subscribed. Your first renewal is one billing cycle later."
                 onChange={(e) => {
                   const startDate = e.target.value
                   set((f) => {
                     const patch = { startDate }
                     if (f.renewal !== 'fixed' && isPresetCycleUnit(f.cycleUnit)) {
-                      patch.nextRenewalDate = presetNextRenewalFromStart(startDate, f.cycleUnit)
+                      patch.nextRenewalDate = presetNextRenewalFromStart(startDate, f.cycleUnit, f.trialEnd || null)
                     }
                     return patch
                   })
@@ -394,11 +407,27 @@ function PlanForm({ initial, editing, planId }) {
                 {form.renewal === 'fixed'
                   ? 'When the last charge is due before the plan ends.'
                   : form.cycleUnit === 'custom'
-                    ? 'Pick the start date and the next renewal date. The days between them are your billing cycle.'
-                    : 'When the next charge is due.'}
+                    ? 'Pick when you started and your next renewal. The days between first renewal and this date are your billing cycle.'
+                    : 'Already running? Tell us your next renewal date.'}
               </p>
             </div>
-            <Input label="Trial end date (optional)" type="date" value={form.trialEnd} onChange={(e) => set({ trialEnd: e.target.value })} error={f.trialEnd} locked={editing} />
+            <Input
+              label="Trial end date (optional)"
+              type="date"
+              value={form.trialEnd}
+              onChange={(e) => {
+                const trialEnd = e.target.value
+                set((f) => {
+                  const patch = { trialEnd }
+                  if (f.renewal !== 'fixed' && isPresetCycleUnit(f.cycleUnit) && f.startDate) {
+                    patch.nextRenewalDate = presetNextRenewalFromStart(f.startDate, f.cycleUnit, trialEnd || null)
+                  }
+                  return patch
+                })
+              }}
+              error={f.trialEnd}
+              locked={editing}
+            />
             <Select
               label="Renewal"
               value={form.renewal}
@@ -499,7 +528,7 @@ function PlanForm({ initial, editing, planId }) {
           <BoxHead title="What happens next" />
           <ol className="grid gap-3">
             <li>1. Each invited person gets an email.</li>
-            <li>2. When they join, their seat starts as Due.</li>
+            <li>2. Your seat and each member seat start as Due until marked paid or confirmed.</li>
             <li>3. They pay you outside Ongsho, then send the transaction ID to confirm.</li>
           </ol>
         </Box>

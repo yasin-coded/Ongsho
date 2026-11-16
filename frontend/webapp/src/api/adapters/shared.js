@@ -163,6 +163,8 @@ export function mapMySharedPlanDetail(row, meUserId) {
         amount: moneyFromApi(c.amount),
         dueDate,
         monthLabel: dueDate ? fmtCycleDueLabel(dueDate, base.cycle) : '',
+        isOwnerSeat: Boolean(c.is_owner_seat),
+        ownerFirstName: c.owner_first_name ?? base.owner?.firstName ?? null,
       }
     }),
   )

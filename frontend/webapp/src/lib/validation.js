@@ -1,6 +1,7 @@
 import { passwordRules } from '@/api/accounts'
 import { parseTaka } from '@/lib/money'
-import { todayDhaka, diffDays } from '@/lib/dates'
+import { todayDhaka, diffDays, dayOfMonth } from '@/lib/dates'
+import { firstBillDate } from '@/mocks/schedule'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -141,14 +142,19 @@ export function validatePlanForm(form, { editing = false, minSeats = 0 } = {}) {
       const rate = validateRate(String(form.rate))
       if (rate) fields.rate = rate
     }
-    if (!form.startDate) fields.startDate = 'Pick the start date.'
+    if (!form.startDate) fields.startDate = 'Pick when the subscription started.'
   }
   if (form.cycleUnit === 'custom' && form.renewal !== 'fixed') {
     if (!form.nextRenewalDate) fields.nextRenewalDate = 'Pick the next renewal date.'
     else {
-      const first = form.trialEnd || form.startDate
+      const first = firstBillDate({
+        startDate: form.startDate,
+        trialEnd: form.trialEnd || null,
+        cycle: { unit: 'month', count: 1 },
+        anchorDay: dayOfMonth(form.trialEnd || form.startDate),
+      })
       if (first && form.nextRenewalDate <= first) {
-        fields.nextRenewalDate = 'Next renewal must be after the start date.'
+        fields.nextRenewalDate = 'Next renewal must be after the first renewal date.'
       }
     }
   }
