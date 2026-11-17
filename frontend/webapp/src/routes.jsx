@@ -5,8 +5,8 @@ import { HttpProvider } from '@/providers/HttpProvider'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { SkeletonCard } from '@/components/ui/Misc'
+import { HomePage } from '@/features/dashboard/HomePage'
 import {
-  AppHomeFallback,
   DetailPageFallback,
   InvitePageSkeleton,
   LandingFallback,
@@ -29,7 +29,6 @@ const VerifyEmailPage = lazyPage(() => import('@/features/auth/AuthPages').then(
 const ResetPasswordPage = lazyPage(() => import('@/features/auth/AuthPages').then((m) => ({ default: m.ResetPasswordPage })))
 const InvitePage = lazyPage(() => import('@/features/auth/InvitePage').then((m) => ({ default: m.InvitePage })))
 const PlanJoinPage = lazyPage(() => import('@/features/auth/PlanJoinPage').then((m) => ({ default: m.PlanJoinPage })))
-const HomePage = lazyPage(() => import('@/features/dashboard/HomePage').then((m) => ({ default: m.HomePage })))
 const MyPlansPage = lazyPage(() => import('@/features/plans/MyPlansPage').then((m) => ({ default: m.MyPlansPage })))
 const PlanFormPage = lazyPage(() => import('@/features/plans/PlanFormPage').then((m) => ({ default: m.PlanFormPage })))
 const OwnerPlanPage = lazyPage(() => import('@/features/plans/OwnerPlanPage').then((m) => ({ default: m.OwnerPlanPage })))
@@ -105,7 +104,14 @@ export const router = createBrowserRouter([
           </ErrorBoundary>
         ),
         children: [
-          { index: true, element: wrapPage(HomePage, <AppHomeFallback />) },
+          {
+            index: true,
+            element: (
+              <ErrorBoundary>
+                <HomePage />
+              </ErrorBoundary>
+            ),
+          },
           { path: 'plans', element: wrapPage(MyPlansPage, <ListPageFallback />) },
           { path: 'plans/new', element: wrapPage(PlanFormPage, <PlanFormSkeleton />) },
           { path: 'plans/:id', element: wrapPage(OwnerPlanPage, <DetailPageFallback />) },

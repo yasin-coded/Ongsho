@@ -64,7 +64,7 @@ function SharedCard({ plan, onPay, onLeave }) {
         {plan.note && <span className="t-meta">Note: {plan.note}</span>}
       </div>
 
-      {plan.openDues.length > 0 && (
+      {plan.openDues.length > 0 && plan.myStatus === 'due' && (
         <>
           <DashedDivider />
           <div className="row-between">
@@ -86,7 +86,7 @@ function SharedCard({ plan, onPay, onLeave }) {
         <p className="t-label">Your payments for this plan</p>
         {plan.history.length ? (
           <ul className="dashed-rows">
-            {plan.history.slice(0, 3).map((h) => (
+            {plan.history.map((h) => (
               <li key={h.id} className="row-between py-2.5">
                 <span className="t-meta font-bold">{historyLine(h)}</span>
                 <span className="row gap-3">

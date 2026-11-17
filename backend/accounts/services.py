@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
@@ -110,11 +110,28 @@ def verify_email(token: str) -> None:
 
 
 def login_user(*, email: str, password: str, client_ip: str = "") -> tuple[str, str, User]:
-    from core.lockout import LOGIN_INVALID_MESSAGE
+    from django.contrib.auth.hashers import check_password
+
+    from core.lockout import DUMMY_LOGIN_PASSWORD_HASH, LOGIN_INVALID_MESSAGE
 
     assert_login_allowed(email=email, ip=client_ip)
-    user = authenticate(username=email, password=password)
+    user = User.objects.filter(email__iexact=email).first()
     if user is None:
+        check_password(password, DUMMY_LOGIN_PASSWORD_HASH)
+        record_login_failure(email=email, ip=client_ip)
+        raise Unauthorized(
+            LOGIN_INVALID_MESSAGE,
+            code="invalid_credentials",
+        )
+    if not user.is_active:
+        check_password(password, user.password)
+        record_login_failure(email=email, ip=client_ip)
+        raise Unauthorized(
+            LOGIN_INVALID_MESSAGE,
+            code="invalid_credentials",
+        )
+    if not check_password(password, user.password):
+        check_password(password, DUMMY_LOGIN_PASSWORD_HASH)
         record_login_failure(email=email, ip=client_ip)
         raise Unauthorized(
             LOGIN_INVALID_MESSAGE,

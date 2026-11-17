@@ -2,13 +2,20 @@ import {
   InvitePageSkeleton,
   PlanFormSkeleton,
   ReviewPaymentsSkeleton,
+  Skeleton,
   SkeletonCard,
 } from '@/components/ui/Misc'
 
 export function LandingFallback() {
   return (
-    <div className="grid min-h-[60vh] place-items-center p-8" aria-busy="true">
+    <div className="stack-lg p-8 pt-12" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading</span>
+      <Skeleton className="mx-auto h-10 w-40" />
       <SkeletonCard lines={5} tall />
+      <div className="card-grid">
+        <SkeletonCard lines={4} />
+        <SkeletonCard lines={4} />
+      </div>
     </div>
   )
 }

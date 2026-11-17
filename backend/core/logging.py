@@ -16,7 +16,13 @@ _EMAIL_RE = re.compile(
 _JWT_RE = re.compile(r"\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b")
 _LONG_B64_RE = re.compile(r"\b[A-Za-z0-9+/]{32,}={0,2}\b")
 _INVITE_PATH_RE = re.compile(r"(/api/invites/)[^/\s?]+", re.IGNORECASE)
-_TXN_RE = re.compile(r"\b(txn_[a-zA-Z0-9]{8,}|transaction[_-]?id[=:\s]+[a-zA-Z0-9]{8,})\b", re.IGNORECASE)
+_TXN_RE = re.compile(
+    r"\b(txn_[a-zA-Z0-9]{8,}|transaction[_-]?id[=:\s]+[a-zA-Z0-9]{8,}|[A-Z]{2,12}[0-9]{8,})\b",
+    re.IGNORECASE,
+)
+_BREVO_KEY_RE = re.compile(r"\bxkeysib-[a-zA-Z0-9_-]{10,}\b")
+_STRIPE_KEY_RE = re.compile(r"\bsk_(live|test)_[a-zA-Z0-9]+\b")
+_RESEND_KEY_RE = re.compile(r"\bre_[a-zA-Z0-9_-]{10,}\b")
 
 
 def mask_sensitive_text(text: str) -> str:
@@ -26,6 +32,9 @@ def mask_sensitive_text(text: str) -> str:
     out = _JWT_RE.sub("eyJ***", out)
     out = _INVITE_PATH_RE.sub(r"\1***", out)
     out = _TXN_RE.sub("txn_***", out)
+    out = _BREVO_KEY_RE.sub("xkeysib-***", out)
+    out = _STRIPE_KEY_RE.sub("sk_***", out)
+    out = _RESEND_KEY_RE.sub("re_***", out)
     out = _LONG_B64_RE.sub("***", out)
     return out
 

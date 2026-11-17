@@ -292,12 +292,14 @@ export function ownerPlanStatus(plan, members) {
     }
     return { key: 'partial', label: 'Not all paid' }
   }
-  const pending = roster.filter((m) => m.dueStatus === 'pending').length
-  const due = roster.filter((m) => m.dueStatus === 'due').length
+  // Owner-mode plans: you are billed like any other seat — include owner in the pill.
+  const payers = members
+  const pending = payers.filter((m) => m.dueStatus === 'pending').length
+  const due = payers.filter((m) => m.dueStatus === 'due').length
   if (pending) return { key: 'review', label: `${pending} to review`, count: pending }
   if (due) return { key: 'due', label: `${due} due`, count: due }
-  if (roster.some((m) => m.dueStatus == null)) return { key: 'upcoming', label: 'Not billed yet' }
-  if (roster.every((m) => m.dueStatus === 'paid' || m.dueStatus === 'waived')) return { key: 'allpaid', label: 'All paid' }
+  if (payers.some((m) => m.dueStatus == null)) return { key: 'upcoming', label: 'Not billed yet' }
+  if (payers.every((m) => m.dueStatus === 'paid' || m.dueStatus === 'waived')) return { key: 'allpaid', label: 'All paid' }
   return { key: 'upcoming', label: 'Not billed yet' }
 }
 

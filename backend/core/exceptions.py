@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, RequestDataTooBig
 from django.http import Http404
 from rest_framework import exceptions as drf_exc
 from rest_framework.response import Response
@@ -124,6 +124,14 @@ def domain_error_response(exc: DomainError) -> Response:
 def ongsho_exception_handler(exc, context):
     if isinstance(exc, DomainError):
         return domain_error_response(exc)
+
+    if isinstance(exc, RequestDataTooBig):
+        return error_response(
+            "payload_too_large",
+            "The request body is too large.",
+            {},
+            413,
+        )
 
     if isinstance(exc, Http404):
         return error_response("not_found", "Not found.", {}, 404)

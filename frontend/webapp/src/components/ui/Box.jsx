@@ -50,7 +50,7 @@ export function StatCard({ label, value, valueClass = '', helper, visual, childr
       className={cx(
         'grid min-w-0 gap-3',
         children ? 'content-start' : 'content-between',
-        visual && !children ? 'overflow-visible' : 'overflow-hidden',
+        visual ? 'overflow-visible' : 'overflow-hidden',
         className,
       )}
       aria-label={typeof label === 'string' ? label : undefined}

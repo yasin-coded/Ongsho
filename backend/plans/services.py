@@ -340,7 +340,10 @@ def update_subscription(user, pk: int, validated: dict) -> Subscription:
         return out
 
     if "next_renewal_date" in validated:
-        return apply_next_renewal_date(user, pk, validated.pop("next_renewal_date"))
+        apply_next_renewal_date(user, pk, validated.pop("next_renewal_date"))
+        sub = owned_subscription(user, pk)
+        if not validated:
+            return sub
     old_snapshot = _snap(validated.keys())
     if "service_name" in validated:
         sn = service_name_for_user(user, validated["service_name"].pk)

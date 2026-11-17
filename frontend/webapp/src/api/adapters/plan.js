@@ -58,6 +58,18 @@ function resellerOwnerPill(roster) {
   return { key: 'partial', label: 'Not all paid' }
 }
 
+function ownerModePill(members) {
+  const pending = members.filter((m) => m.dueStatus === 'pending').length
+  const due = members.filter((m) => m.dueStatus === 'due').length
+  if (pending) return { key: 'review', label: `${pending} to review`, count: pending }
+  if (due) return { key: 'due', label: `${due} due`, count: due }
+  if (members.some((m) => m.dueStatus == null)) return { key: 'upcoming', label: 'Not billed yet' }
+  if (members.every((m) => m.dueStatus === 'paid' || m.dueStatus === 'waived')) {
+    return { key: 'allpaid', label: 'All paid' }
+  }
+  return { key: 'upcoming', label: 'Not billed yet' }
+}
+
 function statusPill(sub, members = []) {
   if (sub.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (sub.status !== 'active') return { key: sub.status, label: sub.status }
@@ -65,15 +77,7 @@ function statusPill(sub, members = []) {
   const roster = members.filter((m) => !m.isOwnerSeat)
   if (!roster.length) return { key: 'empty', label: 'No members yet' }
   if (sub.plan_mode === 'reseller') return resellerOwnerPill(roster)
-  const pending = roster.filter((m) => m.dueStatus === 'pending').length
-  const due = roster.filter((m) => m.dueStatus === 'due').length
-  if (pending) return { key: 'review', label: `${pending} to review`, count: pending }
-  if (due) return { key: 'due', label: `${due} due`, count: due }
-  if (roster.some((m) => m.dueStatus == null)) return { key: 'upcoming', label: 'Not billed yet' }
-  if (roster.every((m) => m.dueStatus === 'paid' || m.dueStatus === 'waived')) {
-    return { key: 'allpaid', label: 'All paid' }
-  }
-  return { key: 'upcoming', label: 'Not billed yet' }
+  return ownerModePill(members)
 }
 
 export function mapMemberRow(row, meUserId) {
@@ -351,14 +355,18 @@ export function buildCreatePayload(form, serviceNameId) {
   return body
 }
 
-export function buildPatchPayload(form) {
+export function buildPatchPayload(form, { baseline } = {}) {
   const allowed = {}
   if (form.planName !== undefined) allowed.plan_name = form.planName?.trim()
   if (form.note !== undefined) allowed.note = form.note ?? ''
   if (form.method !== undefined) allowed.recommended_method = form.method
   if (form.rarelyUsed !== undefined) allowed.rarely_used = form.rarelyUsed
-  if (form.trialEnd !== undefined) allowed.trial_end_date = form.trialEnd || null
+  // trial_end_date is locked after create; never PATCH it or the API returns field_not_editable.
   if (form.endDate !== undefined) allowed.end_date = form.endDate || null
-  if (form.nextRenewalDate !== undefined) allowed.next_renewal_date = form.nextRenewalDate || null
+  if (form.nextRenewalDate !== undefined) {
+    const val = form.nextRenewalDate || null
+    const base = baseline?.nextRenewalDate ?? undefined
+    if (base === undefined || val !== (base || null)) allowed.next_renewal_date = val
+  }
   return allowed
 }

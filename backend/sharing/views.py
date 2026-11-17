@@ -18,6 +18,7 @@ from core.throttles import (
 )
 from dues import selectors as dues_selectors
 from core.exceptions import DomainError
+from core.permissions import PublicEndpoint
 from core.pagination import OngshoPageNumberPagination
 from payments import selectors as payment_selectors
 from sharing import selectors, serializers as sharing_serializers, services
@@ -147,7 +148,7 @@ def invite_new_link(request, pk: int):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([PublicEndpoint])
 @throttle_classes([PlanJoinGetIpThrottle])
 def plan_join_public(request, token: str):
     try:
@@ -168,7 +169,7 @@ def plan_join_accept(request, token: str):
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
+@permission_classes([PublicEndpoint])
 @throttle_classes([PlanJoinSignupIpThrottle])
 def plan_join_signup(request, token: str):
     try:

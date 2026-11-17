@@ -8,27 +8,16 @@ import { clearAccessToken, setAccessToken } from '@/auth/tokenStore'
 import { clearSessionHint, hasSessionHint, markHasSession } from '@/auth/sessionHint'
 import { shouldAttemptSessionRefresh } from '@/auth/sessionBootstrap'
 import { BootSplash } from '@/components/layout/BootSplash'
-import { cx } from '@/components/ui/Box'
 import { AuthContext, useAuth } from './auth-context'
 
 export function AuthProvider({ children }) {
   const [status, setStatus] = useState('loading')
   const [session, setSession] = useState(null)
-  const [splash, setSplash] = useState('on')
-  const [revealApp, setRevealApp] = useState(false)
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    const booting = status === 'loading' || splash !== 'gone'
-    document.documentElement.classList.toggle('is-booting', booting)
+    document.documentElement.classList.toggle('is-booting', status === 'loading')
     return () => document.documentElement.classList.remove('is-booting')
-  }, [status, splash])
-
-  useEffect(() => {
-    if (status === 'loading') return
-    setRevealApp(true)
-    const id = requestAnimationFrame(() => setSplash('off'))
-    return () => cancelAnimationFrame(id)
   }, [status])
 
   useEffect(() => {
@@ -115,10 +104,8 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {booted && (
-        <div className={cx('app-stage', revealApp && 'app-stage--in')}>{children}</div>
-      )}
-      {splash !== 'gone' && <BootSplash leaving={splash === 'off'} onGone={() => setSplash('gone')} />}
+      {booted ? children : null}
+      {status === 'loading' ? <BootSplash /> : null}
     </AuthContext.Provider>
   )
 }

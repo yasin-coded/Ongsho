@@ -10,6 +10,11 @@ from core.throttles import hash_email
 
 LOGIN_INVALID_MESSAGE = "The email or password is incorrect."
 
+# Fixed hash (pbkdf2 for password "x", salt ongsho_dummy_login_v1) — constant-time work when no user row exists.
+DUMMY_LOGIN_PASSWORD_HASH = (
+    "pbkdf2_sha256$1200000$ongsho_dummy_login_v1$7qyN+QjchGqcoTx2KAykiV9otaJMo77B6VwPXlB6Dwc="
+)
+
 # Pair: 5 failures / 15 min -> lock 15 min
 LOGIN_PAIR_FAIL_LIMIT = 5
 LOGIN_PAIR_WINDOW = 15 * 60

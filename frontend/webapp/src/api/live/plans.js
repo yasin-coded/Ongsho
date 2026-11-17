@@ -158,7 +158,10 @@ export async function createSubscription(form) {
 }
 
 export async function updateSubscription(id, form) {
-  const data = await apiRequest('patch', `/api/subscriptions/${Number(id)}/`, { data: buildPatchPayload(form) })
+  const { __patchBaseline, ...rest } = form
+  const data = await apiRequest('patch', `/api/subscriptions/${Number(id)}/`, {
+    data: buildPatchPayload(rest, { baseline: __patchBaseline }),
+  })
   return mapPlanForm(data)
 }
 

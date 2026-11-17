@@ -4,6 +4,9 @@ import { avatarColorFromId } from './me'
 import { idStr, moneyFromApi, paginatedBody } from './common'
 import { mapIncomingTransfer } from './transfers'
 
+/** Recent payments preview on Shared Plans list cards (full list on member plan page). */
+export const SHARED_LIST_HISTORY_PREVIEW = 3
+
 function cycleFromApi(cycle) {
   if (!cycle) return { unit: 'month', count: 1 }
   if (cycle.count > 1) return { unit: cycle.unit, count: cycle.count }
@@ -63,9 +66,9 @@ function mapRosterMember(m, myStatus) {
 }
 
 export function memberSharedStatus(plan) {
+  if (plan.myStatus === 'paid' || plan.myStatus === 'waived') return plan.myStatus === 'waived' ? 'waived' : 'paid'
   if (plan.openDues?.length) return 'due'
   if (plan.pendingAmount) return 'pending'
-  if (plan.myStatus === 'paid' || plan.myStatus === 'waived') return 'paid'
   if (plan.myStatus === 'none') return 'none'
   if (plan.myStatus === 'due') return 'due'
   if (plan.myStatus === 'pending') return 'pending'
@@ -80,9 +83,16 @@ export function mapMySharedSummary(row, meUserId) {
   const myShare = moneyFromApi(row.my_share) ?? openAmount ?? 0
   const cycle = cycleFromApi(row.cycle)
   let openDues = uniqueDueRows((row.open_dues ?? []).map((d) => mapOpenDueRow(d, cycle)))
-  if (!openDues.length && (row.open_dues_count ?? 0) > 0 && openAmount > 0) {
+  const settled = row.my_status === 'paid' || row.my_status === 'waived'
+  if (settled) {
+    openDues = []
+  } else if (!openDues.length && (row.open_dues_count ?? 0) > 0 && openAmount > 0) {
     openDues.push({ id: `${subId}-open`, amount: openAmount, dueDate: null, monthLabel: '' })
   }
+  const history = (row.history ?? [])
+    .map((h) => mapMemberHistoryRow(h, cycle))
+    .sort((a, b) => (b.dueDate ?? '').localeCompare(a.dueDate ?? ''))
+    .slice(0, SHARED_LIST_HISTORY_PREVIEW)
   return {
     id: idStr(subId),
     planName: row.plan_name,
@@ -103,7 +113,7 @@ export function mapMySharedSummary(row, meUserId) {
     pendingAmount,
     earliestOpenDue: null,
     members: (row.members ?? []).map((m) => mapRosterMember(m, row.my_status)),
-    history: [],
+    history,
     totalSpent: moneyFromApi(row.total_spent) ?? 0,
     me: {
       memberId: row.me?.member_id != null ? idStr(row.me.member_id) : null,
@@ -149,7 +159,9 @@ export function mapMySharedPlanDetail(row, meUserId) {
   const openAmount = moneyFromApi(row.open_amount) ?? 0
   const cycle = cycleFromApi(row.cycle)
   let openDues = uniqueDueRows((row.open_dues ?? []).map((d) => mapOpenDueRow(d, cycle)))
-  if (!openDues.length && (row.open_dues_count ?? 0) > 0 && openAmount > 0) {
+  if (base.myStatus === 'paid' || base.myStatus === 'waived') {
+    openDues = []
+  } else if (!openDues.length && (row.open_dues_count ?? 0) > 0 && openAmount > 0) {
     openDues.push({ id: `${idStr(row.plan_id)}-open`, amount: openAmount, dueDate: null, monthLabel: '' })
   }
   const history = (row.history ?? []).map((h) => mapMemberHistoryRow(h, base.cycle))

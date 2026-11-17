@@ -1,6 +1,38 @@
 import { describe, expect, it } from 'vitest'
-import { buildCreatePayload, mapListResponse, mapSubscriptionDetail } from './plan'
+import { buildCreatePayload, buildPatchPayload, mapListResponse, mapSubscriptionDetail } from './plan'
 import { mapOwnerTransfer } from './transfers'
+
+describe('buildPatchPayload', () => {
+  it('omits locked trial_end_date so note-only edits save', () => {
+    const body = buildPatchPayload({
+      planName: 'ChatGPT',
+      note: 'Updated note',
+      method: 'bkash',
+      rarelyUsed: false,
+      trialEnd: '',
+      endDate: '',
+      nextRenewalDate: '2026-12-15',
+    })
+    expect(body).toEqual({
+      plan_name: 'ChatGPT',
+      note: 'Updated note',
+      recommended_method: 'bkash',
+      rarely_used: false,
+      end_date: null,
+      next_renewal_date: '2026-12-15',
+    })
+    expect(body).not.toHaveProperty('trial_end_date')
+  })
+
+  it('skips unchanged next renewal so PATCH can carry only metadata fields', () => {
+    const body = buildPatchPayload(
+      { note: 'hello', nextRenewalDate: '2026-12-15' },
+      { baseline: { nextRenewalDate: '2026-12-15' } },
+    )
+    expect(body).toEqual({ note: 'hello' })
+    expect(body).not.toHaveProperty('next_renewal_date')
+  })
+})
 
 describe('buildCreatePayload', () => {
   const form = {
@@ -111,6 +143,32 @@ describe('mapListResponse', () => {
     })
     expect(out.items[0].statusPill).toEqual({ key: 'allpaid', label: 'All paid' })
     expect(out.items[0].shared).toBe(true)
+  })
+
+  it('shows due when the owner seat is not paid even if members are', () => {
+    const out = mapListResponse({
+      results: [
+        {
+          id: 2,
+          plan_name: 'ChatGPT Pro',
+          status: 'active',
+          cycle_unit: 'month',
+          cycle_count: 1,
+          currency: 'BDT',
+          plan_mode: 'owner',
+          member_count: 2,
+          seats_taken: 2,
+          monthly_cost: '500.00',
+          price_now: { currency: 'BDT', amount_bdt: '500.00' },
+          members: [
+            { id: 1, user_id: 1, name: 'You', first_name: 'You', is_owner_seat: true, due_status: 'due' },
+            { id: 2, user_id: 2, name: 'Guest', first_name: 'Guest', due_status: 'paid' },
+          ],
+        },
+      ],
+      count: 1,
+    })
+    expect(out.items[0].statusPill).toEqual({ key: 'due', label: '1 due', count: 1 })
   })
 
   it('shows not billed yet when members have no due on the current cycle', () => {

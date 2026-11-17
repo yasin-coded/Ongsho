@@ -487,6 +487,17 @@ def me_shared_plan_item(member: Member, today: date) -> dict:
     snap = _member_money_snapshot(member, today)
     price = price_now_dict(sub)
     taken = sharing_selectors.member_count_active(shared)
+    paid_sum = Due.objects.filter(member=member, status=DueStatus.PAID).aggregate(
+        s=Coalesce(Sum("amount_bdt"), Decimal("0"))
+    )["s"]
+    history = list(
+        Due.objects.filter(
+            member=member,
+            status__in=(DueStatus.PAID, DueStatus.WAIVED),
+        )
+        .select_related("charge")
+        .order_by("-charge__due_date", "-id")[:3]  # match webapp SHARED_LIST_HISTORY_PREVIEW
+    )
     row = {
         "plan_id": sub.pk,
         "plan_name": sub.plan_name,
@@ -503,6 +514,8 @@ def me_shared_plan_item(member: Member, today: date) -> dict:
         "seats_taken": taken,
         "open_dues": _member_open_dues_rows(member),
         "members": _member_roster_rows(member, today),
+        "total_spent": str(quantize_money(paid_sum)),
+        "history": _member_dues_payment_rows(history),
         **snap,
     }
     return row

@@ -83,6 +83,84 @@ describe('shared adapter', () => {
     expect(withTotals.totals.paidUpCount).toBe(2)
   })
 
+  it('list cards include payment history and drop stale open dues when paid', () => {
+    const item = mapMySharedList(
+      {
+        results: [
+          {
+            plan_id: 3,
+            plan_name: 'ChatGPT Pro',
+            service_name: { name: 'ChatGPT' },
+            owner: { name: 'Y', first_name: 'Y', avatar_id: 'sage' },
+            cycle: { unit: 'month', count: 1 },
+            my_share: '250.00',
+            my_status: 'paid',
+            open_amount: '250.00',
+            open_dues_count: 1,
+            pending_amount: '0.00',
+            open_dues: [],
+            total_spent: '250.00',
+            history: [
+              {
+                due_id: 12,
+                month: '2026-11',
+                due_date: '2026-11-15',
+                amount: '250.00',
+                status: 'paid',
+                method: 'bkash',
+                transaction_id: 'TID123',
+              },
+            ],
+            members: [],
+          },
+        ],
+        count: 1,
+      },
+      'u9',
+    ).items[0]
+    expect(item.openDues).toEqual([])
+    expect(memberSharedStatus(item)).toBe('paid')
+    expect(item.history).toHaveLength(1)
+    expect(item.history[0].tid).toBe('TID123')
+    expect(item.totalSpent).toBe(25000)
+  })
+
+  it('list cards keep only the three most recent payments', () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+      due_id: i + 1,
+      month: `2026-0${i + 1}`,
+      due_date: `2026-0${i + 1}-15`,
+      amount: '250.00',
+      status: 'paid',
+    }))
+    const item = mapMySharedList(
+      {
+        results: [
+          {
+            plan_id: 4,
+            plan_name: 'Spotify',
+            service_name: { name: 'Spotify' },
+            owner: { name: 'Y', first_name: 'Y', avatar_id: 'sage' },
+            cycle: { unit: 'month', count: 1 },
+            my_share: '250.00',
+            my_status: 'paid',
+            open_amount: '0.00',
+            pending_amount: '0.00',
+            open_dues: [],
+            total_spent: '1250.00',
+            history: rows,
+            members: [],
+          },
+        ],
+        count: 1,
+      },
+      'u9',
+    ).items[0]
+    expect(item.history).toHaveLength(3)
+    expect(item.history[0].id).toBe('5')
+    expect(item.history[2].id).toBe('3')
+  })
+
   it('labels weekly dues with the full date', () => {
     const out = mapMySharedPlanDetail(
       {

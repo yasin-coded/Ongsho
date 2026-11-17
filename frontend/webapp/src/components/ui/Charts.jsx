@@ -24,7 +24,7 @@ export function Donut({ data, size = 9, label, center = true, compact }) {
   return (
     <figure className={compact ? 'chart-donut chart-donut--compact m-0' : 'chart-donut m-0'}>
       <div className="relative chart-donut__frame" style={{ width: `${rem}rem`, height: `${rem}rem` }} aria-hidden="true">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <PieChart>
             <Pie data={total ? data : [{ name: 'none', value: 1, fill: '#eeeccc' }]} dataKey="value" innerRadius="48%" outerRadius="88%" stroke="#000" strokeWidth={3} startAngle={90} endAngle={-270} isAnimationActive={false}>
               {(total ? data : [{ fill: '#eeeccc' }]).map((d, i) => (
@@ -58,8 +58,8 @@ export function ForecastBars({ data, colors, height = 15, compact }) {
   const tickSize = compact ? '0.75rem' : '0.875rem'
   return (
     <figure className={compact ? 'chart-bars chart-bars--compact m-0' : 'chart-bars m-0'}>
-      <div className="chart-bars__frame" style={{ height: `${h}rem` }} aria-hidden="true">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="chart-bars__frame" style={{ width: '100%', height: `${h}rem` }} aria-hidden="true">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <BarChart data={rows} margin={margin} barCategoryGap={compact ? '18%' : '22%'}>
             <XAxis dataKey="label" axisLine={{ stroke: '#000', strokeWidth: 3 }} tickLine={false} interval={0} tick={{ fill: '#000', fontSize: tickSize, fontFamily: 'Bahnschrift', fontWeight: 700 }} />
             <Tooltip {...tooltipShell} cursor={{ fill: 'rgba(0,0,0,0.06)' }} content={<ChartTip />} />
