@@ -34,6 +34,12 @@ class Payment(models.Model):
     note = models.TextField(blank=True, default="")
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=["shared_plan", "review_status"],
+                name="payments_plan_review_idx",
+            ),
+        ]
         constraints = [
             models.CheckConstraint(condition=Q(amount__gt=0), name="payments_payment_amount_positive"),
             models.UniqueConstraint(

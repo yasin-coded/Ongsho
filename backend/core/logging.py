@@ -80,12 +80,16 @@ class RequestLogMiddleware:
             response.status_code,
             duration_ms,
         )
-        self.logger.info(
+        log_line = (
             "request_id=%s user_id=%s route=%s method=%s status=%s duration_ms=%s",
             *log_kwargs,
         )
+        if route == "health":
+            self.logger.debug(*log_line)
+        else:
+            self.logger.info(*log_line)
         threshold = getattr(settings, "SLOW_REQUEST_MS", 800)
-        if duration_ms >= threshold:
+        if route != "health" and duration_ms >= threshold:
             self.logger.warning("slow_request route=%s duration_ms=%s", route, duration_ms)
         return response
 

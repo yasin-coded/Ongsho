@@ -24,6 +24,12 @@ class Charge(models.Model):
     locked = models.BooleanField(default=False)
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=["subscription", "due_date"],
+                name="billing_charge_sub_due_idx",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["subscription", "period_start"],

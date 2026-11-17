@@ -16,6 +16,7 @@ import django
 
 django.setup()
 
+from core.dev_db_guard import assert_local_dev_database_or_exit
 from django.db import connection
 
 QUERIES = [
@@ -88,6 +89,7 @@ def _summarize(plan_text: str) -> list[str]:
 
 
 def main() -> int:
+    assert_local_dev_database_or_exit("explain_hot_queries")
     for name, sql, params in QUERIES:
         print(f"\n=== {name} ===")
         with connection.cursor() as cursor:

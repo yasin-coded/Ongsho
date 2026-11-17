@@ -18,6 +18,12 @@ class Due(models.Model):
     rejection_reason = models.TextField(blank=True, default="")
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=["member", "status"],
+                name="dues_due_member_status_idx",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(fields=["charge", "member"], name="dues_due_charge_member_unique"),
             models.CheckConstraint(condition=Q(amount_bdt__gt=0), name="dues_due_amount_positive"),

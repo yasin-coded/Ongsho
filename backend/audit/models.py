@@ -21,6 +21,14 @@ class AuditLog(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["plan_id", "-created_at"],
+                name="audit_log_plan_created_idx",
+            ),
+        ]
+
     def save(self, *args, **kwargs):
         if self.pk:
             raise ValidationError("Audit log entries cannot be changed.")

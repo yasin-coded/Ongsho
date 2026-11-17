@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+
+from core.dev_db_guard import assert_local_dev_database
 from django.db import transaction
 from django.utils import timezone
 
@@ -25,8 +26,7 @@ class Command(BaseCommand):
     help = "Seed large dev dataset for performance testing (requires DEBUG=True)."
 
     def handle(self, *args, **options):
-        if not settings.DEBUG:
-            raise CommandError("seed_perf refuses to run unless DEBUG is True.")
+        assert_local_dev_database("seed_perf")
         streaming = Category.objects.filter(is_preset=True, name="Streaming").first()
         netflix = ServiceName.objects.filter(is_preset=True, name="Netflix", category=streaming).first()
         if not streaming or not netflix:

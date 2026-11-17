@@ -60,6 +60,12 @@ class Member(models.Model):
     leave_requested_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=["shared_plan", "status"],
+                name="sharing_member_plan_status_idx",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["shared_plan", "user"],
@@ -99,6 +105,12 @@ class Invite(models.Model):
     )
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=["shared_plan", "status"],
+                name="sharing_invite_plan_status_idx",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["shared_plan", "email"],
