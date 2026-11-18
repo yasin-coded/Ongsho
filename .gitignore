@@ -43,9 +43,7 @@ db.sqlite3
 backend/db.sqlite3
 backend/db.sqlite3-journal
 staticfiles/
-media/
 backend/staticfiles/
-backend/media/
 backend/local_settings.py
 backend/**/*.log
 celerybeat-schedule
@@ -76,7 +74,6 @@ pip-delete-this-directory.txt
 .grok
 .claude
 .agents/
-Assets
 .vscode/
 !.vscode/extensions.json
 .idea/

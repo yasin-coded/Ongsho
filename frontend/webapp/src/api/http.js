@@ -1,17 +1,9 @@
 import axios from 'axios'
-import { clearAccessToken, getAccessToken, setAccessToken } from '@/auth/tokenStore'
+import { clearAccessToken, getAccessToken } from '@/auth/tokenStore'
 import { ApiError, normalizeApiError } from './errors'
+import { apiBaseUrl, refreshAccessCoalesced } from './sessionRefresh'
 
-function resolveApiBaseUrl() {
-  const fromEnv = import.meta.env.VITE_API_URL
-  if (fromEnv === '') return ''
-  if (fromEnv) return fromEnv
-  return import.meta.env.PROD ? '' : 'http://localhost:8000'
-}
-
-const baseURL = resolveApiBaseUrl()
-
-import { onceRefresh } from './refreshQueue'
+const baseURL = apiBaseUrl()
 let onUnauthorized = null
 let onRateLimited = null
 let onServerError = null
@@ -36,16 +28,6 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-async function refreshAccess() {
-  const { data } = await axios.post(
-    `${baseURL}/api/auth/refresh/`,
-    {},
-    { withCredentials: true, headers: { 'X-Requested-With': 'Ongsho' } },
-  )
-  setAccessToken(data.access)
-  return data.access
-}
-
 function isAuthExempt(config) {
   const url = config?.url ?? ''
   return url.includes('/api/auth/login') || url.includes('/api/auth/refresh')
@@ -69,13 +51,11 @@ http.interceptors.response.use(
     }
 
     try {
-      await onceRefresh(() =>
-        refreshAccess().catch((refreshErr) => {
-          clearAccessToken()
-          onUnauthorized?.(refreshErr)
-          throw normalizeApiError(refreshErr)
-        }),
-      )
+      await refreshAccessCoalesced().catch((refreshErr) => {
+        clearAccessToken()
+        onUnauthorized?.(refreshErr)
+        throw normalizeApiError(refreshErr)
+      })
     } catch (e) {
       throw e instanceof ApiError ? e : normalizeApiError(e)
     }

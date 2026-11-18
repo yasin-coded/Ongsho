@@ -1,5 +1,6 @@
-import { setAccessToken, clearAccessToken } from '@/auth/tokenStore'
+import { clearAccessToken, setAccessToken } from '@/auth/tokenStore'
 import { apiRequest } from '../http'
+import { refreshAccessCoalesced } from '../sessionRefresh'
 import { mapMePatch, mapUserFromApi } from '../adapters/me'
 import { mapPublicInvite } from '../adapters/invite'
 import * as mock from '../mock/accounts'
@@ -54,9 +55,7 @@ export async function confirmPasswordReset({ password, uid, token }) {
 }
 
 export async function refreshSession() {
-  const data = await apiRequest('post', '/api/auth/refresh/')
-  setAccessToken(data.access)
-  return data.access
+  return refreshAccessCoalesced()
 }
 
 export async function getMe() {

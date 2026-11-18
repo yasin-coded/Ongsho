@@ -159,6 +159,12 @@ def submit_payment(
     for due in dues:
         if due.member.shared_plan_id != shared.pk:
             raise ConflictError("One of those dues is no longer open.", code="due_not_open")
+    if sub.plan_mode == PlanMode.RESELLER and any(d.member_id != payer.pk for d in dues):
+        raise ConflictError(
+            "On a reseller plan you can only pay your own dues.",
+            code="reseller_own_dues_only",
+        )
+
     own = [d for d in dues if d.member_id == payer.pk]
     seen_charges: set[int] = set()
     for d in own:
@@ -380,10 +386,10 @@ def mark_due_paid(user, due_id: int, *, paid_on: date, method: str, note: str, t
     due = Due.objects.select_for_update().get(pk=due.pk)
     if due.status not in (DueStatus.DUE, DueStatus.PENDING):
         raise ConflictError("This due is already Paid.", code="already_paid")
-    if paid_on > today:
-        raise ValidationFailed("The date cannot be in the future.", fields={"date": ["The date cannot be in the future."]})
     if not paid_on:
         raise ValidationFailed("Pick the date.", fields={"date": ["Pick the date you were paid."]})
+    if paid_on > today:
+        raise ValidationFailed("The date cannot be in the future.", fields={"date": ["The date cannot be in the future."]})
     if method not in PaymentMethod.values:
         raise ValidationFailed("Pick how you were paid.", fields={"method": ["Pick how you were paid."]})
 

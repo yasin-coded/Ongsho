@@ -73,6 +73,8 @@ def _seat_usage(shared: SharedPlan) -> int:
 
 
 def _validate_email_address(email: str) -> str:
+    if not isinstance(email, str):
+        raise ValidationFailed("Enter a valid email.", fields={"email": ["Enter a valid email."]})
     email = (email or "").strip().lower()
     if not email or not EMAIL_RE.match(email):
         raise ValidationFailed("Enter a valid email.", fields={"email": ["Enter a valid email."]})

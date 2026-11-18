@@ -6,7 +6,7 @@ import os
 
 bind = f"0.0.0.0:{os.environ.get('PORT', '8000')}"
 worker_class = "gthread"
-workers = int(os.environ.get("WEB_CONCURRENCY", "2"))
+workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
 threads = int(os.environ.get("WEB_THREADS", "4"))
 timeout = 30
 graceful_timeout = 30
