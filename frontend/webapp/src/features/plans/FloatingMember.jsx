@@ -72,7 +72,7 @@ function WindowBody({ member, planId, onClose, onRemove, onAction, rowRefs }) {
         )}
       </div>
       <div className="float-win__actions row flex-wrap justify-end gap-2">
-        {member.dueId && member.dueStatus === 'due' && (
+        {member.isOwnerSeat && member.dueId && member.dueStatus === 'due' && (
           <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onAction?.('markPaid', member)}>
             Mark paid
           </Button>

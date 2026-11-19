@@ -245,11 +245,11 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
               <LinkButton to={`/app/plans/${plan.id}/review`} variant="review" size="sm" icon={Eye}>
                 Review
               </LinkButton>
-            ) : plan.mode === 'owner' && m.dueId && m.dueStatus === 'due' ? (
+            ) : plan.mode === 'owner' && m.isOwnerSeat && m.dueId && m.dueStatus === 'due' ? (
               <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onOpen('markPaid', m)}>
                 Mark paid
               </Button>
-            ) : plan.mode === 'owner' && m.dueId && m.dueStatus === 'paid' ? (
+            ) : m.dueId && m.dueStatus === 'paid' ? (
               <Button variant="ghost" size="sm" onClick={() => onOpen('setDue', m)}>
                 Set to Due
               </Button>

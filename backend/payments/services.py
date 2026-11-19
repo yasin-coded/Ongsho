@@ -397,6 +397,11 @@ def mark_due_paid(user, due_id: int, *, paid_on: date, method: str, note: str, t
     shared = due.member.shared_plan
     member_user = due.member.user
     is_owner_seat = sub.owner_id == member_user.pk
+    if not is_owner_seat:
+        raise ConflictError(
+            "Members must submit a transaction ID. Confirm it on Review payments.",
+            code="tid_required",
+        )
 
     pending = PaymentAllocation.objects.filter(
         due=due, payment__review_status=ReviewStatus.PENDING

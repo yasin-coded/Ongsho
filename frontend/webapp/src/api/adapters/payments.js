@@ -3,6 +3,7 @@ import { ApiError } from '../errors'
 const CODE_MESSAGES = {
   due_not_open: 'One of those dues is no longer open. Refresh and try again.',
   owner_cannot_submit: 'Use mark as paid for your own seat instead of submitting an ID.',
+  tid_required: 'Members must submit a transaction ID. Confirm it on Review payments.',
   reseller_own_dues_only: 'Paying for someone else is off in Reseller plans.',
   amount_mismatch: 'The amount does not match the dues you picked. Refresh and try again.',
   already_decided: 'This payment was already decided.',

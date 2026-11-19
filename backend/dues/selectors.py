@@ -216,7 +216,10 @@ def _payment_brief(payment: Payment | None) -> dict | None:
 
 def prefetch_member_payment_ctx(shared: SharedPlan, members: list[Member], today: date) -> dict[int, dict]:
     """Per-member due/payment snapshot for the plan's current charge."""
+    from billing import services as billing_services
+
     sub = shared.subscription
+    billing_services.generate_missing_charges(sub, today)
     charge = current_charge(sub, today, min_due_date=sub.billing_from)
     ctx: dict[int, dict] = {m.pk: {} for m in members}
     if charge is None:
