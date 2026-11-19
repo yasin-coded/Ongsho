@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { addDays, todayDhaka } from '@/lib/dates'
 import { buildCreatePayload, buildPatchPayload, mapListResponse, mapSubscriptionDetail } from './plan'
 import { mapOwnerTransfer } from './transfers'
 
@@ -197,6 +198,35 @@ describe('mapListResponse', () => {
     expect(mapListResponse({ results: [base], count: 1 }).items[0].shared).toBe(false)
   })
 
+  it('treats null due as due when the plan started and is inside the current renewal window', () => {
+    const today = todayDhaka()
+    const out = mapListResponse({
+      results: [
+        {
+          id: 1,
+          plan_name: 'New plan',
+          status: 'active',
+          start_date: today,
+          next_renewal: addDays(today, 30),
+          cycle_unit: 'month',
+          cycle_count: 1,
+          currency: 'BDT',
+          plan_mode: 'reseller',
+          seats_taken: 2,
+          seats: 4,
+          monthly_cost: '800.00',
+          price_now: { currency: 'BDT', amount_bdt: '800.00' },
+          members: [
+            { id: 1, user_id: 10, name: 'A', first_name: 'A', due_status: null, joined_on: today },
+            { id: 2, user_id: 11, name: 'B', first_name: 'B', due_status: null, joined_on: today },
+          ],
+        },
+      ],
+      count: 1,
+    })
+    expect(out.items[0].statusPill).toEqual({ key: 'due', label: '2 due', count: 2 })
+  })
+
   it('shows not billed yet when members have no due on the current cycle', () => {
     const out = mapListResponse({
       results: [
@@ -204,6 +234,8 @@ describe('mapListResponse', () => {
           id: 1,
           plan_name: 'Apple Music',
           status: 'active',
+          start_date: '2099-01-01',
+          next_renewal: '2099-02-01',
           cycle_unit: 'month',
           cycle_count: 1,
           currency: 'BDT',

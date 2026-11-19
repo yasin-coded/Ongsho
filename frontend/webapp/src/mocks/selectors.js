@@ -38,11 +38,23 @@ export function categoryInUse(categoryId) {
 // ---------- plan facts ----------
 export const latestCharge = (planId) => chargesOf(planId).at(-1) ?? null
 
-/** The cycle the owner is collecting for now: the latest charge whose due date has arrived, else the latest created. */
+/** Charge for the billing period that contains today (matches backend current_charge). */
 export function currentCharge(planId) {
   const list = chargesOf(planId)
-  const arrived = list.filter((c) => c.dueDate <= MOCK_TODAY)
-  return arrived.at(-1) ?? list.at(-1) ?? null
+  const inCycle = list.filter((c) => c.periodStart <= MOCK_TODAY && c.dueDate >= MOCK_TODAY)
+  if (inCycle.length) {
+    return inCycle.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0))[0]
+  }
+  const past = list.filter((c) => c.dueDate < MOCK_TODAY)
+  if (past.length) return past.at(-1)
+  const future = list.filter((c) => c.dueDate >= MOCK_TODAY)
+  return future[0] ?? null
+}
+
+function memberInActiveBillingCycle(plan, member, charge) {
+  if (!charge || !plan) return false
+  if (MOCK_TODAY < plan.startDate || MOCK_TODAY < member.joinedOn) return false
+  return MOCK_TODAY >= charge.periodStart && MOCK_TODAY <= charge.dueDate
 }
 
 /** Due status on the upcoming/current billing charge for one member. */
@@ -260,16 +272,18 @@ export function rarelyUsed(userId) {
 }
 
 // ---------- owner views ----------
-export function memberView(member, charge) {
+export function memberView(member, charge, plan = null) {
   const user = userById(member.userId)
+  const planRow = plan ?? (charge ? planById(charge.planId) : null)
   const due = charge ? db.dues.find((d) => d.chargeId === charge.id && d.memberId === member.id) : null
   const payment = due ? settlingPayment(due.id) : null
+  const dueStatus = due?.status ?? (memberInActiveBillingCycle(planRow, member, charge) ? 'due' : null)
   return {
     id: member.id, userId: user.id, name: user.name, firstName: firstName(user), email: user.email, avatarColor: user.avatarColor,
     isOwnerSeat: member.isOwnerSeat, status: member.status, joinedOn: member.joinedOn, leftOn: member.leftOn,
     customShare: member.customShare ?? null,
     leaveRequested: member.status === 'leave_requested', leaveRequestedAt: member.leaveRequestedAt,
-    dueId: due?.id ?? null, dueStatus: due?.status ?? null, dueAmount: due?.amount ?? null,
+    dueId: due?.id ?? null, dueStatus, dueAmount: due?.amount ?? null,
     lastPayment: payment ? { method: payment.method, at: payment.submittedAt, review: payment.review, id: payment.id } : null,
     pendingPaymentId: payment?.review === 'pending' ? payment.id : null,
   }
@@ -312,7 +326,7 @@ export function ownerPlanStatus(plan, members) {
 
 export function ownerPlanSummary(plan) {
   const charge = currentCharge(plan.id)
-  const members = membersOf(plan.id).map((m) => memberView(m, charge))
+  const members = membersOf(plan.id).map((m) => memberView(m, charge, plan))
   const price = priceNow(plan)
   const { perSeat } = seatShareNow(plan)
   const category = categoryById(plan.categoryId)
@@ -446,7 +460,7 @@ export function memberDetail(memberId) {
   const member = memberById(memberId)
   const plan = planById(member.planId)
   const charge = currentCharge(plan.id)
-  const view = memberView(member, charge)
+  const view = memberView(member, charge, plan)
   const rows = db.dues
     .filter((d) => d.memberId === memberId)
     .map((d) => {

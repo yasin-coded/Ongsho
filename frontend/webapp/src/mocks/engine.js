@@ -28,6 +28,17 @@ function newDue(charge, member, amount) {
   }
 }
 
+function syncDuesForCharge(plan, charge) {
+  if (!plan.shared) return
+  const members = db.members.filter((m) => m.planId === plan.id && (m.status !== 'left' || isActiveOn(m, charge.periodStart)))
+  const shares = splitCharge(plan, members, charge.amount, charge.periodStart)
+  const existing = duesOfCharge(charge.id)
+  for (const share of shares) {
+    if (existing.some((d) => d.memberId === share.memberId)) continue
+    db.dues.push(newDue(charge, memberById(share.memberId), share.amount))
+  }
+}
+
 /** Create any charge that should exist (renewal within the lead window). Safe to run twice. */
 export function generateMissingCharges(plan) {
   const horizon = addDays(MOCK_TODAY, LEAD_DAYS)
@@ -38,7 +49,7 @@ export function generateMissingCharges(plan) {
     const id = `ch-${plan.id}-${period.periodStart}`
     if (db.charges.some((c) => c.id === id)) continue
     const pricing = priceAt(plan, period.dueDate)
-    db.charges.push({
+    const charge = {
       id,
       planId: plan.id,
       periodStart: period.periodStart,
@@ -46,7 +57,11 @@ export function generateMissingCharges(plan) {
       dueDate: period.dueDate,
       ...pricing,
       locked: period.dueDate <= MOCK_TODAY,
-    })
+    }
+    db.charges.push(charge)
+    if (period.periodStart <= MOCK_TODAY && period.dueDate >= MOCK_TODAY) {
+      syncDuesForCharge(plan, charge)
+    }
   }
   recalcUnlocked(plan)
 }

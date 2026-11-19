@@ -1,7 +1,7 @@
 import { cycleFromForm, nextRenewalDateForApi } from '@/mocks/schedule'
 import { lookupServiceKey } from '@/lib/services'
 import { categoryColor } from '@/lib/colors'
-import { fmtCycleDueLabel, fmtMonth } from '@/lib/dates'
+import { fmtCycleDueLabel, fmtMonth, todayDhaka } from '@/lib/dates'
 import { idStr, moneyFromApi, moneyToApi, rateFromApi, rateToApi, paginatedBody } from './common'
 import { avatarColorFromId } from './me'
 import { mapOwnerTransfer } from './transfers'
@@ -70,6 +70,18 @@ function ownerModePill(members) {
   return { key: 'upcoming', label: 'Not billed yet' }
 }
 
+function syntheticDueStatus(row, sub, today = todayDhaka()) {
+  if (row.due_status != null) return row.due_status
+  if (!sub || sub.status !== 'active') return null
+  const start = sub.start_date
+  if (!start || today < start) return null
+  const joined = row.joined_on
+  if (joined && today < joined) return null
+  const renewal = sub.next_renewal
+  if (!renewal || today > renewal) return null
+  return 'due'
+}
+
 function soloOwnerPaymentPill(members) {
   const seat = members.find((m) => m.isOwnerSeat) ?? members[0]
   const st = seat?.dueStatus
@@ -89,7 +101,8 @@ function statusPill(sub, members = []) {
   return ownerModePill(members)
 }
 
-export function mapMemberRow(row, meUserId) {
+export function mapMemberRow(row, meUserId, sub = null) {
+  const dueStatus = sub ? syntheticDueStatus(row, sub) : row.due_status
   return {
     id: idStr(row.id),
     userId: idStr(row.user_id),
@@ -99,7 +112,7 @@ export function mapMemberRow(row, meUserId) {
     avatarColor: avatarColorFromId(row.avatar_id),
     isOwnerSeat: row.is_owner_seat,
     dueId: row.due_id != null ? idStr(row.due_id) : null,
-    dueStatus: row.due_status,
+    dueStatus,
     dueAmount: row.due_amount ? moneyFromApi(row.due_amount) : null,
     leaveRequested: Boolean(row.leave_requested_at),
     leaveRequestedAt: row.leave_requested_at,
@@ -180,7 +193,7 @@ export function mapListResponse(body, membersByPlan = new Map(), meUserId = null
     const members = (sub.members ?? membersByPlan.get(sub.id) ?? []).map((m) => {
       const hasStatus = m.due_status != null || m.dueStatus != null
       if (m.user_id === undefined && !hasStatus) return m
-      return mapMemberRow({ ...m, user_id: m.user_id ?? m.userId ?? m.id }, meUserId)
+      return mapMemberRow({ ...m, user_id: m.user_id ?? m.userId ?? m.id }, meUserId, sub)
     })
     return mapSubscriptionSummary(sub, members, meUserId)
   })
@@ -223,7 +236,13 @@ function mapChargeRow(ch, cycle) {
 }
 
 export function mapSubscriptionDetail(sub, extras = {}) {
-  const members = extras.members ?? []
+  const members = (extras.members ?? []).map((m) =>
+    mapMemberRow(
+      { ...m, user_id: m.user_id ?? m.userId ?? m.id, name: m.name, first_name: m.first_name ?? m.firstName },
+      extras.meUserId,
+      sub,
+    ),
+  )
   const summary = mapSubscriptionSummary(
     { ...sub, member_count: members.length, seats: sub.seats ?? extras.seats, seats_taken: extras.seatsTaken ?? members.length, per_seat: sub.per_seat },
     members,

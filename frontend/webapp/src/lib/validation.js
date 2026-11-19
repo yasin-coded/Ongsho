@@ -1,7 +1,7 @@
 import { passwordRules } from '@/api/accounts'
 import { parseTaka } from '@/lib/money'
 import { todayDhaka, diffDays, dayOfMonth } from '@/lib/dates'
-import { firstBillDate } from '@/mocks/schedule'
+import { firstRenewalDate } from '@/mocks/schedule'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -147,7 +147,7 @@ export function validatePlanForm(form, { editing = false, minSeats = 0 } = {}) {
   if (form.cycleUnit === 'custom' && form.renewal !== 'fixed') {
     if (!form.nextRenewalDate) fields.nextRenewalDate = 'Pick the next renewal date.'
     else {
-      const first = firstBillDate({
+      const first = firstRenewalDate({
         startDate: form.startDate,
         trialEnd: form.trialEnd || null,
         cycle: { unit: 'month', count: 1 },
