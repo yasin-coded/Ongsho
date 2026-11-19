@@ -176,14 +176,39 @@ def prefetch_owner_plan_context(subscriptions: list[Subscription], today: date) 
     return ctx
 
 
+def _ensure_shared_cycle_ready(sub: Subscription, ctx: OwnerPlanContext, today: date) -> Charge | None:
+    """Create the in-cycle charge and dues when missing (e.g. plan started today)."""
+    shared = ctx.shared(sub.pk)
+    if shared is None or sub.status != SubscriptionStatus.ACTIVE:
+        return ctx.current_charge_by_sub.get(sub.pk)
+    charge = ctx.current_charge_by_sub.get(sub.pk)
+    if charge is not None and ctx.dues_by_charge.get(charge.pk):
+        return charge
+    from billing import services as billing_services
+    from dues import selectors as dues_selectors
+    from dues import services as dues_services
+
+    billing_services.generate_missing_charges(sub, today)
+    charge = dues_selectors.current_charge(sub, today, min_due_date=sub.billing_from)
+    if charge:
+        dues_services.recalculate_dues(charge, today, force=True)
+        fresh_dues = list(
+            Due.objects.filter(charge_id=charge.pk).select_related("member", "member__user")
+        )
+        ctx.dues_by_charge[charge.pk] = fresh_dues
+        ctx.current_charge_by_sub[sub.pk] = charge
+    return charge
+
+
 def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
     from core.dates import today_dhaka
+    from dues import selectors as dues_selectors
 
     today = today_dhaka()
     shared = ctx.shared(sub.pk)
     taken = ctx.seats_taken(sub.pk)
     is_shared = _is_shared(sub, shared, taken)
-    charge = ctx.current_charge_by_sub.get(sub.pk)
+    charge = _ensure_shared_cycle_ready(sub, ctx, today)
     member_dues = _member_dues_on_charge(
         charge, sub=sub, members_by_plan=ctx.members_by_sub, dues_by_charge=ctx.dues_by_charge
     )
@@ -195,24 +220,22 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
 
     members_out = []
     pending_count = 0
-    if is_shared:
+    if shared is not None:
         due_by_member = (
             {d.member_id: d for d in ctx.dues_by_charge.get(charge.pk, [])} if charge else {}
         )
         for m in ctx.members_by_sub.get(sub.pk, []):
             if sub.plan_mode == PlanMode.RESELLER and m.user_id == sub.owner_id:
                 continue
-            due = due_by_member.get(m.pk)
-            due_status = due.status if due else None
-            if (
-                due_status is None
-                and charge
-                and today >= m.joined_on
-                and charge.period_start <= today <= charge.due_date
-                and today >= sub.billing_from
-            ):
-                due_status = DueStatus.DUE
-            if due_status == DueStatus.PENDING:
+            snap = dues_selectors.resolve_member_charge_due(
+                m,
+                charge,
+                sub,
+                today,
+                due=due_by_member.get(m.pk),
+                sync_missing=True,
+            )
+            if snap["due_status"] == DueStatus.PENDING:
                 pending_count += 1
             members_out.append(
                 {
@@ -222,7 +245,9 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
                     "first_name": _first_name(m.user),
                     "avatar_id": m.user.avatar_id,
                     "is_owner_seat": sharing_selectors.is_owner_seat(m),
-                    "due_status": due_status,
+                    "due_id": snap["due_id"],
+                    "due_status": snap["due_status"],
+                    "due_amount": snap["due_amount"],
                 }
             )
 
@@ -231,7 +256,7 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
         "seats_taken": taken if shared else None,
         "per_seat": _per_seat_bdt(sub, shared, is_shared=is_shared, seats_taken=taken),
         "members": members_out,
-        "pending_count": pending_count if is_shared and charge else 0,
+        "pending_count": pending_count if shared and charge else 0,
         "collected": collected,
         "expected": expected,
     }
@@ -348,7 +373,9 @@ def owner_detail_extra(sub: Subscription, today: date) -> dict:
 
     taken = ctx.seats_taken(sub.pk)
     is_shared = _is_shared(sub, shared, taken)
-    charge = ctx.current_charge_by_sub.get(sub.pk)
+    charge = _ensure_shared_cycle_ready(sub, ctx, today)
+    if charge and charge.pk not in dues_by_charge:
+        dues_by_charge[charge.pk] = ctx.dues_by_charge.get(charge.pk, [])
     member_dues = (
         _member_dues_on_charge(
             charge,
@@ -368,7 +395,7 @@ def owner_detail_extra(sub: Subscription, today: date) -> dict:
         else []
     )
     confirmed_so_far = (
-        _confirmed_so_far_amounts(charge, cycle_dues) if is_shared and charge else None
+        _confirmed_so_far_amounts(charge, cycle_dues) if shared and charge else None
     )
 
     owner_member = None

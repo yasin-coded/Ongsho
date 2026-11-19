@@ -71,11 +71,12 @@ def generate_missing_charges(plan: Subscription, today) -> dict[str, int]:
 
     created_rows: list[Charge] = []
     for period in periods:
-        if period.due_date > window_end:
+        in_active_cycle = period.period_start <= today <= period.due_date
+        if period.due_date > window_end and not in_active_cycle:
             continue
         if period.due_date < bill_from:
             continue
-        if period.due_date < today:
+        if period.due_date < today and not in_active_cycle:
             continue
         if Charge.objects.filter(subscription=plan, period_start=period.period_start).exists():
             continue

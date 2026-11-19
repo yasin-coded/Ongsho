@@ -32,6 +32,45 @@ def _member_charge_floor(sub: Subscription, member: Member) -> date:
     return max(member.joined_on, sub.billing_from)
 
 
+def member_in_active_billing_cycle(
+    member: Member, charge: Charge, sub: Subscription, today: date
+) -> bool:
+    """True when today is in [period_start, due_date] after billing_from and join."""
+    if today < sub.billing_from or today < member.joined_on:
+        return False
+    if today < charge.period_start or today > charge.due_date:
+        return False
+    return True
+
+
+def resolve_member_charge_due(
+    member: Member,
+    charge: Charge | None,
+    sub: Subscription,
+    today: date,
+    *,
+    due: Due | None = None,
+    sync_missing: bool = False,
+) -> dict:
+    """Due snapshot for the plan's current charge (synthetic Due when in-cycle, no row yet)."""
+    empty = {"due_id": None, "due_status": None, "due_amount": None}
+    if charge is None:
+        return empty
+    if due is None:
+        due = Due.objects.filter(charge=charge, member=member).first()
+    if due is None and sync_missing and member_in_active_billing_cycle(member, charge, sub, today):
+        _sync_member_dues(member, today)
+        due = Due.objects.filter(charge=charge, member=member).first()
+    due_status = due.status if due else None
+    if due_status is None and member_in_active_billing_cycle(member, charge, sub, today):
+        due_status = DueStatus.DUE
+    return {
+        "due_id": due.pk if due else None,
+        "due_status": due_status,
+        "due_amount": str(quantize_money(due.amount_bdt)) if due else None,
+    }
+
+
 def current_charge(
     subscription: Subscription, today: date, *, min_due_date: date | None = None
 ) -> Charge | None:
@@ -213,20 +252,18 @@ def prefetch_member_payment_ctx(shared: SharedPlan, members: list[Member], today
 
     for m in members:
         due = dues.get(m.pk)
-        due_status = due.status if due else None
-        if (
-            due_status is None
-            and today >= sub.billing_from
-            and today >= m.joined_on
-            and charge.due_date >= sub.billing_from
-        ):
-            due_status = DueStatus.DUE
+        snap = resolve_member_charge_due(
+            m, charge, sub, today, due=due, sync_missing=True
+        )
+        due_row = (
+            Due.objects.filter(pk=snap["due_id"]).first()
+            if snap["due_id"]
+            else due
+        )
         ctx[m.pk] = {
-            "due_id": due.pk if due else None,
-            "due_status": due_status,
-            "due_amount": str(quantize_money(due.amount_bdt)) if due else None,
+            **snap,
             "last_payment": _payment_brief(latest_payments.get(m.pk)),
-            "pending_payment_id": pending_for_due.get(due.pk) if due else None,
+            "pending_payment_id": pending_for_due.get(due_row.pk) if due_row else None,
         }
     return ctx
 
@@ -480,8 +517,11 @@ def _member_roster_rows(member: Member, today: date) -> list[dict]:
 
 
 def me_shared_plan_item(member: Member, today: date) -> dict:
+    from billing import services as billing_services
+
     sub = member.shared_plan.subscription
     shared = member.shared_plan
+    billing_services.generate_missing_charges(sub, today)
     _sync_member_dues(member, today)
     owner = sub.owner
     snap = _member_money_snapshot(member, today)
