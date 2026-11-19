@@ -78,8 +78,8 @@
       "destination": "https://ongsho.onrender.com/api/dashboard/summary/"
     },
     {
-      "source": "/api/:path*",
-      "destination": "https://ongsho.onrender.com/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "https://ongsho.onrender.com/api/$1"
     },
     {
       "source": "/(.*)",
