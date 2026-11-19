@@ -70,10 +70,19 @@ function ownerModePill(members) {
   return { key: 'upcoming', label: 'Not billed yet' }
 }
 
+function soloOwnerPaymentPill(members) {
+  const seat = members.find((m) => m.isOwnerSeat) ?? members[0]
+  const st = seat?.dueStatus
+  if (st === 'pending') return { key: 'review', label: 'Pending' }
+  if (st === 'due') return { key: 'due', label: 'Due' }
+  if (st === 'paid' || st === 'waived') return { key: 'allpaid', label: 'Paid' }
+  return { key: 'upcoming', label: 'Not billed yet' }
+}
+
 function statusPill(sub, members = []) {
   if (sub.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (sub.status !== 'active') return { key: sub.status, label: sub.status }
-  if (!isMultiMemberPlan(sub, members)) return { key: 'solo', label: 'Just me' }
+  if (!isMultiMemberPlan(sub, members)) return soloOwnerPaymentPill(members)
   const roster = members.filter((m) => !m.isOwnerSeat)
   if (!roster.length) return { key: 'empty', label: 'No members yet' }
   if (sub.plan_mode === 'reseller') return resellerOwnerPill(roster)

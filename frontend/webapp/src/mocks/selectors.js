@@ -279,7 +279,14 @@ export function ownerPlanStatus(plan, members) {
   if (plan.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (plan.status !== 'active') return { key: plan.status, label: plan.status }
   const roster = members.filter((m) => !m.isOwnerSeat)
-  if (plan.mode !== 'reseller' && members.length <= 1) return { key: 'solo', label: 'Just me' }
+  if (plan.mode !== 'reseller' && members.length <= 1) {
+    const seat = members.find((m) => m.isOwnerSeat) ?? members[0]
+    const st = seat?.dueStatus
+    if (st === 'pending') return { key: 'review', label: 'Pending' }
+    if (st === 'due') return { key: 'due', label: 'Due' }
+    if (st === 'paid' || st === 'waived') return { key: 'allpaid', label: 'Paid' }
+    return { key: 'upcoming', label: 'Not billed yet' }
+  }
   if (!roster.length) return { key: 'empty', label: 'No members yet' }
   if (plan.mode === 'reseller') {
     const pending = roster.filter((m) => m.dueStatus === 'pending').length

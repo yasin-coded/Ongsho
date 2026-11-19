@@ -57,7 +57,18 @@ function PlanCard({ plan }) {
         <div className="row gap-2">
           <span className="t-label">{reseller ? 'Buyers:' : 'Members:'}</span>
           {plan.members.length ? (
-            plan.members.map((m) => <MemberChip key={m.id} name={m.name} label={m.isOwnerSeat ? 'You' : m.firstName} color={m.avatarColor} status={m.dueStatus ?? undefined} />)
+            (plan.mode === 'owner'
+              ? [...plan.members].sort((a, b) => Number(b.isOwnerSeat) - Number(a.isOwnerSeat))
+              : plan.members
+            ).map((m) => (
+              <MemberChip
+                key={m.id}
+                name={m.name}
+                label={m.isOwnerSeat ? (plan.mode === 'owner' ? `${m.firstName} (you)` : 'You') : m.firstName}
+                color={m.avatarColor}
+                status={m.dueStatus ?? undefined}
+              />
+            ))
           ) : (
             <span className="t-meta">Nobody yet. Invite people from the plan page.</span>
           )}

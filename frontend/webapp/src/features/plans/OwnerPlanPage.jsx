@@ -200,7 +200,11 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
   const reservedInvites = pendingInvitesReservingSeats(plan.invites)
   const free = freeSeats(plan)
   const reseller = plan.mode === 'reseller'
-  const list = plan.members.filter((m) => !m.isOwnerSeat)
+  const list = (
+    reseller
+      ? plan.members.filter((m) => !m.isOwnerSeat)
+      : [...plan.members].sort((a, b) => Number(b.isOwnerSeat) - Number(a.isOwnerSeat))
+  )
   const inviteLabel = reseller ? 'Invite buyer' : 'Invite member'
   const canInvite = canSendInvite(plan)
   const seatsFullReason =
@@ -252,9 +256,12 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
           <li key={m.id} className="owner-member-row flex w-full flex-wrap items-center gap-3 py-3">
             <Avatar name={m.name} color={m.avatarColor} size="md" status={m.dueStatus ?? undefined} decorative />
             <div className="min-w-0 flex-[1_1_12rem]">
-              <p className="truncate font-bold" title={`${m.firstName}${m.isOwnerSeat ? ' (owner)' : ''}`}>
+              <p
+                className="truncate font-bold"
+                title={`${m.firstName}${m.isOwnerSeat ? (m.isYou ? ' (you, owner)' : ' (owner)') : ''}`}
+              >
                 {m.firstName}
-                {m.isOwnerSeat ? ' (owner)' : ''}
+                {m.isOwnerSeat ? (m.isYou ? ' (you)' : ' (owner)') : ''}
               </p>
               <p className="t-meta break-all" title={m.email}>
                 {m.email}

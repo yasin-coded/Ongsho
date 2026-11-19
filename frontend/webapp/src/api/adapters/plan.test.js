@@ -171,6 +171,32 @@ describe('mapListResponse', () => {
     expect(out.items[0].statusPill).toEqual({ key: 'due', label: '1 due', count: 1 })
   })
 
+  it('solo plan status pill is due or paid, not a second Just me', () => {
+    const base = {
+      id: 9,
+      plan_name: 'Solo Netflix',
+      status: 'active',
+      cycle_unit: 'month',
+      cycle_count: 1,
+      currency: 'BDT',
+      plan_mode: 'owner',
+      member_count: 1,
+      seats_taken: 1,
+      monthly_cost: '500.00',
+      price_now: { currency: 'BDT', amount_bdt: '500.00' },
+      members: [{ id: 1, user_id: 1, name: 'You', first_name: 'You', is_owner_seat: true, due_status: 'due' }],
+    }
+    expect(mapListResponse({ results: [base], count: 1 }).items[0].statusPill).toEqual({
+      key: 'due',
+      label: 'Due',
+    })
+    expect(mapListResponse({ results: [{ ...base, members: [{ ...base.members[0], due_status: 'paid' }] }], count: 1 }).items[0].statusPill).toEqual({
+      key: 'allpaid',
+      label: 'Paid',
+    })
+    expect(mapListResponse({ results: [base], count: 1 }).items[0].shared).toBe(false)
+  })
+
   it('shows not billed yet when members have no due on the current cycle', () => {
     const out = mapListResponse({
       results: [
