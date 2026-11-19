@@ -29,8 +29,17 @@
       ]
     }
   ],
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://ongsho.onrender.com/api/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
+ "rewrites": [
+  {
+    "source": "/api/health/",
+    "destination": "https://ongsho.onrender.com/api/health/"
+  },
+  {
+    "source": "/api/:path*",
+    "destination": "https://ongsho.onrender.com/api/:path*"
+  },
+  {
+    "source": "/(.*)",
+    "destination": "/index.html"
+  }
+]
