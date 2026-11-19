@@ -1,5 +1,5 @@
 import { lookupServiceKey } from '@/lib/services'
-import { fmtCycleDueLabel, fmtMonth } from '@/lib/dates'
+import { fmtCycleDueLabel, fmtMonth, todayDhaka } from '@/lib/dates'
 import { avatarColorFromId } from './me'
 import { idStr, moneyFromApi, paginatedBody } from './common'
 import { mapIncomingTransfer } from './transfers'
@@ -65,13 +65,30 @@ function mapRosterMember(m, myStatus) {
   }
 }
 
+function effectiveMyStatus(row) {
+  const st = row.my_status
+  if (st && st !== 'none') return st
+  if (row.status !== 'active') return st ?? 'none'
+  const today = todayDhaka()
+  const renewal = row.next_renewal
+  if (!renewal || today > renewal) return st ?? 'none'
+  const joined = row.me?.joined_on ?? row.joined_on
+  if (joined && today < joined) return 'none'
+  if ((row.open_dues_count ?? 0) > 0) return 'due'
+  const openAmount = moneyFromApi(row.open_amount) ?? 0
+  const pendingAmount = moneyFromApi(row.pending_amount) ?? 0
+  if (openAmount > 0) return 'due'
+  if (pendingAmount > 0) return 'pending'
+  return 'due'
+}
+
 export function memberSharedStatus(plan) {
   if (plan.myStatus === 'paid' || plan.myStatus === 'waived') return plan.myStatus === 'waived' ? 'waived' : 'paid'
   if (plan.openDues?.length) return 'due'
   if (plan.pendingAmount) return 'pending'
-  if (plan.myStatus === 'none') return 'none'
   if (plan.myStatus === 'due') return 'due'
   if (plan.myStatus === 'pending') return 'pending'
+  if (plan.myStatus === 'none') return 'none'
   return 'none'
 }
 
@@ -105,7 +122,7 @@ export function mapMySharedSummary(row, meUserId) {
       avatarColor: avatarColorFromId(row.owner?.avatar_id),
     },
     myShare,
-    myStatus: row.my_status,
+    myStatus: effectiveMyStatus(row),
     nextRenewal: row.next_renewal,
     method: row.recommended_method,
     note: row.note ?? '',

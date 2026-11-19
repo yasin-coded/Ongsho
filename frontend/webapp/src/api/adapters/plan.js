@@ -1,7 +1,7 @@
-import { cycleFromForm, nextRenewalDateForApi } from '@/mocks/schedule'
+import { cycleFromForm, nextDueDate, nextRenewalDateForApi } from '@/mocks/schedule'
 import { lookupServiceKey } from '@/lib/services'
 import { categoryColor } from '@/lib/colors'
-import { fmtCycleDueLabel, fmtMonth, todayDhaka } from '@/lib/dates'
+import { dayOfMonth, fmtCycleDueLabel, fmtMonth, todayDhaka } from '@/lib/dates'
 import { idStr, moneyFromApi, moneyToApi, rateFromApi, rateToApi, paginatedBody } from './common'
 import { avatarColorFromId } from './me'
 import { mapOwnerTransfer } from './transfers'
@@ -70,21 +70,54 @@ function ownerModePill(members) {
   return { key: 'upcoming', label: 'Not billed yet' }
 }
 
-function syntheticDueStatus(row, sub, today = todayDhaka()) {
-  if (row.due_status != null) return row.due_status
+function planScheduleFromSub(sub) {
+  return {
+    startDate: sub.start_date,
+    trialEnd: sub.trial_end_date || null,
+    cycle: { unit: sub.cycle_unit || 'month', count: sub.cycle_count ?? 1 },
+    anchorDay: sub.anchor_day ?? (sub.start_date ? dayOfMonth(sub.start_date) : 1),
+    renewal: sub.renewal_type === 'fixed_term' ? 'fixed' : 'auto',
+    endDate: sub.end_date ?? null,
+    pausedOn: sub.paused_on ?? null,
+    cancelledOn: null,
+  }
+}
+
+function currentCycleRenewalEnd(sub, today = todayDhaka()) {
+  if (sub.next_renewal && today <= sub.next_renewal) return sub.next_renewal
+  if (!sub.start_date) return sub.next_renewal ?? null
+  const plan = planScheduleFromSub(sub)
+  const floor = sub.billing_from && sub.billing_from > today ? sub.billing_from : today
+  return nextDueDate(plan, floor) ?? nextDueDate(plan, sub.start_date) ?? sub.next_renewal ?? null
+}
+
+export function syntheticDueStatus(row, sub, today = todayDhaka()) {
+  const existing = row.due_status ?? row.dueStatus
+  if (existing != null) return existing
   if (!sub || sub.status !== 'active') return null
   const start = sub.start_date
   if (!start || today < start) return null
-  const joined = row.joined_on
+  const billFrom = sub.billing_from ?? start
+  if (today < billFrom) return null
+  const joined = row.joined_on ?? row.joinedOn
   if (joined && today < joined) return null
-  const renewal = sub.next_renewal
+  const renewal = currentCycleRenewalEnd(sub, today)
   if (!renewal || today > renewal) return null
   return 'due'
 }
 
-function soloOwnerPaymentPill(members) {
+function soloOwnerPaymentPill(members, sub) {
   const seat = members.find((m) => m.isOwnerSeat) ?? members[0]
-  const st = seat?.dueStatus
+  let st = seat?.dueStatus ?? seat?.due_status
+  if (st == null && sub) {
+    st = syntheticDueStatus(
+      {
+        due_status: null,
+        joined_on: seat?.joinedOn ?? seat?.joined_on ?? sub.start_date,
+      },
+      sub,
+    )
+  }
   if (st === 'pending') return { key: 'review', label: 'Pending' }
   if (st === 'due') return { key: 'due', label: 'Due' }
   if (st === 'paid' || st === 'waived') return { key: 'allpaid', label: 'Paid' }
@@ -94,7 +127,7 @@ function soloOwnerPaymentPill(members) {
 function statusPill(sub, members = []) {
   if (sub.status === 'trial') return { key: 'trial', label: 'Trial' }
   if (sub.status !== 'active') return { key: sub.status, label: sub.status }
-  if (!isMultiMemberPlan(sub, members)) return soloOwnerPaymentPill(members)
+  if (!isMultiMemberPlan(sub, members)) return soloOwnerPaymentPill(members, sub)
   const roster = members.filter((m) => !m.isOwnerSeat)
   if (!roster.length) return { key: 'empty', label: 'No members yet' }
   if (sub.plan_mode === 'reseller') return resellerOwnerPill(roster)
@@ -102,7 +135,7 @@ function statusPill(sub, members = []) {
 }
 
 export function mapMemberRow(row, meUserId, sub = null) {
-  const dueStatus = sub ? syntheticDueStatus(row, sub) : row.due_status
+  const dueStatus = sub ? syntheticDueStatus(row, sub) : (row.due_status ?? row.dueStatus)
   return {
     id: idStr(row.id),
     userId: idStr(row.user_id),
@@ -236,13 +269,17 @@ function mapChargeRow(ch, cycle) {
 }
 
 export function mapSubscriptionDetail(sub, extras = {}) {
-  const members = (extras.members ?? []).map((m) =>
-    mapMemberRow(
+  const members = (extras.members ?? []).map((m) => {
+    if (m.userId != null) {
+      const dueStatus = m.dueStatus ?? syntheticDueStatus({ due_status: m.dueStatus, joined_on: m.joinedOn }, sub)
+      return dueStatus === m.dueStatus ? m : { ...m, dueStatus }
+    }
+    return mapMemberRow(
       { ...m, user_id: m.user_id ?? m.userId ?? m.id, name: m.name, first_name: m.first_name ?? m.firstName },
       extras.meUserId,
       sub,
-    ),
-  )
+    )
+  })
   const summary = mapSubscriptionSummary(
     { ...sub, member_count: members.length, seats: sub.seats ?? extras.seats, seats_taken: extras.seatsTaken ?? members.length, per_seat: sub.per_seat },
     members,

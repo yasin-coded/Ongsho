@@ -295,7 +295,11 @@ export function ownerPlanStatus(plan, members) {
   const roster = members.filter((m) => !m.isOwnerSeat)
   if (plan.mode !== 'reseller' && members.length <= 1) {
     const seat = members.find((m) => m.isOwnerSeat) ?? members[0]
-    const st = seat?.dueStatus
+    let st = seat?.dueStatus
+    if (st == null && plan.status === 'active') {
+      const renewal = nextRenewal(plan)
+      if (plan.startDate <= MOCK_TODAY && renewal && MOCK_TODAY <= renewal) st = 'due'
+    }
     if (st === 'pending') return { key: 'review', label: 'Pending' }
     if (st === 'due') return { key: 'due', label: 'Due' }
     if (st === 'paid' || st === 'waived') return { key: 'allpaid', label: 'Paid' }

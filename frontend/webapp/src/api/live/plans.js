@@ -23,10 +23,10 @@ async function resolveServiceNameId(serviceName, categoryId) {
   return Number(created.id)
 }
 
-async function loadMembers(planId, meUserId) {
+async function loadMembers(planId, meUserId, sub = null) {
   try {
     const rows = await apiRequest('get', `/api/shared-plans/${Number(planId)}/members/`)
-    return (rows ?? []).map((r) => mapMemberRow(r, meUserId))
+    return (rows ?? []).map((r) => mapMemberRow(r, meUserId, sub))
   } catch {
     return []
   }
@@ -92,7 +92,7 @@ export async function getSubscription(id) {
     const sub = await apiRequest('get', `/api/subscriptions/${Number(id)}/`)
     const me = await getMe()
     const [members, invitesRaw, shared, priceChanges] = await Promise.all([
-      loadMembers(id, me.id),
+      loadMembers(id, me.id, sub),
       loadInvites(id),
       loadSharedMeta(id),
       apiRequest('get', `/api/subscriptions/${Number(id)}/price-changes/`).catch(() => []),
