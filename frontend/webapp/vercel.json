@@ -55,6 +55,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/auth/login/",
+      "destination": "https://ongsho.onrender.com/api/auth/login/"
+    },
+    {
+      "source": "/api/auth/register/",
+      "destination": "https://ongsho.onrender.com/api/auth/register/"
+    },
+    {
       "source": "/api/health/",
       "destination": "https://ongsho.onrender.com/api/health/"
     },
