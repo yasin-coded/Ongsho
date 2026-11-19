@@ -164,38 +164,6 @@ function SeatSplitCard({ plan }) {
   )
 }
 
-function YourSeatCard({ plan, onOpen }) {
-  if (plan.mode !== 'owner' || !plan.shared) return null
-  const seat = plan.members.find((m) => m.isOwnerSeat)
-  if (!seat) return null
-  const statusLabel = STATUS[seat.dueStatus]?.label ?? seat.dueStatus ?? '—'
-  return (
-    <Box>
-      <BoxHead title="Your seat" sub="Your share in the split — not a member to chase." />
-      <div className="row-between flex-wrap gap-3 py-1">
-        <div>
-          <p className="font-bold">
-            Your share: {seat.dueAmount != null ? formatBDT(seat.dueAmount, { trim: true }) : formatBDT(plan.perSeat, { trim: true })} · {statusLabel}
-          </p>
-          <p className="t-meta">Mark paid yourself, or a member can pay for you and you will owe them.</p>
-        </div>
-        <div className="row gap-2">
-          {seat.dueId && seat.dueStatus === 'due' ? (
-            <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onOpen('markPaid', seat)}>
-              Mark my seat paid
-            </Button>
-          ) : null}
-          {seat.dueId && seat.dueStatus === 'paid' ? (
-            <Button variant="ghost" size="sm" onClick={() => onOpen('setDue', seat)}>
-              Set back to Due
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </Box>
-  )
-}
-
 function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, cancelInviteBusy }) {
   const reservedInvites = pendingInvitesReservingSeats(plan.invites)
   const free = freeSeats(plan)
@@ -277,6 +245,14 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
               <LinkButton to={`/app/plans/${plan.id}/review`} variant="review" size="sm" icon={Eye}>
                 Review
               </LinkButton>
+            ) : plan.mode === 'owner' && m.dueId && m.dueStatus === 'due' ? (
+              <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onOpen('markPaid', m)}>
+                Mark paid
+              </Button>
+            ) : plan.mode === 'owner' && m.dueId && m.dueStatus === 'paid' ? (
+              <Button variant="ghost" size="sm" onClick={() => onOpen('setDue', m)}>
+                Set to Due
+              </Button>
             ) : (
               <Button
                 ref={(el) => {
@@ -490,8 +466,6 @@ function OwnerPlan({ plan }) {
         <StatCard label="Renews in" value={renewsInLabel(plan.nextRenewal)} helper={plan.nextRenewal ? fmtShort(plan.nextRenewal) : undefined} />
       </div>
 
-      {plan.shared && plan.mode === 'owner' ? <YourSeatCard plan={plan} onOpen={(type, member) => setModal({ type, member })} /> : null}
-
       {plan.confirmedSoFar ? (
         <Box>
           <div className="row-between mb-4">
@@ -520,7 +494,7 @@ function OwnerPlan({ plan }) {
         plan.shared && (
           <Box>
             <h2 className="t-card">Confirmed so far</h2>
-            <p className="t-meta">Nothing to collect from members yet — first member bill is on the first renewal date.</p>
+            <p className="t-meta">No dues on the current cycle yet. They appear once billing starts for this period.</p>
           </Box>
         )
       )}
@@ -539,8 +513,35 @@ function OwnerPlan({ plan }) {
           }}
         />
         <>
-          <FloatingMember memberId={openId} planId={plan.id} onClose={() => setOpenId(null)} onRemove={(m) => { setOpenId(null); setModal({ type: 'remove', member: m }) }} rowRefs={rowRefs} />
-          <FloatingMember sheet memberId={openId} planId={plan.id} onClose={() => setOpenId(null)} onRemove={(m) => { setOpenId(null); setModal({ type: 'remove', member: m }) }} rowRefs={rowRefs} />
+          <FloatingMember
+            memberId={openId}
+            planId={plan.id}
+            onClose={() => setOpenId(null)}
+            onRemove={(m) => {
+              setOpenId(null)
+              setModal({ type: 'remove', member: m })
+            }}
+            onAction={(type, member) => {
+              setOpenId(null)
+              setModal({ type, member })
+            }}
+            rowRefs={rowRefs}
+          />
+          <FloatingMember
+            sheet
+            memberId={openId}
+            planId={plan.id}
+            onClose={() => setOpenId(null)}
+            onRemove={(m) => {
+              setOpenId(null)
+              setModal({ type: 'remove', member: m })
+            }}
+            onAction={(type, member) => {
+              setOpenId(null)
+              setModal({ type, member })
+            }}
+            rowRefs={rowRefs}
+          />
         </>
       </div>
 
@@ -755,7 +756,12 @@ function OwnerPlan({ plan }) {
       )}
       {modal?.type === 'waive' && <WaiveModal dueId={modal.member.dueId} name={modal.member.firstName} onClose={() => setModal(null)} />}
       {modal?.type === 'setDue' && (
-        <SetDueModal dueId={modal.member.dueId} name={modal.member.firstName} ownSeat onClose={() => setModal(null)} />
+        <SetDueModal
+          dueId={modal.member.dueId}
+          name={modal.member.firstName}
+          ownSeat={modal.member.isOwnerSeat}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   )

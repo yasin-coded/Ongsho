@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Eye, UserMinus, X } from 'lucide-react'
+import { BadgeCheck, Eye, HandCoins, RotateCcw, UserMinus, X } from 'lucide-react'
 import { getMember } from '@/api/plans'
 import { METHODS } from '@/lib/colors'
 import { formatBDT } from '@/lib/money'
@@ -18,7 +18,7 @@ function EmptyWindow() {
   )
 }
 
-function WindowBody({ member, planId, onClose, onRemove, rowRefs }) {
+function WindowBody({ member, planId, onClose, onRemove, onAction, rowRefs }) {
   const closeRef = useRef(null)
   useEffect(() => {
     closeRef.current?.focus()
@@ -71,7 +71,22 @@ function WindowBody({ member, planId, onClose, onRemove, rowRefs }) {
           <p className="t-meta">No payments yet.</p>
         )}
       </div>
-      <div className="float-win__actions row justify-end">
+      <div className="float-win__actions row flex-wrap justify-end gap-2">
+        {member.dueId && member.dueStatus === 'due' && (
+          <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onAction?.('markPaid', member)}>
+            Mark paid
+          </Button>
+        )}
+        {member.dueId && member.dueStatus === 'paid' && (
+          <Button variant="ghost" size="sm" icon={RotateCcw} onClick={() => onAction?.('setDue', member)}>
+            Set to Due
+          </Button>
+        )}
+        {member.dueId && member.dueStatus === 'due' && (
+          <Button variant="waive" size="sm" icon={HandCoins} onClick={() => onAction?.('waive', member)}>
+            Waive
+          </Button>
+        )}
         {member.pendingPaymentId && (
           <LinkButton to={`/app/plans/${planId}/review`} variant="review" size="sm" icon={Eye}>
             Review Payment
@@ -87,7 +102,7 @@ function WindowBody({ member, planId, onClose, onRemove, rowRefs }) {
   )
 }
 
-export function FloatingMember({ memberId, planId, onClose, onRemove, rowRefs, sheet }) {
+export function FloatingMember({ memberId, planId, onClose, onRemove, onAction, rowRefs, sheet }) {
   const query = useQuery({ queryKey: ['member', memberId], queryFn: () => getMember(memberId), enabled: Boolean(memberId) })
   const inner = !memberId ? (
     <EmptyWindow />
@@ -100,7 +115,7 @@ export function FloatingMember({ memberId, planId, onClose, onRemove, rowRefs, s
       <ErrorBox error={query.error} onRetry={() => query.refetch()} />
     </Box>
   ) : (
-    <WindowBody member={query.data} planId={planId} onClose={onClose} onRemove={onRemove} rowRefs={rowRefs} />
+    <WindowBody member={query.data} planId={planId} onClose={onClose} onRemove={onRemove} onAction={onAction} rowRefs={rowRefs} />
   )
   if (sheet) {
     if (!memberId) return null

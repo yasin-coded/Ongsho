@@ -37,7 +37,7 @@ export function mapReview(data) {
   const serviceName = data.plan?.service_name?.name
   const decided = (data.decided ?? []).map((d) => ({
     id: idStr(d.due_id),
-    name: d.member?.first_name ?? '',
+    name: d.member?.name ?? d.member?.first_name ?? '',
     firstName: d.member?.first_name ?? '',
     email: d.member?.email ?? '',
     avatarColor: avatarColorFromId(d.member?.avatar_id),
