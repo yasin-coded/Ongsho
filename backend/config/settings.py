@@ -273,6 +273,8 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_EXPOSE_HEADERS = ["Content-Disposition", "X-Statement-Number", "X-Request-ID"]
 
 NUM_PROXIES = int(os.environ.get("NUM_PROXIES", "0"))
+# Temporary: enable IP chain logging on /api/health/ when set + matching X-IP-Diagnostics-Token header.
+IP_DIAGNOSTICS_TOKEN = os.environ.get("IP_DIAGNOSTICS_TOKEN", "").strip()
 
 DEFAULT_THROTTLE_RATES = {
     "login_ip": "10/m",
@@ -337,6 +339,11 @@ LOGGING = {
     },
     "loggers": {
         "ongsho.request": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "ongsho.ip_diag": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
