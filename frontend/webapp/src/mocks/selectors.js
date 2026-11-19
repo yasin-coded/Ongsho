@@ -756,7 +756,7 @@ export function navCounts(userId) {
 }
 
 export function profileCounts(userId) {
-  return { owned: ownedPlans(userId).length, joined: joinedPlans(userId).length }
+  return { plansOwned: ownedPlans(userId).length, plansJoined: joinedPlans(userId).length }
 }
 
 export { MOCK_TODAY, LEAD_DAYS, diffDays, fmtShort, monthStart }

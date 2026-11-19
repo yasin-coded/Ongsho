@@ -558,10 +558,10 @@ export function ProfilePage() {
                   </div>
                   <div className="profile-summary__tags">
                     <Pill small fill="#ff00ff">
-                      {me.owned} owned
+                      {me.plansOwned} owned
                     </Pill>
                     <Pill small fill="#00ff8b">
-                      {me.joined} joined
+                      {me.plansJoined} joined
                     </Pill>
                   </div>
                 </Box>
