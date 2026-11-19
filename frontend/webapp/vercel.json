@@ -63,6 +63,10 @@
       "destination": "https://ongsho.onrender.com/api/auth/register/"
     },
     {
+      "source": "/api/auth/refresh/",
+      "destination": "https://ongsho.onrender.com/api/auth/refresh/"
+    },
+    {
       "source": "/api/health/",
       "destination": "https://ongsho.onrender.com/api/health/"
     },
