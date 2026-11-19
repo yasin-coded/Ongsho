@@ -1,4 +1,3 @@
-
 {
   "headers": [
     {
@@ -69,6 +68,14 @@
     {
       "source": "/api/health/",
       "destination": "https://ongsho.onrender.com/api/health/"
+    },
+    {
+      "source": "/api/me/",
+      "destination": "https://ongsho.onrender.com/api/me/"
+    },
+    {
+      "source": "/api/dashboard/summary/",
+      "destination": "https://ongsho.onrender.com/api/dashboard/summary/"
     },
     {
       "source": "/api/:path*",
