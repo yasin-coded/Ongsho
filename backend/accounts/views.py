@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
@@ -17,6 +19,7 @@ from accounts.serializers import (
     user_public_dict,
 )
 from core.exceptions import DomainError, ValidationFailed
+from core.mail_enqueue import OutboxEnqueueError
 from core.security import require_same_app_request
 from core.throttles import (
     LoginEmailThrottle,
@@ -31,6 +34,13 @@ from core.throttles import (
     VerifyEmailIpThrottle,
     client_ip,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _log_accounts_outbox_enqueue_failure(*, operation: str) -> None:
+    """Log outbox enqueue failure without request email or exception text."""
+    logger.warning("accounts_outbox_enqueue_failed operation=%s", operation)
 
 
 def _domain_response(exc: DomainError, *, clear_refresh: bool = False) -> Response:
@@ -128,7 +138,10 @@ def logout_view(request):
 def resend_verification_view(request):
     serializer = ResendVerificationSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    services.resend_verification(serializer.validated_data["email"])
+    try:
+        services.resend_verification(serializer.validated_data["email"])
+    except OutboxEnqueueError:
+        _log_accounts_outbox_enqueue_failure(operation="verify_resend")
     return Response({"message": services.RESEND_VERIFICATION_MESSAGE})
 
 
@@ -138,7 +151,10 @@ def resend_verification_view(request):
 def password_reset_view(request):
     serializer = PasswordResetRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    services.request_password_reset(serializer.validated_data["email"])
+    try:
+        services.request_password_reset(serializer.validated_data["email"])
+    except OutboxEnqueueError:
+        _log_accounts_outbox_enqueue_failure(operation="password_reset")
     return Response({"message": services.PASSWORD_RESET_GENERIC_MESSAGE})
 
 

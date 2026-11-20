@@ -1,0 +1,1 @@
+"""Transactional outbox worker (delivery only; domain enqueue is a separate stage)."""

@@ -445,6 +445,8 @@ def delete_subscription(user, pk: int, password: str) -> None:
             plan_id=plan_id,
             summary=f"You deleted {sub.plan_name}",
         )
+        if shared is not None:
+            sharing_services.purge_plan_invite_outbox(shared)
         sub.delete()
 
 

@@ -32,6 +32,8 @@ htmlcov/
 .nox/
 .hypothesis/
 
+backend/tests/*.bak
+
 # Type checkers / linters
 .mypy_cache/
 .ruff_cache/
@@ -53,11 +55,6 @@ celerybeat.pid
 backend/.env
 backend/.env.*
 !backend/.env.example
-
-# Backend tests (separate nested git repo — do not track here)
-backend/tests/
-backend/conftest.py
-backend/pytest.ini
 
 # Python packaging
 *.egg-info/

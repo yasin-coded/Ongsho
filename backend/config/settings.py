@@ -6,6 +6,7 @@ Django settings for Ongsho. Environment variables are loaded with python-dotenv 
 """
 
 import json
+import math
 import os
 import sys
 from datetime import timedelta
@@ -34,6 +35,9 @@ if "pytest" in sys.argv[0] or any(arg == "pytest" or arg.endswith("pytest") for 
     os.environ.setdefault("ADMIN_URL", "admin/")
     os.environ.setdefault("SECURE_SSL_REDIRECT", "False")
     os.environ.setdefault("TRUST_PROXY_SSL", "False")
+    from core.test_support.invite_delivery_keys import apply_test_invite_delivery_encryption_env
+
+    apply_test_invite_delivery_encryption_env()
 
 
 def _env_bool(name: str) -> bool:
@@ -71,6 +75,56 @@ def _env_str_default(name: str, default: str) -> str:
     return raw.strip()
 
 
+def _positive_int_env(name: str, default: str) -> int:
+    raw = os.environ.get(name, default)
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{name} must be a positive integer") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return value
+
+
+def _load_invite_delivery_encryption_keys() -> dict[int, str]:
+    from core.crypto.invite_delivery import parse_invite_delivery_encryption_keys_json
+
+    raw = os.environ.get("INVITE_DELIVERY_ENCRYPTION_KEYS", "").strip()
+    if not raw:
+        return {}
+    return parse_invite_delivery_encryption_keys_json(raw)
+
+
+def _load_invite_delivery_encryption_active_version(keys: dict[int, str]) -> int:
+    raw = os.environ.get("INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION", "1").strip()
+    try:
+        version = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION must be an integer") from exc
+    if version < 1:
+        raise RuntimeError("INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION must be >= 1")
+    if keys and version not in keys:
+        raise RuntimeError(
+            f"INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION {version} is not present in INVITE_DELIVERY_ENCRYPTION_KEYS"
+        )
+    return version
+
+
+def _brevo_api_timeout() -> float:
+    raw = os.environ.get("BREVO_API_TIMEOUT", "10")
+    try:
+        timeout = float(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "BREVO_API_TIMEOUT must be a number of seconds (positive and finite)."
+        ) from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise RuntimeError(
+            "BREVO_API_TIMEOUT must be a positive finite number of seconds."
+        )
+    return timeout
+
+
 def _running_pytest() -> bool:
     if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
         return True
@@ -96,6 +150,7 @@ def _use_direct_database_url() -> bool:
         "sqlmigrate",
         "squashmigrations",
         "run_daily",
+        "process_email_outbox",
         "seed_perf",
         "shell",
         "dbshell",
@@ -258,6 +313,20 @@ SIMPLE_JWT = {
 
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = _env_str("DEFAULT_FROM_EMAIL")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
+BREVO_API_TIMEOUT = _brevo_api_timeout()
+
+INVITE_DELIVERY_ENCRYPTION_KEYS = _load_invite_delivery_encryption_keys()
+INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION = _load_invite_delivery_encryption_active_version(
+    INVITE_DELIVERY_ENCRYPTION_KEYS
+)
+if not INVITE_DELIVERY_ENCRYPTION_KEYS and not _running_pytest() and not DEBUG:
+    raise RuntimeError("Missing INVITE_DELIVERY_ENCRYPTION_KEYS (required when DEBUG is False)")
+
+OUTBOX_LEASE_SECONDS = _positive_int_env("OUTBOX_LEASE_SECONDS", "900")
+# Worker retries are bounded; delivery is not guaranteed eventual (at-least-once attempts only).
+OUTBOUND_EMAIL_MAX_ATTEMPTS = _positive_int_env("OUTBOUND_EMAIL_MAX_ATTEMPTS", "8")
+
 FRONTEND_BASE_URL = _env_str("FRONTEND_BASE_URL").rstrip("/")
 REFRESH_COOKIE_SECURE = _env_bool("REFRESH_COOKIE_SECURE")
 REFRESH_COOKIE_SAMESITE = _env_str("REFRESH_COOKIE_SAMESITE")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -18,7 +19,7 @@ from core.exceptions import ConflictError, Forbidden, NotFound, ValidationFailed
 from core.money import format_bdt, quantize_money
 from plans.models import PlanMode, PriceChange, Subscription, SubscriptionStatus
 from plans.selectors import owned_subscription, price_now_dict
-from sharing.emails import send_invite_email
+from core.mail_outbox import cancel_pending_invite_deliveries, enqueue_plan_invite_delivery
 from sharing.models import Invite, InviteStatus, Member, MemberStatus, SharedPlan, SplitType
 from sharing.tokens import hash_invite_token, new_invite_token
 
@@ -481,11 +482,10 @@ def _create_invite_locked(
         status=InviteStatus.PENDING,
         replaces_member=replaces_member,
     )
-    send_invite_email(
-        to_email=email,
-        plan_name=sub.plan_name,
-        inviter_name=owner.name,
-        invite_link=_invite_link(raw),
+    enqueue_plan_invite_delivery(
+        invite=invite,
+        raw_token=raw,
+        business_event_id=f"plan_invite:create:{invite.pk}",
     )
     if User.objects.filter(email__iexact=email, email_verified=True).exists():
         existing = User.objects.get(email__iexact=email)
@@ -526,6 +526,7 @@ def cancel_invite(user, invite_id: int) -> Invite:
         raise NotFound("Not found.")
     if invite.status != InviteStatus.PENDING:
         raise ConflictError("Only pending invites can be cancelled.", code="invite_used")
+    cancel_pending_invite_deliveries(invite.pk)
     invite.status = InviteStatus.CANCELLED
     invite.save(update_fields=["status"])
     from core.notify import resolve_notifications
@@ -554,16 +555,16 @@ def new_invite_link(user, invite_id: int, *, today: date) -> tuple[Invite, str]:
         raise NotFound("Not found.")
     if invite.status != InviteStatus.PENDING:
         raise ConflictError("Only pending invites can get a new link.", code="invite_used")
+    cancel_pending_invite_deliveries(invite.pk)
     raw, token_hash = new_invite_token()
     invite.token_hash = token_hash
     invite.expires_on = _expires_end_of_day(today)
     invite.save(update_fields=["token_hash", "expires_on"])
     sub = invite.shared_plan.subscription
-    send_invite_email(
-        to_email=invite.email,
-        plan_name=sub.plan_name,
-        inviter_name=invite.invited_by.name,
-        invite_link=_invite_link(raw),
+    enqueue_plan_invite_delivery(
+        invite=invite,
+        raw_token=raw,
+        business_event_id=f"plan_invite:rotate:{invite.pk}:{uuid.uuid4()}",
     )
     _audit(
         user,
@@ -998,10 +999,19 @@ def cancel_all_pending_invites(shared: SharedPlan) -> int:
 
     pending = list(Invite.objects.filter(shared_plan=shared, status=InviteStatus.PENDING))
     for invite in pending:
+        cancel_pending_invite_deliveries(invite.pk)
         invite.status = InviteStatus.CANCELLED
         invite.save(update_fields=["status"])
         resolve_notifications("invite", invite_id=invite.pk)
     return len(pending)
+
+
+def purge_plan_invite_outbox(shared: SharedPlan) -> int:
+    """Remove invite-tied outbox rows before plan delete cascades remove Invite rows."""
+    from core.mail_outbox import purge_outbound_emails_for_invites
+
+    invite_ids = Invite.objects.filter(shared_plan=shared).values_list("pk", flat=True)
+    return purge_outbound_emails_for_invites(invite_ids)
 
 
 from sharing.ownership_transfer import (  # noqa: E402

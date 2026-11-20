@@ -14,7 +14,12 @@ from rest_framework_simplejwt.tokens import RefreshToken, UntypedToken
 
 from audit import services as audit_services
 from accounts.constants import DEFAULT_AVATAR_ID
-from accounts.emails import send_email_change_verification, send_password_reset_email, send_verification_email
+from core.mail_outbox import (
+    enqueue_account_verify,
+    enqueue_email_change,
+    enqueue_password_reset,
+    enqueue_verify_resend,
+)
 from accounts.tokens import load_email_change_token, load_email_verification_token
 from core.exceptions import ConflictError, Forbidden, Unauthorized, ValidationFailed
 from core.lockout import (
@@ -72,7 +77,7 @@ def register_user(*, email: str, password: str, name: str) -> User:
         email_verified=False,
         avatar_id=DEFAULT_AVATAR_ID,
     )
-    send_verification_email(user)
+    enqueue_account_verify(user)
     return user
 
 
@@ -81,15 +86,22 @@ def _resend_verification_cache_key(email: str) -> str:
     return f"{_RESEND_VERIFY_CACHE_PREFIX}{digest}"
 
 
+@transaction.atomic
 def resend_verification(email: str) -> None:
-    user = User.objects.filter(email__iexact=email, is_active=True, email_verified=False).first()
+    user = (
+        User.objects.select_for_update()
+        .filter(email__iexact=email, is_active=True, email_verified=False)
+        .first()
+    )
     if not user:
         return
     cache_key = _resend_verification_cache_key(email)
     if cache.get(cache_key):
         return
-    send_verification_email(user)
-    cache.set(cache_key, True, timeout=RESEND_VERIFICATION_COOLDOWN_SECONDS)
+    enqueue_verify_resend(user)
+    transaction.on_commit(
+        lambda key=cache_key: cache.set(key, True, timeout=RESEND_VERIFICATION_COOLDOWN_SECONDS)
+    )
 
 
 def verify_email(token: str) -> None:
@@ -200,13 +212,12 @@ def logout_refresh(refresh_raw: str | None) -> None:
         return
 
 
+@transaction.atomic
 def request_password_reset(email: str) -> None:
     user = User.objects.filter(email__iexact=email, is_active=True, email_verified=True).first()
     if not user:
         return
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = default_token_generator.make_token(user)
-    send_password_reset_email(user, uid, token)
+    enqueue_password_reset(user)
 
 
 def confirm_password_reset(*, uid: str, token: str, new_password: str) -> None:
@@ -263,7 +274,9 @@ def _resend_email_change_cache_key(user_id: int) -> str:
     return f"{_RESEND_EMAIL_CHANGE_CACHE_PREFIX}{user_id}"
 
 
+@transaction.atomic
 def resend_pending_email_change(user) -> None:
+    user = User.objects.select_for_update().get(pk=user.pk)
     if not user.pending_email:
         raise ValidationFailed(
             "No pending email change.",
@@ -272,8 +285,10 @@ def resend_pending_email_change(user) -> None:
     cache_key = _resend_email_change_cache_key(user.pk)
     if cache.get(cache_key):
         return
-    send_email_change_verification(user, user.pending_email)
-    cache.set(cache_key, True, timeout=RESEND_EMAIL_CHANGE_COOLDOWN_SECONDS)
+    enqueue_email_change(user)
+    transaction.on_commit(
+        lambda key=cache_key: cache.set(key, True, timeout=RESEND_EMAIL_CHANGE_COOLDOWN_SECONDS)
+    )
 
 
 def reminder_settings_dict(user) -> dict:
@@ -300,6 +315,14 @@ def update_reminder_settings(user, *, days_before=None, email=None) -> None:
     if update_fields:
         user.full_clean()
         user.save(update_fields=update_fields)
+        if email is False:
+            from core.mail_outbox import cancel_pending_reminder_deliveries_for_user
+
+            cancel_pending_reminder_deliveries_for_user(user.pk)
+        if email is False:
+            from core.mail_outbox import cancel_pending_reminder_deliveries_for_user
+
+            cancel_pending_reminder_deliveries_for_user(user.pk)
 
 
 @transaction.atomic
@@ -350,7 +373,7 @@ def request_email_change(user, *, new_email: str, password: str) -> None:
     previous_pending = user.pending_email or None
     user.pending_email = new_email
     user.save(update_fields=["pending_email"])
-    send_email_change_verification(user, new_email)
+    enqueue_email_change(user)
     audit_services.log(
         user,
         "email_change.requested",

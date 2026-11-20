@@ -7,10 +7,8 @@ from calendar import month_name
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from accounts.validators import parse_reminder_days
@@ -52,24 +50,6 @@ def _owner_amount(sub: Subscription, on_date: date, prices: list) -> Decimal:
     return Decimal(raw) if raw else Decimal("0")
 
 
-def _try_send_email(user, *, title: str, message: str, link: str) -> bool:
-    if not user.email_verified or not user.email:
-        return False
-    body = f"{message}\n\n{settings.FRONTEND_BASE_URL}{link}\n"
-    try:
-        send_mail(
-            subject=title,
-            message=body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
-        return True
-    except Exception:
-        logger.exception("reminder_email_failed")
-        return False
-
-
 def _dispatch(
     *,
     user,
@@ -85,7 +65,18 @@ def _dispatch(
     payload: dict,
     email_reminders: bool,
 ) -> tuple[bool, bool, bool]:
-    """Create Reminder + notification; optional email. Returns (created, email_sent, email_failed)."""
+    """
+    Create Reminder + notification; optional outbox email.
+
+    Returns (created, email_queued, enqueue_failed). ``email_queued`` / ``enqueue_failed`` refer
+    to outbox insert success or failure, not provider delivery.
+    """
+    from core.mail_enqueue import OutboxEnqueueError
+    from core.mail_outbox import enqueue_reminder_delivery
+    from core.models.outbound_email import OutboundEmail, OutboundEmailType
+
+    email_queued = False
+    email_failed = False
     with transaction.atomic():
         reminder, created = Reminder.objects.get_or_create(
             kind=reminder_kind,
@@ -99,20 +90,60 @@ def _dispatch(
                 "sent_at": timezone.now(),
             },
         )
-        if not created:
-            return False, False, False
-    notify(user, kind, title, message, link=link, payload=payload)
-    email_sent = False
-    email_failed = False
-    channel = ReminderChannel.IN_APP
-    if email_reminders and user.email_verified:
-        if _try_send_email(user, title=title, message=message, link=link):
-            email_sent = True
-            channel = ReminderChannel.EMAIL
+        needs_save = created
+        if created:
+            notify(user, kind, title, message, link=link, payload=payload)
+            channel = ReminderChannel.IN_APP
         else:
-            email_failed = True
-    Reminder.objects.filter(pk=reminder.pk).update(channel=channel, sent_at=timezone.now())
-    return True, email_sent, email_failed
+            channel = reminder.channel
+
+        if email_reminders and user.email_verified:
+            has_outbox = OutboundEmail.objects.filter(
+                reminder_id=reminder.pk,
+                email_type=OutboundEmailType.REMINDER,
+            ).exists()
+            if not has_outbox:
+                business_event_id = f"reminder:{reminder.pk}"
+                try:
+                    with transaction.atomic():
+                        enqueue_reminder_delivery(
+                            reminder=reminder,
+                            user=user,
+                            title=title,
+                            message=message,
+                            link_path=link,
+                        )
+                    email_queued = True
+                    channel = ReminderChannel.EMAIL
+                    needs_save = True
+                except OutboxEnqueueError:
+                    logger.warning("reminder_outbox_enqueue_failed reminder_id=%s", reminder.pk)
+                    email_failed = True
+                    if created:
+                        needs_save = True
+                except IntegrityError:
+                    if OutboundEmail.objects.filter(
+                        reminder_id=reminder.pk,
+                        email_type=OutboundEmailType.REMINDER,
+                        business_event_id=business_event_id,
+                    ).exists():
+                        email_queued = True
+                        channel = ReminderChannel.EMAIL
+                        needs_save = True
+                    else:
+                        logger.warning("reminder_outbox_enqueue_integrity_failure reminder_id=%s", reminder.pk)
+                        email_failed = True
+                        if created:
+                            needs_save = True
+        elif created:
+            channel = ReminderChannel.IN_APP
+            needs_save = True
+
+        if needs_save:
+            reminder.channel = channel
+            reminder.sent_at = timezone.now()
+            reminder.save(update_fields=["channel", "sent_at"])
+    return created, email_queued, email_failed
 
 
 def _owner_targets(sub: Subscription, today: date, prices: list) -> list[tuple[str, date, str, str, str, dict]]:
@@ -200,6 +231,12 @@ def _member_due_items(member: Member, today: date) -> list[tuple[Due, int]]:
 
 
 def send_reminders(today: date) -> dict[str, int]:
+    """
+    Daily reminder job.
+
+    Counter semantics: ``emails_sent`` counts reminder emails successfully enqueued to the
+    outbox; ``emails_failed`` counts enqueue failures. Neither reflects worker/provider delivery.
+    """
     User = get_user_model()
     counts = {
         "owner_reminders": 0,

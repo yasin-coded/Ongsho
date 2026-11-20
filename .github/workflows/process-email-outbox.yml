@@ -1,0 +1,68 @@
+name: Process email outbox
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      confirm_live_processing:
+        description: Confirm live outbox processing (required for manual runs)
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ongsho-email-outbox
+  cancel-in-progress: false
+
+jobs:
+  process_email_outbox:
+    if: >-
+      vars.OUTBOX_WORKER_ENABLED == 'true' &&
+      (github.event_name == 'schedule' ||
+      inputs.confirm_live_processing == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+      INVITE_DELIVERY_ENCRYPTION_KEYS: ${{ secrets.INVITE_DELIVERY_ENCRYPTION_KEYS }}
+      DEBUG: ${{ vars.DEBUG }}
+      ALLOWED_HOSTS: ${{ vars.ALLOWED_HOSTS }}
+      CSRF_TRUSTED_ORIGINS: ${{ vars.CSRF_TRUSTED_ORIGINS }}
+      FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+      FRONTEND_ORIGINS: ${{ vars.FRONTEND_ORIGINS }}
+      DEFAULT_FROM_EMAIL: ${{ vars.DEFAULT_FROM_EMAIL }}
+      EMAIL_BACKEND: ${{ vars.EMAIL_BACKEND }}
+      REFRESH_COOKIE_SECURE: ${{ vars.REFRESH_COOKIE_SECURE }}
+      REFRESH_COOKIE_SAMESITE: ${{ vars.REFRESH_COOKIE_SAMESITE }}
+      INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION: ${{ vars.INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION }}
+      SECURE_SSL_REDIRECT: ${{ vars.SECURE_SSL_REDIRECT }}
+      TRUST_PROXY_SSL: ${{ vars.TRUST_PROXY_SSL }}
+      OUTBOX_LEASE_SECONDS: ${{ vars.OUTBOX_LEASE_SECONDS }}
+      OUTBOUND_EMAIL_MAX_ATTEMPTS: ${{ vars.OUTBOUND_EMAIL_MAX_ATTEMPTS }}
+      BREVO_API_TIMEOUT: ${{ vars.BREVO_API_TIMEOUT }}
+      LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Process email outbox
+        run: python manage.py process_email_outbox --batch-size 50 --max-runtime 55
