@@ -22,8 +22,10 @@ jobs:
   process_email_outbox:
     if: >-
       vars.OUTBOX_WORKER_ENABLED == 'true' &&
-      (github.event_name == 'schedule' ||
-      inputs.confirm_live_processing == true)
+      (
+        (github.event_name == 'schedule' && vars.OUTBOX_SCHEDULE_ENABLED == 'true') ||
+        (github.event_name == 'workflow_dispatch' && inputs.confirm_live_processing == true)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
