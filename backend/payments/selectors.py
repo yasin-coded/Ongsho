@@ -313,10 +313,17 @@ def plan_activity(plan_id: int) -> list[dict]:
 
 
 def review_data(shared: SharedPlan, today: date) -> dict:
+    from billing import services as billing_services
+    from dues import services as dues_services
+
     sub = shared.subscription
-    charge = dues_selectors.current_charge(sub, today)
+    billing_services.generate_missing_charges(sub, today)
+    charge = dues_selectors.current_charge(sub, today, min_due_date=sub.billing_from)
     if charge is None:
         return _empty_review(sub)
+
+    if not Due.objects.filter(charge=charge).exists():
+        dues_services.recalculate_dues(charge, today, force=True)
 
     dues = list(
         Due.objects.filter(charge=charge)
@@ -393,6 +400,7 @@ def review_data(shared: SharedPlan, today: date) -> dict:
                 "payment_id": payment.pk if payment else None,
                 "member": {
                     "id": due.member_id,
+                    "name": due.member.user.name,
                     "first_name": _first_name(due.member.user),
                     "email": due.member.user.email,
                     "avatar_id": due.member.user.avatar_id,

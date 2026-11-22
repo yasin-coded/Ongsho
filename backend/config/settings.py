@@ -137,10 +137,30 @@ if _running_pytest():
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
-def _use_direct_database_url() -> bool:
-    if _running_pytest():
-        return True
-    management_cmds = {
+def _first_management_command_arg(argv_tail: list[str]) -> str | None:
+    for arg in argv_tail:
+        if arg.startswith("-"):
+            continue
+        return arg
+    return None
+
+
+def _django_management_command() -> str | None:
+    """Return the Django management subcommand name, or None for WSGI/cron runtimes.
+
+    Recognized entrypoints: ``manage.py`` / ``django-admin`` only. ``python -m django`` is not
+    supported for database URL selection (use ``manage.py`` or ``django-admin``).
+    """
+    if not sys.argv:
+        return None
+    program = Path(sys.argv[0]).name
+    if program in ("django-admin", "django-admin.py") or program.endswith("manage.py"):
+        return _first_management_command_arg(sys.argv[1:])
+    return None
+
+
+_DIRECT_DATABASE_COMMANDS = frozenset(
+    {
         "migrate",
         "makemigrations",
         "showmigrations",
@@ -155,7 +175,14 @@ def _use_direct_database_url() -> bool:
         "shell",
         "dbshell",
     }
-    return any(cmd in sys.argv for cmd in management_cmds)
+)
+
+
+def _use_direct_database_url() -> bool:
+    if _running_pytest():
+        return True
+    cmd = _django_management_command()
+    return cmd in _DIRECT_DATABASE_COMMANDS if cmd else False
 
 
 def _db_conn_max_age(*, pooled_runtime: bool) -> int:
@@ -171,7 +198,10 @@ def _database_config() -> dict:
         if test_url:
             return dj_database_url.parse(test_url, conn_max_age=0)
     pooled_runtime = not _use_direct_database_url()
-    if _use_direct_database_url():
+    management_cmd = _django_management_command()
+    if management_cmd == "migrate":
+        url_var = "MIGRATE_DATABASE_URL"
+    elif _use_direct_database_url():
         url_var = "DATABASE_URL"
     else:
         url_var = "DATABASE_URL_POOLED"
