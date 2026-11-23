@@ -22,6 +22,7 @@ ALLOWANY_URL_NAMES = frozenset(
         "invite-public",
         "invite-signup",
         "health",
+        "health-ready",
     }
 )
 

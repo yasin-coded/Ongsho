@@ -2,10 +2,11 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
-from core.views import health
+from core.views import health, health_ready
 
 urlpatterns = [
     path("api/health/", health, name="health"),
+    path("api/health/ready/", health_ready, name="health-ready"),
     path("api/auth/", include("accounts.urls")),
     path("api/me/", include("accounts.me_urls")),
     path("api/reminders/", include("accounts.reminder_urls")),
