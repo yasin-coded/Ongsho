@@ -357,6 +357,23 @@ OUTBOX_LEASE_SECONDS = _positive_int_env("OUTBOX_LEASE_SECONDS", "900")
 # Worker retries are bounded; delivery is not guaranteed eventual (at-least-once attempts only).
 OUTBOUND_EMAIL_MAX_ATTEMPTS = _positive_int_env("OUTBOUND_EMAIL_MAX_ATTEMPTS", "8")
 
+# Post-commit GitHub workflow_dispatch wake (Render only); GitHub gate is OUTBOX_WAKE_ENABLED (repo var).
+OUTBOX_WAKE_DISPATCH_ENABLED = _env_bool_default("OUTBOX_WAKE_DISPATCH_ENABLED", False)
+OUTBOX_WAKE_DEBOUNCE_SECONDS = _positive_int_env("OUTBOX_WAKE_DEBOUNCE_SECONDS", "60")
+OUTBOX_WAKE_GITHUB_TOKEN = os.environ.get("OUTBOX_WAKE_GITHUB_TOKEN", "").strip()
+OUTBOX_WAKE_GITHUB_OWNER = _env_str_default("OUTBOX_WAKE_GITHUB_OWNER", "")
+OUTBOX_WAKE_GITHUB_REPO = _env_str_default("OUTBOX_WAKE_GITHUB_REPO", "")
+OUTBOX_WAKE_WORKFLOW_FILE = _env_str_default("OUTBOX_WAKE_WORKFLOW_FILE", "process-email-outbox.yml")
+OUTBOX_WAKE_GITHUB_REF = _env_str_default("OUTBOX_WAKE_GITHUB_REF", "main")
+_raw_wake_timeout = os.environ.get("OUTBOX_WAKE_HTTP_TIMEOUT_SECONDS", "3").strip()
+try:
+    _wake_timeout = float(_raw_wake_timeout)
+except (TypeError, ValueError) as exc:
+    raise RuntimeError("OUTBOX_WAKE_HTTP_TIMEOUT_SECONDS must be a positive number") from exc
+if not math.isfinite(_wake_timeout) or _wake_timeout <= 0:
+    raise RuntimeError("OUTBOX_WAKE_HTTP_TIMEOUT_SECONDS must be a positive finite number")
+OUTBOX_WAKE_HTTP_TIMEOUT_SECONDS = _wake_timeout
+
 FRONTEND_BASE_URL = _env_str("FRONTEND_BASE_URL").rstrip("/")
 REFRESH_COOKIE_SECURE = _env_bool("REFRESH_COOKIE_SECURE")
 REFRESH_COOKIE_SAMESITE = _env_str("REFRESH_COOKIE_SAMESITE")

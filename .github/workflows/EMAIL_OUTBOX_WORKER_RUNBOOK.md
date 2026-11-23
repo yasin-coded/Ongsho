@@ -34,6 +34,7 @@ Required by `process-email-outbox.yml`. Set in repository **Variables** (not Sec
 |---------------|----------------------------------------|
 | `OUTBOX_WORKER_ENABLED` | **Workflow gate only** (job `if` in YAML; **not** in job `env` and **not** visible to Django). Must be literal string **`true`** for **any** job run (manual or scheduled). |
 | `OUTBOX_SCHEDULE_ENABLED` | **Workflow gate only** (job `if` for `schedule` events; **not** in job `env` and **not** visible to Django). Leave unset / not **`true`** until after a successful confirmed manual run; scheduled cron requires this **and** `OUTBOX_WORKER_ENABLED` == **`true`**. |
+| `OUTBOX_WAKE_ENABLED` | **Workflow gate only** for **application-triggered** `workflow_dispatch` when input `outbox_wake` is **`true`**. Independent of `OUTBOX_SCHEDULE_ENABLED`. Leave off until deliberate cutover (see **Event-triggered wake**). |
 | `DEBUG` | `false` |
 | `ALLOWED_HOSTS` | Comma-separated hosts (same as Render API). |
 | `CSRF_TRUSTED_ORIGINS` | Comma-separated origins (same as Render). |
@@ -73,10 +74,15 @@ Use direct URLs for workers: row claiming uses `SELECT FOR UPDATE SKIP LOCKED` a
   1. `OUTBOX_WORKER_ENABLED`
   2. `OUTBOX_SCHEDULE_ENABLED`
   3. Event is `schedule`
-- **Manual job** runs when **both** hold:
+- **Manual job (live email, operator confirm)** runs when **both** hold:
   1. `OUTBOX_WORKER_ENABLED` is **`true`**
   2. Event is `workflow_dispatch` with input `confirm_live_processing` **`true`**
-  (Manual runs do **not** require `OUTBOX_SCHEDULE_ENABLED`.)
+  (Manual runs do **not** require `OUTBOX_SCHEDULE_ENABLED` or `OUTBOX_WAKE_ENABLED`.)
+- **API wake job** runs when **all** hold:
+  1. `OUTBOX_WORKER_ENABLED` is **`true`**
+  2. `OUTBOX_WAKE_ENABLED` is **`true`**
+  3. Event is `workflow_dispatch` with input `outbox_wake` **`true`** (boolean; set by Render via REST API, not the GitHub UI default)
+  (Does **not** require `confirm_live_processing` or `OUTBOX_SCHEDULE_ENABLED`.)
 
 Unset, empty, or any value other than exact **`true`** for either gate variable is treated as **off**.
 
@@ -91,7 +97,54 @@ Unset, empty, or any value other than exact **`true`** for either gate variable 
 3. Ensure `OUTBOX_WORKER_ENABLED` is **`true`** (otherwise the job is skipped).
 4. **`OUTBOX_SCHEDULE_ENABLED` may remain off** for a first-run manual pass—scheduled cron will skip until you set it to **`true`** after review.
 
-Manual runs without confirmation never execute the worker, even if `OUTBOX_WORKER_ENABLED` is `true`.
+Manual runs without confirmation never execute the worker, even if `OUTBOX_WORKER_ENABLED` is `true`, unless the **API wake** gate path above matches.
+
+## Event-triggered wake (Render → GitHub)
+
+Production web (Render Gunicorn) may call GitHub `workflow_dispatch` after an outbox row **commits**, with debouncing so bulk enqueues coalesce to one wake per window.
+
+| Surface | Env / gate | Role |
+|---------|------------|------|
+| **Render** | `OUTBOX_WAKE_DISPATCH_ENABLED` | App feature flag (default **off**). When off, no GitHub HTTP from the API. |
+| **Render** | `OUTBOX_WAKE_GITHUB_TOKEN` | Fine-grained PAT (repo-scoped, **Actions: Read and write**). Never in repo. |
+| **Render** | `OUTBOX_WAKE_GITHUB_OWNER`, `OUTBOX_WAKE_GITHUB_REPO`, `OUTBOX_WAKE_WORKFLOW_FILE`, `OUTBOX_WAKE_GITHUB_REF` | Dispatch target (non-secret). |
+| **Render** | `CACHE_BACKEND=db`, `CACHE_TABLE=ongsho_cache` | **Required** for cross-worker debounce (see below). |
+| **GitHub** | `OUTBOX_WAKE_ENABLED` | Repo variable; must be **`true`** for API wakes to run the job. |
+
+Debouncing uses Django **`cache.add`** on **`DatabaseCache`** (shared PostgreSQL table on the **same Neon database** as the app). Gunicorn uses `DATABASE_URL_POOLED`; cache writes are short standalone transactions and are compatible with Neon transaction pooler mode (same as throttling).
+
+Ensure the cache table exists before enabling wake dispatch on Render:
+
+`python manage.py createcachetable` (via owner/migrate URL if needed once; table is shared app data).
+
+### Debounce race (expected; cron is the backstop)
+
+1. Email A commits → debounce winner dispatches → worker runs and drains the queue.
+2. Email B commits **after** that pass finishes but **before** the debounce TTL expires (`OUTBOX_WAKE_DEBOUNCE_SECONDS`, default 60s).
+3. No new `workflow_dispatch` is sent (debounce key still set).
+4. **Scheduled recovery** (`OUTBOX_SCHEDULE_ENABLED`) or the **next** debounce window after TTL expiry processes B.
+
+Design assumption: sub-minute latency is served by wake; multi-minute tail is acceptable via cron. Do not disable schedule solely because wake is enabled.
+
+### Empty-outbox workflow testing vs live email delivery testing
+
+| Goal | Safe approach | Sends email? |
+|------|----------------|--------------|
+| **Prove GHA plumbing** (checkout, env, DB, dry run) | Local or CI: `python manage.py process_email_outbox --dry-run` with production-like env; **or** manual workflow with `confirm_live_processing=true` when queue has **no eligible rows** (worker exits quickly; still uses Brevo backend but nothing to send) | Only if eligible rows exist |
+| **Prove wake gate** | Enable `OUTBOX_WAKE_ENABLED` only after Render dispatch tested in staging; queue empty → job runs, counts zero, no provider calls | No if queue empty |
+| **Authorized live delivery test** | Manual `workflow_dispatch` with `confirm_live_processing=true` with known test row / staging inbox | **Yes** — treat as production send |
+
+Do **not** conflate “wake fired successfully” with “safe to enable mass email”; validate empty queue behavior separately from stakeholder-approved live sends.
+
+## Render-only variables (wake dispatch)
+
+Not read by the GHA worker job unless duplicated for other reasons:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OUTBOX_WAKE_DISPATCH_ENABLED` | `false` | Master app-side wake |
+| `OUTBOX_WAKE_DEBOUNCE_SECONDS` | `60` | Coalesce dispatches |
+| `OUTBOX_WAKE_HTTP_TIMEOUT_SECONDS` | `3` | Bounded post-commit GitHub HTTP |
 
 For diagnostics without sending, operators can run locally or in a controlled environment with
 `python manage.py process_email_outbox --dry-run` (not used in CI). **Do not** run the full worker against production without authorization.

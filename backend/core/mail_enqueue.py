@@ -18,6 +18,7 @@ from django.db import connection, transaction
 from core.crypto.invite_delivery import encrypt_invite_delivery_secret
 from core.mail_payload import assert_payload_value_safety
 from core.models.outbound_email import OutboundEmail, OutboundEmailType
+from core.outbox.wake import schedule_outbox_wake_after_commit
 
 _FORBIDDEN_PAYLOAD_KEYS = frozenset(
     {
@@ -120,6 +121,7 @@ def enqueue_outbound_email(
         raise OutboxEnqueueError("invite_delivery_secret is only valid for plan_invite")
 
     row.save()
+    schedule_outbox_wake_after_commit()
     return row
 
 
