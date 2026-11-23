@@ -10,6 +10,11 @@ on:
         required: true
         type: boolean
         default: false
+      outbox_wake:
+        description: Automated event-triggered wake
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,7 +29,8 @@ jobs:
       vars.OUTBOX_WORKER_ENABLED == 'true' &&
       (
         (github.event_name == 'schedule' && vars.OUTBOX_SCHEDULE_ENABLED == 'true') ||
-        (github.event_name == 'workflow_dispatch' && inputs.confirm_live_processing == true)
+        (github.event_name == 'workflow_dispatch' && inputs.confirm_live_processing == true) ||
+        (github.event_name == 'workflow_dispatch' && vars.OUTBOX_WAKE_ENABLED == 'true' && inputs.outbox_wake == true)
       )
     runs-on: ubuntu-latest
     timeout-minutes: 10
