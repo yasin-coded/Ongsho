@@ -17,5 +17,5 @@ def test_gunicorn_conf_reads_env(monkeypatch):
     assert mod.workers == 3
     assert mod.threads == 8
     assert mod.worker_class == "gthread"
-    assert mod.preload_app is True
+    assert mod.preload_app is False
     assert mod.accesslog is None
