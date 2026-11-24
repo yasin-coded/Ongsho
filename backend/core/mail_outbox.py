@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from core.mail_enqueue import enqueue_outbound_email
+from core.mail_enqueue import OutboxPayloadError, enqueue_outbound_email
 from core.models.outbound_email import OutboundEmail, OutboundEmailStatus, OutboundEmailType
 from core.outbox.verification import cancel_pending_verification_deliveries
 
@@ -186,4 +186,60 @@ def enqueue_plan_invite_delivery(*, invite, raw_token: str, business_event_id: s
         to_email=invite.email,
         invite=invite,
         invite_delivery_secret=raw_token,
+    )
+
+
+_REQUIRED_RECEIPT_PAYLOAD_KEYS = (
+    "payment_id",
+    "plan_name",
+    "subscription_currency",
+    "amount",
+    "amount_display",
+    "method",
+    "method_label",
+    "transaction_id",
+    "paid_on",
+    "confirmed_at",
+    "covered_months",
+    "payer_first_name",
+    "confirmer_name",
+    "link_path",
+)
+
+
+def enqueue_payment_receipt(*, payment, confirmed_by) -> OutboundEmail:
+    """Queue a payment receipt for the payer; caller must be inside transaction.atomic."""
+    from core.choices import Currency
+    from core.money import format_bdt
+    from payments.services import _covered_months, _first_name, _method_label
+
+    payer = payment.member.user
+    sub = payment.shared_plan.subscription
+    payload = {
+        "payment_id": payment.pk,
+        "plan_name": sub.plan_name or "",
+        "subscription_currency": sub.currency,
+        "amount": str(payment.amount),
+        "amount_display": format_bdt(payment.amount),
+        "method": payment.method,
+        "method_label": _method_label(payment.method),
+        "transaction_id": payment.transaction_id or "",
+        "paid_on": payment.paid_on.isoformat() if payment.paid_on else "",
+        "confirmed_at": payment.reviewed_at.isoformat() if payment.reviewed_at else "",
+        "covered_months": _covered_months(payment),
+        "payer_first_name": _first_name(payer),
+        "confirmer_name": _first_name(confirmed_by),
+        "link_path": f"/app/shared/{sub.pk}",
+    }
+    if sub.currency not in (Currency.BDT, Currency.USD):
+        payload["subscription_currency"] = str(sub.currency)
+    for key in _REQUIRED_RECEIPT_PAYLOAD_KEYS:
+        if key not in payload:
+            raise OutboxPayloadError(f"payment receipt payload missing {key}")
+    return enqueue_outbound_email(
+        email_type=OutboundEmailType.PAYMENT_RECEIPT,
+        business_event_id=f"payment_receipt:{payment.pk}",
+        to_email=payer.email,
+        user=payer,
+        payload=payload,
     )

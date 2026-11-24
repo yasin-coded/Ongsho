@@ -49,6 +49,10 @@ def dispatch_outbound_email(row: OutboundEmail) -> None:
         _dispatch_reminder(row)
         return
 
+    if row.email_type == OutboundEmailType.PAYMENT_RECEIPT:
+        _dispatch_payment_receipt(row)
+        return
+
     raise OutboxDeliveryError("unsupported_type", permanent=True)
 
 
@@ -89,6 +93,53 @@ def _dispatch_email_change(row: OutboundEmail) -> None:
     if pending.lower() != row.to_email.strip().lower():
         raise OutboxDeliveryError("pending_email_mismatch", permanent=True)
     account_emails.send_email_change_verification(user, user.pending_email)
+
+
+_PAYMENT_RECEIPT_PAYLOAD_KEYS = (
+    "payment_id",
+    "plan_name",
+    "amount_display",
+    "method_label",
+    "covered_months",
+    "payer_first_name",
+    "confirmer_name",
+    "link_path",
+)
+
+
+def _dispatch_payment_receipt(row: OutboundEmail) -> None:
+    user = row.user
+    if user is None:
+        raise OutboxDeliveryError("missing_user", permanent=True)
+    if not user.is_active:
+        raise OutboxDeliveryError("user_inactive", permanent=True)
+    if not user.email_verified:
+        raise OutboxDeliveryError("email_not_verified", permanent=True)
+    if user.email.lower() != row.to_email.strip().lower():
+        raise OutboxDeliveryError("recipient_mismatch", permanent=True)
+
+    payload = row.payload or {}
+    payment_id = payload.get("payment_id")
+    if payment_id is None:
+        raise OutboxDeliveryError("invalid_payload", permanent=True)
+    try:
+        payment_pk = int(payment_id)
+    except (TypeError, ValueError):
+        raise OutboxDeliveryError("invalid_payload", permanent=True) from None
+
+    from payments.models import Payment, ReviewStatus
+
+    payment = Payment.objects.filter(pk=payment_pk).first()
+    if payment is None or payment.review_status != ReviewStatus.CONFIRMED:
+        raise OutboxDeliveryError("payment_not_confirmed", permanent=True)
+
+    for key in _PAYMENT_RECEIPT_PAYLOAD_KEYS:
+        if not str(payload.get(key) or "").strip():
+            raise OutboxDeliveryError("invalid_payload", permanent=True)
+
+    from payments import emails as payment_emails
+
+    payment_emails.send_payment_receipt_email(to_email=row.to_email, payload=payload)
 
 
 def _dispatch_reminder(row: OutboundEmail) -> None:

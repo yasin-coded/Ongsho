@@ -36,6 +36,7 @@ _CANCEL_ERROR_CODES = frozenset(
         "opt_out",
         "email_not_verified",
         "invalid_payload",
+        "payment_not_confirmed",
         "reminder_removed",
         "user_inactive",
         "superseded",

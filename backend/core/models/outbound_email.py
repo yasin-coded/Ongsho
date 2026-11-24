@@ -22,6 +22,7 @@ class OutboundEmailType(models.TextChoices):
     EMAIL_CHANGE = "email_change", "Email change verification"
     PLAN_INVITE = "plan_invite", "Plan invitation"
     REMINDER = "reminder", "Due or renewal reminder"
+    PAYMENT_RECEIPT = "payment_receipt", "Payment receipt"
 
 
 class OutboundEmailStatus(models.TextChoices):

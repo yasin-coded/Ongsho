@@ -9,6 +9,8 @@ from django.utils import timezone
 from audit import services as audit_services
 from core.choices import PaymentMethod
 from core.exceptions import ConflictError, Forbidden, NotFound, ValidationFailed
+from core.mail_enqueue import OutboxEnqueueError, OutboxPayloadError
+from core.mail_outbox import enqueue_payment_receipt
 from core.money import format_bdt, quantize_money
 from core.notify import notify, resolve_notifications
 from core.validators import normalize_tid, validate_transaction_id
@@ -274,6 +276,14 @@ def confirm_payment(user, payment_id: int) -> dict:
         payload={"plan_id": sub.pk},
     )
     resolve_notifications("payment", payment_id=payment.pk)
+    try:
+        enqueue_payment_receipt(payment=payment, confirmed_by=user)
+    except (OutboxEnqueueError, OutboxPayloadError, IntegrityError):
+        raise ConflictError(
+            "Could not confirm this payment. Please try again.",
+            code="confirm_failed",
+            status_code=503,
+        )
     return {"message": f"Payment confirmed. It covered {months}."}
 
 
