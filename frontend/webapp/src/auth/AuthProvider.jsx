@@ -86,6 +86,14 @@ export function AuthProvider({ children }) {
     queryClient.clear()
   }, [queryClient])
 
+  const endSession = useCallback(() => {
+    clearAccessToken()
+    clearSessionHint()
+    setSession(null)
+    setStatus('anonymous')
+    queryClient.clear()
+  }, [queryClient])
+
   const value = useMemo(
     () => ({
       session,
@@ -94,10 +102,11 @@ export function AuthProvider({ children }) {
       isAuthed: status === 'authed',
       login,
       logout,
+      endSession,
       signInDirect,
       adoptSession,
     }),
-    [session, status, login, logout, signInDirect, adoptSession],
+    [session, status, login, logout, endSession, signInDirect, adoptSession],
   )
 
   const booted = status !== 'loading'

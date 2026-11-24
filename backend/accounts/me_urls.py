@@ -10,6 +10,7 @@ urlpatterns = [
     path("email/verify/", me_views.me_email_verify, name="me-email-verify"),
     path("email/resend/", me_views.me_email_resend, name="me-email-resend"),
     path("nav-counts/", me_views.me_nav_counts, name="me-nav-counts"),
+    path("close/", me_views.me_close, name="me-close"),
     path("shared-plans/", me_shared_views.me_shared_plan_list, name="me-shared-plan-list"),
     path("shared-plans/<int:pk>/", me_shared_views.me_shared_plan_detail, name="me-shared-plan-detail"),
     path("shared-plans/<int:pk>/statement/", report_views.member_statement, name="me-shared-plan-statement"),

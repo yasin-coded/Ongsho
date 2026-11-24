@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from accounts import selectors, services
 from accounts.cookies import clear_refresh_cookie
 from accounts.serializers import (
+    AccountCloseSerializer,
     EmailChangeRequestSerializer,
     EmailChangeVerifySerializer,
     ME_PATCH_ALLOWED,
@@ -157,3 +158,22 @@ def me_email_resend(request):
 @permission_classes([IsAuthenticated])
 def me_nav_counts(request):
     return Response(selectors.nav_counts(request.user))
+
+
+@api_view(["POST", "GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def me_close(request):
+    if request.method != "POST":
+        return _method_not_allowed()
+    serializer = AccountCloseSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        services.close_account(
+            request.user,
+            password=serializer.validated_data["password"],
+        )
+    except DomainError as exc:
+        return _domain_response(exc)
+    response = Response(status=status.HTTP_204_NO_CONTENT)
+    clear_refresh_cookie(response)
+    return response

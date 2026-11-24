@@ -27,7 +27,7 @@ PRODUCTION_OVERRIDES = {
         {
             "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
             "DEFAULT_AUTHENTICATION_CLASSES": [
-                "rest_framework_simplejwt.authentication.JWTAuthentication",
+                "accounts.authentication.ActiveUserJWTAuthentication",
             ],
             "EXCEPTION_HANDLER": "core.exceptions.ongsho_exception_handler",
         },

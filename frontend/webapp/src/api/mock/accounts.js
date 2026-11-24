@@ -79,6 +79,14 @@ export function logout() {
   })
 }
 
+export function closeAccount({ password }) {
+  return write(() => {
+    checkPassword(password)
+    server.password = null
+    return { closed: true }
+  })
+}
+
 export function getMe() {
   return read(meShape)
 }

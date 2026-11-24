@@ -54,6 +54,40 @@ def enqueue_email_change(user, *, business_event_id: str | None = None) -> Outbo
     )
 
 
+_EMAIL_CHANGE_CANCEL_STATUSES = (
+    OutboundEmailStatus.PENDING,
+    OutboundEmailStatus.RETRY,
+)
+
+
+def cancel_pending_email_change_deliveries(user_id: int) -> int:
+    """Cancel pending/retry email-change outbox rows for a user (caller must hold transaction.atomic)."""
+    count = 0
+    rows = OutboundEmail.objects.select_for_update().filter(
+        user_id=user_id,
+        email_type=OutboundEmailType.EMAIL_CHANGE,
+        status__in=_EMAIL_CHANGE_CANCEL_STATUSES,
+    )
+    for row in rows:
+        row.status = OutboundEmailStatus.CANCELLED
+        row.last_error_code = "superseded"
+        row.locked_at = None
+        row.locked_by = ""
+        row.next_attempt_at = None
+        row.save(
+            update_fields=[
+                "status",
+                "last_error_code",
+                "locked_at",
+                "locked_by",
+                "next_attempt_at",
+                "updated_at",
+            ]
+        )
+        count += 1
+    return count
+
+
 def cancel_pending_invite_deliveries(invite_id: int) -> int:
     """Cancel active plan_invite rows for an invite (caller must hold transaction.atomic)."""
     count = 0

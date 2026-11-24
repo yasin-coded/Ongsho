@@ -1,10 +1,40 @@
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
+from core.exceptions import ConflictError, Forbidden
 from dues.models import Due, DueStatus
 from notifications.models import Notification
 from payments.models import Payment, ReviewStatus
 from plans.models import Subscription
-from sharing.models import Member, MemberStatus
+from sharing.models import Member, MemberStatus, OwnershipTransfer, TransferStatus
+
+
+def assert_account_closure_allowed(user) -> None:
+    if user.is_staff or user.is_superuser:
+        raise Forbidden(
+            "Staff accounts cannot be closed through the app.",
+            code="staff_cannot_close",
+        )
+    if OwnershipTransfer.objects.filter(
+        status=TransferStatus.PENDING,
+    ).filter(Q(from_user=user) | Q(to_user=user)).exists():
+        raise ConflictError(
+            "Finish or cancel your pending ownership transfer before closing your account.",
+            code="pending_ownership_transfer",
+        )
+    if Subscription.objects.filter(owner=user, archived_on__isnull=True).exists():
+        raise ConflictError(
+            "You still have active plans. Archive or delete them before closing your account.",
+            code="owned_plans_remain",
+        )
+    if Member.objects.filter(
+        user=user,
+        status__in=(MemberStatus.ACTIVE, MemberStatus.LEAVE_REQUESTED),
+        shared_plan__subscription__archived_on__isnull=True,
+    ).exists():
+        raise ConflictError(
+            "Leave or resolve your shared-plan memberships before closing your account.",
+            code="active_membership",
+        )
 
 
 def plans_owned_count(user) -> int:

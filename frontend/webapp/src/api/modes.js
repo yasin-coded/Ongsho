@@ -16,6 +16,7 @@ const LIVE_FUNCTIONS = new Set([
   'changeEmail',
   'resendEmailChange',
   'cancelEmailChange',
+  'closeAccount',
   'getReminderSettings',
   'updateReminderSettings',
   'getInvite',

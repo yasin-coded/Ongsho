@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.contrib.auth.tokens import default_token_generator
-from django.db import transaction
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework_simplejwt.exceptions import TokenError
@@ -14,12 +15,16 @@ from rest_framework_simplejwt.tokens import RefreshToken, UntypedToken
 
 from audit import services as audit_services
 from accounts.constants import DEFAULT_AVATAR_ID
+from accounts import selectors as account_selectors
 from core.mail_outbox import (
+    cancel_pending_email_change_deliveries,
+    cancel_pending_reminder_deliveries_for_user,
     enqueue_account_verify,
     enqueue_email_change,
     enqueue_password_reset,
     enqueue_verify_resend,
 )
+from core.outbox.verification import cancel_pending_verification_deliveries
 from accounts.tokens import load_email_change_token, load_email_verification_token
 from core.exceptions import ConflictError, Forbidden, Unauthorized, ValidationFailed
 from core.lockout import (
@@ -33,6 +38,9 @@ from core.lockout import (
 
 User = get_user_model()
 
+CLOSED_ACCOUNT_DISPLAY_NAME = "Closed account"
+ACCOUNT_TOMBSTONE_DOMAIN = "closed.ongsho.invalid"
+
 PASSWORD_RESET_GENERIC_MESSAGE = (
     "If an account exists with a verified email, you will receive password reset instructions."
 )
@@ -42,6 +50,27 @@ RESEND_VERIFICATION_MESSAGE = (
 )
 RESEND_VERIFICATION_COOLDOWN_SECONDS = 60
 _RESEND_VERIFY_CACHE_PREFIX = "accounts:resend-verify:"
+
+_DUPLICATE_EMAIL_CONSTRAINTS = frozenset(
+    {
+        "accounts_user_email_ci_unique",
+        "accounts_user_email_key",
+    }
+)
+_DUPLICATE_EMAIL_VALIDATION = ValidationFailed(
+    "A user with this email already exists.",
+    fields={"email": ["A user with this email already exists."]},
+    code="validation_failed",
+)
+
+
+def _integrity_error_is_duplicate_email(exc: IntegrityError) -> bool:
+    diag = getattr(getattr(exc, "__cause__", None), "diag", None)
+    constraint = getattr(diag, "constraint_name", None)
+    if constraint in _DUPLICATE_EMAIL_CONSTRAINTS:
+        return True
+    text = str(exc).lower()
+    return any(name in text for name in _DUPLICATE_EMAIL_CONSTRAINTS)
 
 
 def verify_current_password(user, password: str) -> None:
@@ -65,19 +94,21 @@ def verify_current_password(user, password: str) -> None:
 @transaction.atomic
 def register_user(*, email: str, password: str, name: str) -> User:
     if User.objects.filter(email__iexact=email).exists():
-        raise ValidationFailed(
-            "A user with this email already exists.",
-            fields={"email": ["A user with this email already exists."]},
-            code="validation_failed",
-        )
-    user = User.objects.create_user(
-        email=email,
-        password=password,
-        name=name,
-        email_verified=False,
-        avatar_id=DEFAULT_AVATAR_ID,
-    )
-    enqueue_account_verify(user)
+        raise _DUPLICATE_EMAIL_VALIDATION
+    try:
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=email,
+                password=password,
+                name=name,
+                email_verified=False,
+                avatar_id=DEFAULT_AVATAR_ID,
+            )
+            enqueue_account_verify(user)
+    except IntegrityError as exc:
+        if _integrity_error_is_duplicate_email(exc):
+            raise _DUPLICATE_EMAIL_VALIDATION from exc
+        raise
     return user
 
 
@@ -459,4 +490,65 @@ def cancel_email_change(user) -> None:
         user.pk,
         {"pending_email": pending},
         {"pending_email": None},
+    )
+
+
+def _tombstone_email(user_id: int) -> str:
+    token = secrets.token_hex(8)
+    return f"closed.{user_id}.{token}@{ACCOUNT_TOMBSTONE_DOMAIN}".lower()
+
+
+@transaction.atomic
+def close_account(user, *, password: str) -> None:
+    """Deactivate and anonymise the user, preserving financial FK history by primary key."""
+    user = User.objects.select_for_update().get(pk=user.pk)
+    if not user.is_active:
+        raise ConflictError(
+            "This account is already closed.",
+            code="account_already_closed",
+        )
+    verify_current_password(user, password)
+    account_selectors.assert_account_closure_allowed(user)
+
+    cancel_pending_verification_deliveries(user.pk)
+    cancel_pending_email_change_deliveries(user.pk)
+    cancel_pending_reminder_deliveries_for_user(user.pk)
+
+    tombstone = _tombstone_email(user.pk)
+    for _ in range(8):
+        if not User.objects.filter(email__iexact=tombstone).exclude(pk=user.pk).exists():
+            break
+        tombstone = _tombstone_email(user.pk)
+    else:
+        raise ConflictError(
+            "Could not close this account right now. Try again.",
+            code="tombstone_collision",
+        )
+
+    old_snapshot = {"is_active": True, "name": user.name}
+    user.is_active = False
+    user.email = tombstone
+    user.name = CLOSED_ACCOUNT_DISPLAY_NAME
+    user.pending_email = ""
+    user.email_reminders = False
+    user.set_unusable_password()
+    user.save(
+        update_fields=[
+            "is_active",
+            "email",
+            "name",
+            "pending_email",
+            "email_reminders",
+            "password",
+        ]
+    )
+    revoke_all_tokens(user)
+    audit_services.log(
+        user,
+        "account.closed",
+        "User",
+        user.pk,
+        old_snapshot,
+        {"is_active": False, "name": CLOSED_ACCOUNT_DISPLAY_NAME},
+        summary="Account closed",
     )

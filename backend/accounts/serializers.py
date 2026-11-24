@@ -102,6 +102,15 @@ class PasswordChangeSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True, trim_whitespace=False)
 
 
+class AccountCloseSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True, trim_whitespace=False, allow_blank=False)
+
+    def validate_password(self, value: str) -> str:
+        if not value:
+            raise serializers.ValidationError("Enter your password.")
+        return value
+
+
 class EmailChangeRequestSerializer(serializers.Serializer):
     new_email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)

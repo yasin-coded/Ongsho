@@ -27,6 +27,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Pill } from '@/components/ui/Pill'
 import { CatalogPanelSkeleton, SkeletonCard } from '@/components/ui/Misc'
 import { Loadable } from '@/features/common/PlanBits'
+import { AccountCloseSection } from '@/features/profile/CloseAccountModal'
 
 function AvatarPicker({ me }) {
   const queryClient = useQueryClient()
@@ -574,6 +575,7 @@ export function ProfilePage() {
               </div>
             </div>
             <CatalogCard />
+            <AccountCloseSection />
           </>
         )}
       </Loadable>

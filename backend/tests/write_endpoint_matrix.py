@@ -39,6 +39,7 @@ WRITE_ENDPOINT_MATRIX: tuple[WriteEndpoint, ...] = (
     WriteEndpoint("DELETE", "/api/me/email/", "owner", hostile_reject=False),
     WriteEndpoint("POST", "/api/me/email/verify/", "owner"),
     WriteEndpoint("POST", "/api/me/email/resend/", "owner"),
+    WriteEndpoint("POST", "/api/me/close/", "owner"),
     WriteEndpoint("PATCH", "/api/reminders/settings/", "owner", hostile_reject=False),
     # Catalog
     WriteEndpoint("POST", "/api/categories/", "outsider"),

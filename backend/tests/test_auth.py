@@ -189,6 +189,47 @@ class TestLogin:
 
 
 @pytest.mark.django_db
+class TestAccessJWTInactive:
+    def test_inactive_user_access_token_rejected(self, api_client):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        user = User.objects.create_user(
+            email="jwt-inactive@example.com",
+            password=STRONG_PASSWORD,
+            name="Off",
+            email_verified=True,
+            is_active=False,
+        )
+        access = str(RefreshToken.for_user(user).access_token)
+        response = api_client.get(
+            "/api/me/",
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+            **APP_HEADER,
+        )
+        assert response.status_code == 401
+        assert_error_shape(response)
+        assert response.json()["error"]["code"] == "user_inactive"
+
+    def test_active_user_access_token_accepted(self, api_client):
+        user = User.objects.create_user(
+            email="jwt-active@example.com",
+            password=STRONG_PASSWORD,
+            name="On",
+            email_verified=True,
+        )
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        access = str(RefreshToken.for_user(user).access_token)
+        response = api_client.get(
+            "/api/me/",
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+            **APP_HEADER,
+        )
+        assert response.status_code == 200
+        assert response.json()["email"] == user.email
+
+
+@pytest.mark.django_db
 class TestRefreshLogout:
     def _verified_login(self, client, email="refresh@example.com"):
         User.objects.create_user(email=email, password=STRONG_PASSWORD, name="R", email_verified=True)

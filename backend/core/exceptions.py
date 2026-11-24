@@ -149,10 +149,21 @@ def ongsho_exception_handler(exc, context):
         return error_response(str(code), message, fields, 400)
 
     if isinstance(exc, drf_exc.AuthenticationFailed):
-        code = getattr(exc, "default_code", "authentication_failed")
+        if isinstance(exc.detail, dict) and "detail" in exc.detail:
+            message = str(exc.detail["detail"])
+            code_leaf = exc.detail.get("code")
+            code = str(code_leaf) if code_leaf is not None else "authentication_failed"
+        else:
+            message = _detail_to_fields(exc.detail)[0]
+            codes = exc.get_codes()
+            if isinstance(codes, str):
+                code = codes
+            elif isinstance(codes, list) and codes:
+                code = codes[0] if isinstance(codes[0], str) else str(codes[0])
+            else:
+                code = getattr(type(exc), "default_code", "authentication_failed")
         if hasattr(code, "value"):
             code = code.value
-        message = _detail_to_fields(exc.detail)[0]
         return error_response(str(code), message, {}, 401)
 
     if isinstance(exc, drf_exc.NotAuthenticated):

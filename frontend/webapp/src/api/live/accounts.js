@@ -1,4 +1,5 @@
 import { clearAccessToken, setAccessToken } from '@/auth/tokenStore'
+import { rethrowAccountCloseError } from '@/lib/accountCloseErrors'
 import { apiRequest } from '../http'
 import { refreshAccessCoalesced } from '../sessionRefresh'
 import { mapMePatch, mapUserFromApi } from '../adapters/me'
@@ -89,6 +90,16 @@ export async function resendEmailChange() {
 export async function cancelEmailChange() {
   await apiRequest('delete', '/api/me/email/')
   return getMe()
+}
+
+export async function closeAccount({ password }) {
+  try {
+    await apiRequest('post', '/api/me/close/', { data: { password } })
+  } catch (err) {
+    rethrowAccountCloseError(err)
+  }
+  clearAccessToken()
+  return { closed: true }
 }
 
 export async function getReminderSettings() {

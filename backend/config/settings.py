@@ -326,7 +326,7 @@ def apply_production_rest_framework(config: dict, *, debug: bool) -> dict:
 _REST_FRAMEWORK_BASE = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "accounts.authentication.ActiveUserJWTAuthentication",
     ],
     "DEFAULT_PAGINATION_CLASS": "core.pagination.OngshoPageNumberPagination",
     "PAGE_SIZE": 25,
