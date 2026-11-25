@@ -37,8 +37,13 @@ _CANCEL_ERROR_CODES = frozenset(
         "email_not_verified",
         "invalid_payload",
         "payment_not_confirmed",
+        "payment_not_rejected",
+        "audit_not_found",
+        "email_change_stale",
+        "previous_recipient_mismatch",
         "reminder_removed",
         "user_inactive",
+        "account_closed",
         "superseded",
     }
 )

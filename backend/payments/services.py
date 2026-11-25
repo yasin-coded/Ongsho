@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 from decimal import Decimal
 
@@ -10,7 +11,7 @@ from audit import services as audit_services
 from core.choices import PaymentMethod
 from core.exceptions import ConflictError, Forbidden, NotFound, ValidationFailed
 from core.mail_enqueue import OutboxEnqueueError, OutboxPayloadError
-from core.mail_outbox import enqueue_payment_receipt
+from core.mail_outbox import enqueue_payment_receipt, enqueue_payment_rejection
 from core.money import format_bdt, quantize_money
 from core.notify import notify, resolve_notifications
 from core.validators import normalize_tid, validate_transaction_id
@@ -19,6 +20,31 @@ from dues.state import transition
 from payments.models import Payment, PaymentAllocation, ReviewStatus
 from plans.models import PlanMode, Subscription
 from sharing.models import Member, MemberStatus, SharedPlan
+
+logger = logging.getLogger(__name__)
+
+
+def _best_effort_enqueue_payment_rejection(
+    *,
+    payment: Payment,
+    rejected_by,
+    audit_log_id: int,
+    rejection_reason: str,
+) -> None:
+    try:
+        with transaction.atomic():
+            enqueue_payment_rejection(
+                payment=payment,
+                rejected_by=rejected_by,
+                audit_log_id=audit_log_id,
+                rejection_reason=rejection_reason,
+            )
+    except (OutboxEnqueueError, OutboxPayloadError, IntegrityError):
+        logger.warning(
+            "payments_rejection_email_enqueue_failed event=payment_rejected payment_id=%s audit_log_id=%s",
+            payment.pk,
+            audit_log_id,
+        )
 
 
 def _first_name(user) -> str:
@@ -309,7 +335,7 @@ def reject_payment(user, payment_id: int, *, reason: str) -> dict:
 
     sub = payment.shared_plan.subscription
     payer = payment.member.user
-    audit_services.log(
+    audit_row = audit_services.log(
         user,
         "payment.rejected",
         "Payment",
@@ -329,6 +355,12 @@ def reject_payment(user, payment_id: int, *, reason: str) -> dict:
         payload={"plan_id": sub.pk},
     )
     resolve_notifications("payment", payment_id=payment.pk)
+    _best_effort_enqueue_payment_rejection(
+        payment=payment,
+        rejected_by=user,
+        audit_log_id=audit_row.pk,
+        rejection_reason=clean,
+    )
     return {
         "message": f"Rejected. {_first_name(payer)}'s due is back to Due, and they can see your reason."
     }

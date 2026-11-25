@@ -23,6 +23,11 @@ class OutboundEmailType(models.TextChoices):
     PLAN_INVITE = "plan_invite", "Plan invitation"
     REMINDER = "reminder", "Due or renewal reminder"
     PAYMENT_RECEIPT = "payment_receipt", "Payment receipt"
+    PAYMENT_REJECTED = "payment_rejected", "Payment rejected"
+    PASSWORD_CHANGED = "password_changed", "Password changed"
+    PASSWORD_RESET_COMPLETED = "password_reset_completed", "Password reset completed"
+    EMAIL_CHANGED_NEW = "email_changed_new", "Email changed (new address)"
+    EMAIL_CHANGED_PREVIOUS = "email_changed_previous", "Email changed (previous address)"
 
 
 class OutboundEmailStatus(models.TextChoices):

@@ -59,6 +59,47 @@ _EMAIL_CHANGE_CANCEL_STATUSES = (
     OutboundEmailStatus.RETRY,
 )
 
+_ACCOUNT_CLOSURE_NOTIFICATION_TYPES = (
+    OutboundEmailType.EMAIL_CHANGED_NEW,
+    OutboundEmailType.EMAIL_CHANGED_PREVIOUS,
+    OutboundEmailType.PASSWORD_CHANGED,
+    OutboundEmailType.PASSWORD_RESET_COMPLETED,
+    OutboundEmailType.PAYMENT_REJECTED,
+)
+
+
+def cancel_pending_account_notification_deliveries(user_id: int) -> int:
+    """
+    Cancel pending/retry account-security and payment-notification rows on account closure.
+
+    Caller must hold transaction.atomic(); rows are locked with select_for_update.
+    Does not cancel processing rows (worker may be in flight to the provider).
+    """
+    count = 0
+    rows = OutboundEmail.objects.select_for_update().filter(
+        user_id=user_id,
+        email_type__in=_ACCOUNT_CLOSURE_NOTIFICATION_TYPES,
+        status__in=_EMAIL_CHANGE_CANCEL_STATUSES,
+    )
+    for row in rows:
+        row.status = OutboundEmailStatus.CANCELLED
+        row.last_error_code = "account_closed"
+        row.locked_at = None
+        row.locked_by = ""
+        row.next_attempt_at = None
+        row.save(
+            update_fields=[
+                "status",
+                "last_error_code",
+                "locked_at",
+                "locked_by",
+                "next_attempt_at",
+                "updated_at",
+            ]
+        )
+        count += 1
+    return count
+
 
 def cancel_pending_email_change_deliveries(user_id: int) -> int:
     """Cancel pending/retry email-change outbox rows for a user (caller must hold transaction.atomic)."""
@@ -242,4 +283,173 @@ def enqueue_payment_receipt(*, payment, confirmed_by) -> OutboundEmail:
         to_email=payer.email,
         user=payer,
         payload=payload,
+    )
+
+
+_REQUIRED_REJECTION_PAYLOAD_KEYS = (
+    "payment_id",
+    "user_id",
+    "audit_log_id",
+    "plan_name",
+    "subscription_currency",
+    "amount_display",
+    "method_label",
+    "rejection_reason",
+    "reviewer_name",
+    "reviewed_at",
+    "payer_first_name",
+    "link_path",
+)
+
+
+def enqueue_payment_rejection(
+    *,
+    payment,
+    rejected_by,
+    audit_log_id: int,
+    rejection_reason: str,
+) -> OutboundEmail:
+    """Queue a payment-rejection notice for the payer; caller must be inside transaction.atomic."""
+    from core.choices import Currency
+    from core.money import format_bdt
+    from payments.services import _first_name, _method_label
+
+    payer = payment.member.user
+    sub = payment.shared_plan.subscription
+    payload = {
+        "payment_id": payment.pk,
+        "user_id": payer.pk,
+        "audit_log_id": audit_log_id,
+        "plan_name": sub.plan_name or "",
+        "subscription_currency": sub.currency,
+        "amount_display": format_bdt(payment.amount),
+        "method_label": _method_label(payment.method),
+        "transaction_id": payment.transaction_id or "",
+        "paid_on": payment.paid_on.isoformat() if payment.paid_on else "",
+        "rejection_reason": rejection_reason.strip(),
+        "reviewer_name": _first_name(rejected_by),
+        "reviewed_at": payment.reviewed_at.isoformat() if payment.reviewed_at else "",
+        "payer_first_name": _first_name(payer),
+        "link_path": f"/app/shared/{sub.pk}",
+    }
+    if sub.currency not in (Currency.BDT, Currency.USD):
+        payload["subscription_currency"] = str(sub.currency)
+    for key in _REQUIRED_REJECTION_PAYLOAD_KEYS:
+        if key not in payload or not str(payload[key]).strip():
+            raise OutboxPayloadError(f"payment rejection payload missing {key}")
+    return enqueue_outbound_email(
+        email_type=OutboundEmailType.PAYMENT_REJECTED,
+        business_event_id=f"payment_rejected:{audit_log_id}",
+        to_email=payer.email,
+        user=payer,
+        payload=payload,
+    )
+
+
+def _password_security_payload(*, user, audit_log_id: int, event: str) -> dict:
+    from django.utils import timezone
+
+    return {
+        "event": event,
+        "user_id": user.pk,
+        "audit_log_id": audit_log_id,
+        "occurred_at": timezone.now().isoformat(),
+        "link_path": "/app/profile",
+    }
+
+
+def enqueue_password_changed_notice(*, user, audit_log_id: int) -> OutboundEmail:
+    """Queue a password-changed security notice; caller must be inside transaction.atomic."""
+    return enqueue_outbound_email(
+        email_type=OutboundEmailType.PASSWORD_CHANGED,
+        business_event_id=f"password_changed:{audit_log_id}",
+        to_email=user.email,
+        user=user,
+        payload=_password_security_payload(
+            user=user,
+            audit_log_id=audit_log_id,
+            event=OutboundEmailType.PASSWORD_CHANGED,
+        ),
+    )
+
+
+def enqueue_password_reset_completed_notice(*, user, audit_log_id: int) -> OutboundEmail:
+    """Queue a password-reset-completed security notice; caller must be inside transaction.atomic."""
+    return enqueue_outbound_email(
+        email_type=OutboundEmailType.PASSWORD_RESET_COMPLETED,
+        business_event_id=f"password_reset_completed:{audit_log_id}",
+        to_email=user.email,
+        user=user,
+        payload=_password_security_payload(
+            user=user,
+            audit_log_id=audit_log_id,
+            event=OutboundEmailType.PASSWORD_RESET_COMPLETED,
+        ),
+    )
+
+
+def _email_change_completion_payload(
+    *,
+    user,
+    audit_log_id: int,
+    event: str,
+    previous_email: str,
+    new_email: str,
+) -> dict:
+    from django.utils import timezone
+
+    return {
+        "event": event,
+        "user_id": user.pk,
+        "audit_log_id": audit_log_id,
+        "previous_email": previous_email.strip().lower(),
+        "new_email": new_email.strip().lower(),
+        "occurred_at": timezone.now().isoformat(),
+        "link_path": "/app/profile",
+    }
+
+
+def enqueue_email_changed_new_notice(
+    *,
+    user,
+    audit_log_id: int,
+    previous_email: str,
+    new_email: str,
+) -> OutboundEmail:
+    """Queue confirmation to the new address after email change verification."""
+    return enqueue_outbound_email(
+        email_type=OutboundEmailType.EMAIL_CHANGED_NEW,
+        business_event_id=f"email_changed_new:{audit_log_id}",
+        to_email=new_email,
+        user=user,
+        payload=_email_change_completion_payload(
+            user=user,
+            audit_log_id=audit_log_id,
+            event=OutboundEmailType.EMAIL_CHANGED_NEW,
+            previous_email=previous_email,
+            new_email=new_email,
+        ),
+    )
+
+
+def enqueue_email_changed_previous_notice(
+    *,
+    user,
+    audit_log_id: int,
+    previous_email: str,
+    new_email: str,
+) -> OutboundEmail:
+    """Queue security warning to the previous address after email change verification."""
+    return enqueue_outbound_email(
+        email_type=OutboundEmailType.EMAIL_CHANGED_PREVIOUS,
+        business_event_id=f"email_changed_previous:{audit_log_id}",
+        to_email=previous_email,
+        user=user,
+        payload=_email_change_completion_payload(
+            user=user,
+            audit_log_id=audit_log_id,
+            event=OutboundEmailType.EMAIL_CHANGED_PREVIOUS,
+            previous_email=previous_email,
+            new_email=new_email,
+        ),
     )

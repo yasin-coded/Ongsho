@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 
 from django.contrib.auth import get_user_model
@@ -16,12 +17,18 @@ from rest_framework_simplejwt.tokens import RefreshToken, UntypedToken
 from audit import services as audit_services
 from accounts.constants import DEFAULT_AVATAR_ID
 from accounts import selectors as account_selectors
+from core.mail_enqueue import OutboxEnqueueError, OutboxPayloadError
 from core.mail_outbox import (
+    cancel_pending_account_notification_deliveries,
     cancel_pending_email_change_deliveries,
     cancel_pending_reminder_deliveries_for_user,
     enqueue_account_verify,
     enqueue_email_change,
+    enqueue_email_changed_new_notice,
+    enqueue_email_changed_previous_notice,
+    enqueue_password_changed_notice,
     enqueue_password_reset,
+    enqueue_password_reset_completed_notice,
     enqueue_verify_resend,
 )
 from core.outbox.verification import cancel_pending_verification_deliveries
@@ -37,6 +44,8 @@ from core.lockout import (
 )
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 CLOSED_ACCOUNT_DISPLAY_NAME = "Closed account"
 ACCOUNT_TOMBSTONE_DOMAIN = "closed.ongsho.invalid"
@@ -71,6 +80,69 @@ def _integrity_error_is_duplicate_email(exc: IntegrityError) -> bool:
         return True
     text = str(exc).lower()
     return any(name in text for name in _DUPLICATE_EMAIL_CONSTRAINTS)
+
+
+def _best_effort_enqueue_password_changed(user, *, audit_log_id: int) -> None:
+    try:
+        with transaction.atomic():
+            enqueue_password_changed_notice(user=user, audit_log_id=audit_log_id)
+    except (OutboxEnqueueError, OutboxPayloadError, IntegrityError):
+        logger.warning(
+            "accounts_security_email_enqueue_failed event=password_changed user_id=%s audit_log_id=%s",
+            user.pk,
+            audit_log_id,
+        )
+
+
+def _best_effort_enqueue_email_change_completion(
+    user,
+    *,
+    audit_log_id: int,
+    previous_email: str,
+    new_email: str,
+) -> None:
+    for event, enqueue_fn in (
+        (
+            "email_changed_new",
+            lambda: enqueue_email_changed_new_notice(
+                user=user,
+                audit_log_id=audit_log_id,
+                previous_email=previous_email,
+                new_email=new_email,
+            ),
+        ),
+        (
+            "email_changed_previous",
+            lambda: enqueue_email_changed_previous_notice(
+                user=user,
+                audit_log_id=audit_log_id,
+                previous_email=previous_email,
+                new_email=new_email,
+            ),
+        ),
+    ):
+        try:
+            with transaction.atomic():
+                enqueue_fn()
+        except (OutboxEnqueueError, OutboxPayloadError, IntegrityError):
+            logger.warning(
+                "accounts_email_change_notice_enqueue_failed event=%s user_id=%s audit_log_id=%s",
+                event,
+                user.pk,
+                audit_log_id,
+            )
+
+
+def _best_effort_enqueue_password_reset_completed(user, *, audit_log_id: int) -> None:
+    try:
+        with transaction.atomic():
+            enqueue_password_reset_completed_notice(user=user, audit_log_id=audit_log_id)
+    except (OutboxEnqueueError, OutboxPayloadError, IntegrityError):
+        logger.warning(
+            "accounts_security_email_enqueue_failed event=password_reset_completed user_id=%s audit_log_id=%s",
+            user.pk,
+            audit_log_id,
+        )
 
 
 def verify_current_password(user, password: str) -> None:
@@ -251,14 +323,25 @@ def request_password_reset(email: str) -> None:
     enqueue_password_reset(user)
 
 
+@transaction.atomic
 def confirm_password_reset(*, uid: str, token: str, new_password: str) -> None:
     user = _user_from_uid(uid)
     if user is None or not default_token_generator.check_token(user, token):
         raise ValidationFailed("Invalid or expired reset link.", code="invalid_token")
 
+    user = User.objects.select_for_update().get(pk=user.pk)
     user.set_password(new_password)
     user.save(update_fields=["password"])
+    audit_row = audit_services.log(
+        user,
+        "password.reset_completed",
+        "User",
+        user.pk,
+        None,
+        None,
+    )
     revoke_all_tokens(user)
+    _best_effort_enqueue_password_reset_completed(user, audit_log_id=audit_row.pk)
 
 
 def _user_from_uid(uid: str):
@@ -393,8 +476,9 @@ def change_password(user, *, current_password: str, new_password: str) -> None:
     verify_current_password(user, current_password)
     user.set_password(new_password)
     user.save(update_fields=["password"])
-    audit_services.log(user, "password.changed", "User", user.pk, None, None)
+    audit_row = audit_services.log(user, "password.changed", "User", user.pk, None, None)
     revoke_all_tokens(user)
+    _best_effort_enqueue_password_changed(user, audit_log_id=audit_row.pk)
 
 
 @transaction.atomic
@@ -454,7 +538,7 @@ def verify_email_change(user, token: str) -> User:
     user.pending_email = ""
     user.email_verified = True
     user.save(update_fields=["email", "pending_email", "email_verified"])
-    audit_services.log(
+    audit_row = audit_services.log(
         user,
         "email_change.verified",
         "User",
@@ -463,6 +547,12 @@ def verify_email_change(user, token: str) -> User:
         {"email": user.email},
     )
     revoke_all_tokens(user)
+    _best_effort_enqueue_email_change_completion(
+        user,
+        audit_log_id=audit_row.pk,
+        previous_email=old_email,
+        new_email=user.email,
+    )
     from core.notify import notify
 
     notify(
@@ -481,6 +571,7 @@ def cancel_email_change(user) -> None:
     if not user.pending_email:
         return
     pending = user.pending_email
+    cancel_pending_email_change_deliveries(user.pk)
     user.pending_email = ""
     user.save(update_fields=["pending_email"])
     audit_services.log(
@@ -513,6 +604,7 @@ def close_account(user, *, password: str) -> None:
     cancel_pending_verification_deliveries(user.pk)
     cancel_pending_email_change_deliveries(user.pk)
     cancel_pending_reminder_deliveries_for_user(user.pk)
+    cancel_pending_account_notification_deliveries(user.pk)
 
     tombstone = _tombstone_email(user.pk)
     for _ in range(8):
