@@ -1,12 +1,11 @@
 import { apiRequest } from '../http'
-import { idStr, paginatedBody } from '../adapters/common'
+import { paginatedBody } from '../adapters/common'
 import { composeDashboard } from '../adapters/dashboard'
 import { mapCalendarResponse } from '../adapters/calendar'
 import { mapNotificationCounts, mapNotificationItem } from '../adapters/notifications'
 import { getMe } from './accounts'
 
 const FILTER_TO_API = { all: 'all', action: 'action', needs_action: 'action', payments: 'payments', plans: 'plans', reminders: 'reminders' }
-const FILTER_FROM_API = { action: 'needs_action' }
 
 export async function getDashboard() {
   const me = await getMe()

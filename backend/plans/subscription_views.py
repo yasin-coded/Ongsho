@@ -23,6 +23,20 @@ ORDERING_WHITELIST = frozenset(
 )
 
 
+def _list_filters_active(params: dict) -> bool:
+    if (params.get("search") or "").strip():
+        return True
+    for key in ("status", "category", "currency", "plan_mode"):
+        if params.get(key):
+            return True
+    rarely = params.get("rarely_used")
+    if rarely is not None and rarely != "":
+        return True
+    if params.get("needs_review"):
+        return True
+    return False
+
+
 def _domain_response(exc: DomainError) -> Response:
     from core.exceptions import domain_error_response
 
@@ -102,18 +116,23 @@ def subscription_list_create(request):
         qs = selectors.owned_subscriptions(request.user, params)
         counts = selectors.subscription_list_counts(request.user)
         today = today_dhaka()
-        from plans.models import Subscription
+        if _list_filters_active(params):
+            from plans.models import Subscription
 
-        all_owned = list(
-            Subscription.objects.filter(owner=request.user).select_related("service_name", "category")
-        )
+            all_owned = list(
+                Subscription.objects.filter(owner=request.user).select_related("service_name", "category")
+            )
+            page_source = qs
+        else:
+            all_owned = list(qs)
+            page_source = all_owned
         ctx = owner_selectors.prefetch_owner_plan_context(all_owned, today)
         paginator = OngshoPageNumberPagination()
-        page = paginator.paginate_queryset(qs, request, view=None)
+        page = paginator.paginate_queryset(page_source, request, view=None)
         page_list = list(page)
         data = SubscriptionListSerializer(page_list, many=True).data
         for i, sub in enumerate(page_list):
-            data[i].update(owner_selectors.owner_list_extra(sub, ctx))
+            data[i].update(owner_selectors.owner_list_extra(sub, ctx, read_only=True))
         totals = owner_selectors.subscription_list_totals_from_ctx(all_owned, ctx, request.user)
         return paginator.get_paginated_response(data, extra={"counts": counts, "totals": totals})
     serializer = SubscriptionCreateSerializer(data=request.data, context={"request": request})

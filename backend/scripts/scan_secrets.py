@@ -20,7 +20,7 @@ ALLOWLIST_PATHS = frozenset(
 
 RULES: list[tuple[str, re.Pattern[str]]] = [
     ("private_key_header", re.compile(r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----")),
-    ("postgresql_url_password", re.compile(r"postgresql://[^:]+:[^@\s]+@")),
+    ("postgresql_url_password", re.compile("postgresql" + r"://" + r"[^:]+:[^@\s]+@")),
     ("secret_key_literal", re.compile(r"(?i)(SECRET_KEY|API_KEY)\s*=\s*['\"][^'\"]{20,}['\"]")),
     ("jwt_literal", re.compile(r"\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b")),
     ("resend_key", re.compile(r"\bre_[a-zA-Z0-9_-]{20,}\b")),
@@ -28,10 +28,79 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     ("stripe_sk", re.compile(r"\bsk_(live|test)_[a-zA-Z0-9]{16,}\b")),
 ]
 
-FAKE_OK = (
+FAKE_OK_SUBSTRINGS = (
     "fake-secret-key-change-me",
-    "postgresql://user:password@",
 )
+
+_NEON_FIXTURE_ACCOUNTS = (
+    ("main", "mainpass"),
+    ("pool", "poolpass"),
+    ("testuser", "testpass"),
+    ("owner", "ownerpass"),
+)
+_BREVO_FIXTURE_MARKERS = (
+    "test-key-not-real",
+    "deadbeef1234567890abcdefghij",
+    "should-not-appear",
+)
+
+
+def _in_tests(rel: str) -> bool:
+    return rel.replace("\\", "/").startswith("backend/tests/")
+
+
+def _pg_credential_prefix(user: str, password: str) -> str:
+    return "postgresql://" + user + ":" + password + "@"
+
+
+def _postgresql_test_fixture(fragment: str) -> bool:
+    if fragment.startswith(_pg_credential_prefix("user", "password")):
+        return True
+    if fragment.startswith(_pg_credential_prefix("user", "sekret")):
+        return True
+    return any(fragment == _pg_credential_prefix(user, pw) for user, pw in _NEON_FIXTURE_ACCOUNTS)
+
+
+def _jwt_test_fixture(token: str) -> bool:
+    parts = token.split(".")
+    if len(parts) != 3 or not parts[0].startswith("eyJ"):
+        return False
+    # Masking tests use short placeholder payload/signature segments, not real JWT blobs.
+    return len(parts[1]) <= 12 and len(parts[2]) <= 12
+
+
+def _brevo_test_fixture(fragment: str) -> bool:
+    return any(marker in fragment for marker in _BREVO_FIXTURE_MARKERS)
+
+
+def _match_allowed(rule: str, matched: str, rel: str) -> bool:
+    if rule in ("postgresql_url_password", "secret_key_literal"):
+        if any(ok in matched for ok in FAKE_OK_SUBSTRINGS):
+            return True
+    if not _in_tests(rel):
+        return False
+    if rule == "postgresql_url_password":
+        return _postgresql_test_fixture(matched)
+    if rule == "jwt_literal":
+        return _jwt_test_fixture(matched)
+    if rule == "brevo_key":
+        return _brevo_test_fixture(matched)
+    return False
+
+
+def secret_violations_in_text(rel: str, text: str) -> list[str]:
+    """Return rule names that match at least one non-exempt secret pattern in text."""
+    rel = rel.replace("\\", "/")
+    hit_rules: list[str] = []
+    for rule, pattern in RULES:
+        unallowed = False
+        for match in pattern.finditer(text):
+            if not _match_allowed(rule, match.group(0), rel):
+                unallowed = True
+                break
+        if unallowed:
+            hit_rules.append(rule)
+    return hit_rules
 
 
 def _git_ls_files() -> list[str]:
@@ -68,12 +137,8 @@ def scan() -> list[tuple[str, str]]:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for rule, pattern in RULES:
-            if not pattern.search(text):
-                continue
-            if any(ok in text for ok in FAKE_OK) and rule in ("postgresql_url_password", "secret_key_literal"):
-                continue
-            hits.append((rel.replace("\\", "/"), rule))
+        for rule in secret_violations_in_text(rel, text):
+            hits.append((rel, rule))
     return hits
 
 

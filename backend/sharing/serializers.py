@@ -31,7 +31,9 @@ def member_row(member: Member, *, due_ctx: dict | None = None) -> dict:
         "first_name": (member.user.name or "").split(" ")[0],
         "email": member.user.email,
         "avatar_id": member.user.avatar_id,
-        "is_owner_seat": selectors.is_owner_seat(member),
+        "is_owner_seat": selectors.is_owner_seat(
+            member, owner_id=member.shared_plan.subscription.owner_id
+        ),
         "status": member.status,
         "joined_on": member.joined_on,
         "left_on": member.left_on,

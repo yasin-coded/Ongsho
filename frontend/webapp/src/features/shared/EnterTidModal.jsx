@@ -24,7 +24,10 @@ function dueLabel(d, { name } = {}) {
 }
 
 function TidForm({ plan, onClose, othersOnly = false }) {
-  const mine = othersOnly ? [] : plan.openDues.slice(0, 1)
+  const mine = useMemo(
+    () => (othersOnly ? [] : plan.openDues.slice(0, 1)),
+    [othersOnly, plan.openDues],
+  )
   const coverable = plan.coverable ?? []
   const [coverPicked, setCoverPicked] = useState(() => new Set())
   const [method, setMethod] = useState(plan.method)

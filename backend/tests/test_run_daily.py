@@ -87,7 +87,8 @@ def test_held_advisory_lock_exits_quietly():
     from jobs import services as job_services
 
     with patch.object(job_services, "_try_advisory_lock", return_value=False):
-        assert job_services.run_daily(date(2026, 1, 1)) is None
+        result = job_services.run_daily(date(2026, 1, 1))
+        assert result.skipped_due_to_lock is True
 
 
 @pytest.mark.django_db

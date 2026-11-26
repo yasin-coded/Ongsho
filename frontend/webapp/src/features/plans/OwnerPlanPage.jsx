@@ -94,11 +94,6 @@ function SeatSplitCard({ plan }) {
   )
   const saveSplit = useAction((p) => plansApi.updatePlanSplit(plan.id, p), { toastMessage: 'Seat split saved.' })
 
-  useEffect(() => {
-    setSplit(plan.split)
-    setAmounts(Object.fromEntries(plan.members.map((m) => [m.id, m.customShare != null ? String(m.customShare / 100) : ''])))
-  }, [plan.id, plan.split, plan.members])
-
   if (plan.mode !== 'owner' || !plan.shared) return null
 
   const chargeTotal = plan.price.amount
@@ -429,15 +424,8 @@ function OwnerPlan({ plan }) {
   }
 
   const free = freeSeats(plan)
-  const reservedInvites = pendingInvitesReservingSeats(plan.invites)
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const canInvite = canSendInvite(plan)
-  const seatsFullReason =
-    free <= 0 && reservedInvites.length > 0
-      ? `${reservedInvites.length} pending invite${reservedInvites.length === 1 ? '' : 's'} — cancel one to free a seat`
-      : free <= 0
-        ? 'All seats are taken'
-        : undefined
   const openInvite = () => setModal({ type: 'invite' })
 
   return (
@@ -611,7 +599,10 @@ function OwnerPlan({ plan }) {
             </div>
           </Box>
 
-          <SeatSplitCard plan={plan} />
+          <SeatSplitCard
+            key={`${plan.id}:${plan.split}:${plan.members.map((m) => m.id).join(',')}`}
+            plan={plan}
+          />
 
           <Box>
             <BoxHead title="IOUs in this plan" />

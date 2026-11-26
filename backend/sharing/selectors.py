@@ -122,8 +122,11 @@ def member_count_active(shared: SharedPlan) -> int:
     return Member.objects.filter(shared_plan=shared).exclude(status=MemberStatus.LEFT).count()
 
 
-def is_owner_seat(member: Member) -> bool:
-    return member.user_id == member.shared_plan.subscription.owner_id
+def is_owner_seat(member: Member, *, owner_id: int | None = None) -> bool:
+    if owner_id is not None:
+        return member.user_id == owner_id
+    sub = member.shared_plan.subscription
+    return member.user_id == sub.owner_id
 
 
 def pending_transfer_for_plan(sub) -> OwnershipTransfer | None:

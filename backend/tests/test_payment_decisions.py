@@ -72,6 +72,47 @@ def test_reject_requires_reason(world):
 
 
 @pytest.mark.django_db
+def test_member_cannot_mark_due_paid(world):
+    due = world["due_x"]
+    due.status = DueStatus.DUE
+    due.save(update_fields=["status"])
+    member = client_for(world["member"])
+    r = member.post(
+        f"/api/dues/{due.pk}/mark-paid/",
+        {"date": str(world["today"]), "method": PaymentMethod.CASH, "note": "x"},
+        format="json",
+    )
+    assert r.status_code == 404
+    due.refresh_from_db()
+    assert due.status == DueStatus.DUE
+
+
+@pytest.mark.django_db
+def test_owner_mark_paid_member_due_no_transaction_id(world):
+    due = world["due_x"]
+    due.status = DueStatus.DUE
+    due.save(update_fields=["status"])
+    owner = client_for(world["owner"])
+    r = owner.post(
+        f"/api/dues/{due.pk}/mark-paid/",
+        {"date": str(world["today"]), "method": PaymentMethod.CASH, "note": "cash"},
+        format="json",
+    )
+    assert r.status_code == 200
+    due.refresh_from_db()
+    assert due.status == DueStatus.PAID
+    payment = Payment.objects.get(
+        member=due.member,
+        review_status=ReviewStatus.CONFIRMED,
+    )
+    assert payment.transaction_id is None
+    assert payment.recorded_by_id == world["owner"].pk
+    assert PaymentAllocation.objects.filter(payment=payment, due=due).exists()
+    assert AuditLog.objects.filter(action="due.mark_paid", entity_id=due.pk).exists()
+    assert Notification.objects.filter(user=world["member"], kind="payment_recorded").exists()
+
+
+@pytest.mark.django_db
 def test_mark_paid_on_pending(world):
     due = world["due_x"]
     due.status = DueStatus.DUE

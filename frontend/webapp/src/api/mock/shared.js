@@ -120,7 +120,7 @@ export function acceptPlanJoin(token) {
   })
 }
 
-export function signupAndJoinPlan(token, { email, name, password }) {
+export function signupAndJoinPlan(token, { email, name }) {
   return write(() => {
     const planId = parseMockJoinToken(token)
     const plan = planId ? planById(planId) : null

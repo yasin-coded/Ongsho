@@ -57,6 +57,7 @@ class WorkerRunResult:
     failed: int = 0
     cancelled: int = 0
     skipped_ownership: int = 0
+    eligible_remaining: int = 0
 
 
 def process_claimed_row(*, row_id: uuid.UUID, claim_token: str) -> str:
@@ -247,4 +248,5 @@ def run_worker_pass(
                 result.skipped_ownership += 1
         if len(claimed_rows) < batch_size:
             break
+    result.eligible_remaining = count_eligible()
     return result

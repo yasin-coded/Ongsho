@@ -1,8 +1,8 @@
-"""billing_from and no back-charges (lead window uses TODAY = 2026-11-15 baseline)."""
+"""billing_from, active-cycle charges, and lead window (TODAY baseline = 2026-11-15)."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -10,7 +10,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from billing.models import Charge
-from billing.services import generate_missing_charges
+from billing.services import CHARGE_LEAD_DAYS, generate_missing_charges
 from billing.services import activate_ended_trials
 from dues.models import Due, DueStatus
 from jobs.services import run_daily
@@ -40,18 +40,20 @@ def today_dhaka_t0():
 
 @pytest.mark.django_db
 def test_old_start_no_back_charge_until_lead(owner, today_dhaka_t0):
+    """Active cycle at T0: Dec 5 due is beyond the lead window but still generates."""
     sub = _plan(
         owner,
         start_date=date(2025, 2, 5),
         billing_from=T0,
         anchor_day=5,
     )
-    generate_missing_charges(sub, T0)
+    assert generate_missing_charges(sub, T0)["created"] == 1
     dates = list(Charge.objects.filter(subscription=sub).values_list("due_date", flat=True))
     assert all(d >= T0 for d in dates)
-    assert date(2026, 12, 5) not in dates
+    assert date(2026, 12, 5) in dates
+    assert generate_missing_charges(sub, T0)["created"] == 0
     generate_missing_charges(sub, date(2026, 11, 26))
-    assert Charge.objects.filter(subscription=sub, due_date=date(2026, 12, 5)).exists()
+    assert Charge.objects.filter(subscription=sub, due_date=date(2026, 12, 5)).count() == 1
 
 
 @pytest.mark.django_db
@@ -78,9 +80,11 @@ def test_create_with_next_renewal_sets_billing_from(owner, today_dhaka_t0):
 
 @pytest.mark.django_db
 def test_recent_start_first_due_not_created_until_lead(owner, today_dhaka_t0):
+    """First billing period began before T0; charge is created via the active-cycle rule."""
     sub = _plan(owner, start_date=date(2026, 11, 10), billing_from=T0, anchor_day=10)
-    generate_missing_charges(sub, T0)
-    assert not Charge.objects.filter(subscription=sub).exists()
+    assert generate_missing_charges(sub, T0)["created"] == 1
+    assert Charge.objects.filter(subscription=sub, due_date=date(2026, 12, 10)).exists()
+    assert generate_missing_charges(sub, T0)["created"] == 0
 
 
 @pytest.mark.django_db
@@ -105,6 +109,7 @@ def test_prior_cycle_in_lead_creates_owner_due(owner, today_dhaka_t0):
 
 @pytest.mark.django_db
 def test_yearly_nothing_until_lead(owner, today_dhaka_t0):
+    """Annual period started last year; renewal due > CHARGE_LEAD_DAYS out but cycle is active."""
     sub = _plan(
         owner,
         cycle_unit=CycleUnit.YEAR,
@@ -113,8 +118,28 @@ def test_yearly_nothing_until_lead(owner, today_dhaka_t0):
         billing_from=T0,
         anchor_day=20,
     )
+    assert generate_missing_charges(sub, T0)["created"] == 1
+    assert Charge.objects.filter(subscription=sub, due_date=date(2026, 12, 20)).exists()
+    assert generate_missing_charges(sub, T0)["created"] == 0
+
+
+@pytest.mark.django_db
+def test_future_due_beyond_lead_held_until_window(owner, today_dhaka_t0):
+    """Next cycle is not active at T0 and due date is past the lead window — no early charge."""
+    sub = _plan(
+        owner,
+        start_date=date(2025, 11, 25),
+        billing_from=T0,
+        anchor_day=25,
+    )
     generate_missing_charges(sub, T0)
-    assert not Charge.objects.filter(subscription=sub, due_date=date(2026, 12, 20)).exists()
+    dates = set(Charge.objects.filter(subscription=sub).values_list("due_date", flat=True))
+    assert date(2026, 11, 25) in dates
+    assert date(2026, 12, 25) not in dates
+
+    lead_day = date(2026, 12, 25) - timedelta(days=CHARGE_LEAD_DAYS)
+    assert generate_missing_charges(sub, lead_day)["created"] == 1
+    assert Charge.objects.filter(subscription=sub, due_date=date(2026, 12, 25)).exists()
 
 
 @pytest.mark.django_db

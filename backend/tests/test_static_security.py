@@ -8,10 +8,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+import importlib.util
+
 import pytest
 
 BACKEND = Path(__file__).resolve().parent.parent
 REPO = BACKEND.parent
+
+
+def _load_scan_secrets():
+    path = BACKEND / "scripts" / "scan_secrets.py"
+    spec = importlib.util.spec_from_file_location("scan_secrets", path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
 
 SKIP_PARTS = ("/tests/", "/migrations/", "__pycache__", "/.venv/", "/venv/")
 SCAN_DIRS = ("accounts", "billing", "catalog", "config", "core", "dues", "jobs", "notifications", "payments", "plans", "reports", "sharing")
@@ -100,6 +111,47 @@ def test_secret_scan_script_clean():
     proc = subprocess.run([sys.executable, str(script)], cwd=REPO, capture_output=True, text=True)
     if proc.stdout.strip():
         pytest.fail("scan_secrets findings (file\\trule):\n" + proc.stdout.strip())
+
+
+def test_secret_scan_exempts_known_test_fixtures():
+    scan_secrets = _load_scan_secrets()
+    rel = "backend/tests/example_fixture.py"
+    violations = scan_secrets.secret_violations_in_text(
+        rel,
+        "\n".join(
+            (
+                'FAKE_KEY = "xkeysib-test-key-not-real-abc12345"',
+                'secret = "xkeysib-supersecret-should-not-appear"',
+                'k = "xkeysib-deadbeef1234567890abcdefghij"',
+                'j = "eyJhbGciOiJIUzI1NiJ9.payload.sig"',
+                'b = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.body.sig"',
+                'u = "postgresql://testuser:testpass@ep-test.region.aws.neon.tech/test_neondb?sslmode=require"',
+                'h = "postgresql://user:sekret@host/db"',
+            )
+        ),
+    )
+    assert violations == []
+
+
+def test_secret_scan_flags_realistic_secrets_in_test_paths():
+    scan_secrets = _load_scan_secrets()
+    rel = "backend/tests/evil_fixture.py"
+    prod_pw = "Tr0ub4dor&3"
+    realistic = "\n".join(
+        (
+            'API = "xkeysib-' + ("Z" * 32) + '"',
+            'DB = "postgresql://app:' + prod_pw + "@db.prod.example.com/appdb\"",
+            'JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+            + ("YWJjZGVmZ2hpams" * 3)
+            + "."
+            + ("c3VwZXJzZWNyZXQ" * 3)
+            + '"',
+        )
+    )
+    violations = set(scan_secrets.secret_violations_in_text(rel, realistic))
+    assert "brevo_key" in violations
+    assert "postgresql_url_password" in violations
+    assert "jwt_literal" in violations
 
 
 def test_view_direct_pk_heuristic_report():

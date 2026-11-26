@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Plus, X } from 'lucide-react'
@@ -178,21 +178,26 @@ function Preview({ form, names, editing }) {
   )
 }
 
-function PlanForm({ initial, editing, planId }) {
-  const navigate = useNavigate()
-  const patchBaseline = useRef({ nextRenewalDate: null })
-  const [form, setForm] = useState(() => {
-    const nextRenewalDate =
-      initial.renewal === 'fixed' && initial.endDate
-        ? initial.endDate
-        : initial.nextRenewalDate || nextRenewalOf(initial) || ''
-    patchBaseline.current = { nextRenewalDate: nextRenewalDate || null }
-    return {
+function initialPlanFormState(initial) {
+  const nextRenewalDate =
+    initial.renewal === 'fixed' && initial.endDate
+      ? initial.endDate
+      : initial.nextRenewalDate || nextRenewalOf(initial) || ''
+  return {
+    form: {
       ...initial,
       nextRenewalDate,
       ...(initial.renewal === 'fixed' && initial.endDate ? { endDate: initial.endDate } : {}),
-    }
-  })
+    },
+    patchBaseline: { nextRenewalDate: nextRenewalDate || null },
+  }
+}
+
+function PlanForm({ initial, editing, planId }) {
+  const navigate = useNavigate()
+  const [{ form: initialForm, patchBaseline: initialBaseline }] = useState(() => initialPlanFormState(initial))
+  const [patchBaseline] = useState(() => initialBaseline)
+  const [form, setForm] = useState(() => initialForm)
   const [email, setEmail] = useState('')
   const cats = useQuery({ queryKey: ['categories'], queryFn: getCategories })
   const names = useQuery({ queryKey: ['service-names'], queryFn: getServiceNames })
@@ -239,7 +244,7 @@ function PlanForm({ initial, editing, planId }) {
       seats: Number(form.seats),
       trialEnd: form.trialEnd || null,
       endDate: form.renewal === 'fixed' ? form.endDate : null,
-      ...(editing ? { __patchBaseline: patchBaseline.current } : { split: 'equal', customTotalOk: true }),
+      ...(editing ? { __patchBaseline: patchBaseline } : { split: 'equal', customTotalOk: true }),
     }
     save.run(payload)
   }

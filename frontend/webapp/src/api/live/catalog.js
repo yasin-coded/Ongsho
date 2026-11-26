@@ -13,7 +13,6 @@ function mapCategory(row) {
 
 function mapServiceName(row, categories) {
   const categoryId = idStr(row.category)
-  const category = categories?.find((c) => c.id === categoryId)
   const fallbackCategory = categories?.find((c) => c.name === 'Other')
   return {
     id: idStr(row.id),

@@ -7,7 +7,7 @@ export function PrefetchLink({ to, prefetchKind, prefetchId, onMouseEnter, onMou
   const queryClient = useQueryClient()
   const armed = Boolean(prefetchKind && prefetchId)
 
-  const bindPrefetch = (handler, kind, id) => (e) => {
+  const bindPrefetch = (handler, kind) => (e) => {
     if (armed) {
       if (kind === 'enter' || kind === 'focus') scheduleHoverPrefetch(queryClient, prefetchKind, prefetchId)
       else cancelHoverPrefetch()

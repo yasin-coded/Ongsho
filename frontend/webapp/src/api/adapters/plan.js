@@ -1,7 +1,7 @@
 import { cycleFromForm, nextDueDate, nextRenewalDateForApi } from '@/mocks/schedule'
 import { lookupServiceKey } from '@/lib/services'
 import { categoryColor } from '@/lib/colors'
-import { dayOfMonth, fmtCycleDueLabel, fmtMonth, todayDhaka } from '@/lib/dates'
+import { dayOfMonth, fmtCycleDueLabel, todayDhaka } from '@/lib/dates'
 import { idStr, moneyFromApi, moneyToApi, rateFromApi, rateToApi, paginatedBody } from './common'
 import { avatarColorFromId } from './me'
 import { mapOwnerTransfer } from './transfers'
@@ -39,10 +39,6 @@ function isMultiMemberPlan(sub, members = []) {
   const headcount = planHeadcount(sub, members)
   if (sub.plan_mode === 'reseller') return headcount > 0 || (sub.pending_invites?.length ?? 0) > 0
   return headcount > 1 || (sub.pending_invites?.length ?? 0) > 0
-}
-
-function billableMembers(sub, members) {
-  return members.filter((m) => !(sub.plan_mode === 'reseller' && m.isOwnerSeat))
 }
 
 function resellerOwnerPill(roster) {
@@ -156,7 +152,7 @@ export function mapMemberRow(row, meUserId, sub = null) {
   }
 }
 
-export function mapSubscriptionSummary(sub, members = [], meUserId = null) {
+export function mapSubscriptionSummary(sub, members = []) {
   const serviceName = sub.service_name?.name ?? ''
   const category = sub.category
   const price = priceBlock(sub)
@@ -228,7 +224,7 @@ export function mapListResponse(body, membersByPlan = new Map(), meUserId = null
       if (m.user_id === undefined && !hasStatus) return m
       return mapMemberRow({ ...m, user_id: m.user_id ?? m.userId ?? m.id }, meUserId, sub)
     })
-    return mapSubscriptionSummary(sub, members, meUserId)
+    return mapSubscriptionSummary(sub, members)
   })
   return { ...page, items, counts, totals, totalsMeta }
 }

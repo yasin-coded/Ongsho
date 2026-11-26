@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import logging
 import socket
+import time
 import uuid
 
 from django.core.management.base import BaseCommand, CommandError
 
 from core.outbox.claim import count_eligible, release_worker_lock, try_worker_lock
-from core.outbox.worker import run_worker_pass
+from core.outbox.health import format_health_report, outbox_health_snapshot
+from core.outbox.reporting import format_worker_log_json, format_worker_stdout, worker_result_to_log_dict
+from core.outbox.worker import WorkerRunResult, run_worker_pass
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -40,7 +46,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="Report eligible row count only; do not claim or send.",
+            help="Read-only outbox health and eligible count; do not claim or send.",
         )
         parser.add_argument(
             "--no-advisory-lock",
@@ -57,36 +63,57 @@ class Command(BaseCommand):
             raise CommandError("--max-runtime must be zero or a positive integer.")
 
         if options["dry_run"]:
-            self.stdout.write(f"eligible={count_eligible()}")
+            snapshot = outbox_health_snapshot()
+            eligible = count_eligible()
+            self.stdout.write(format_health_report(snapshot, eligible=eligible))
             return
 
+        started = time.monotonic()
         lock_held = False
+        advisory_lock = "skipped" if options["no_advisory_lock"] else "busy"
         if not options["no_advisory_lock"]:
             lock_held = try_worker_lock()
             if not lock_held:
-                self.stdout.write("advisory_lock=busy exit=0")
+                duration = time.monotonic() - started
+                self.stdout.write(
+                    f"advisory_lock=busy duration_seconds={duration:.3f} exit_ok=true exit=0"
+                )
                 return
+            advisory_lock = "acquired"
 
         worker_id = (options["worker_id"] or "").strip() or f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+        operational_error: str | None = None
+        result = WorkerRunResult()
         try:
-            result = run_worker_pass(
-                batch_size=batch_size,
-                worker_id=worker_id,
-                max_runtime_seconds=float(max_runtime) if max_runtime else None,
-            )
+            try:
+                result = run_worker_pass(
+                    batch_size=batch_size,
+                    worker_id=worker_id,
+                    max_runtime_seconds=float(max_runtime) if max_runtime else None,
+                )
+            except Exception as exc:
+                operational_error = type(exc).__name__
+                logger.exception("outbox_worker operational failure worker_id=%s", worker_id)
+                raise CommandError(f"outbox worker operational failure: {operational_error}") from exc
         finally:
             if lock_held:
                 release_worker_lock()
 
+        duration = time.monotonic() - started
+        log_payload = worker_result_to_log_dict(
+            result,
+            worker_id=worker_id,
+            duration_seconds=duration,
+            advisory_lock=advisory_lock,
+            operational_error=operational_error,
+        )
+        logger.info("outbox_worker_run %s", format_worker_log_json(**log_payload))
         self.stdout.write(
-            "worker_id={worker} claimed={claimed} sent={sent} retry={retry} failed={failed} "
-            "cancelled={cancelled} skipped_ownership={skipped}".format(
-                worker=worker_id,
-                claimed=result.claimed,
-                sent=result.sent,
-                retry=result.retry,
-                failed=result.failed,
-                cancelled=result.cancelled,
-                skipped=result.skipped_ownership,
+            format_worker_stdout(
+                result,
+                worker_id=worker_id,
+                duration_seconds=duration,
+                advisory_lock=advisory_lock,
+                operational_error=operational_error,
             )
         )

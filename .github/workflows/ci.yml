@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ongsho
+          POSTGRES_PASSWORD: ci_test_only
+          POSTGRES_DB: test_ongsho
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ongsho -d test_ongsho"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      SECRET_KEY: ci-test-secret-key-not-for-production-use-only
+      DEBUG: "false"
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      CSRF_TRUSTED_ORIGINS: http://localhost:5173
+      DEFAULT_FROM_EMAIL: "Ongsho <ci-test@example.com>"
+      FRONTEND_BASE_URL: http://localhost:5173
+      FRONTEND_ORIGINS: http://localhost:5173
+      REFRESH_COOKIE_SECURE: "false"
+      REFRESH_COOKIE_SAMESITE: Lax
+      SECURE_SSL_REDIRECT: "false"
+      TRUST_PROXY_SSL: "false"
+      CACHE_BACKEND: locmem
+      DATABASE_URL: postgresql://ongsho:ci_test_only@localhost:5432/test_ongsho
+      EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
+      INVITE_DELIVERY_ENCRYPTION_KEYS: '{"1": "xFEfHMLkadBG8Sb0XCV-VDjwNEjtw6z2kf0MuFdhyhg=", "2": "Qh7g_BUmq38bXW-on_RTmP2-SbX1q6xNo108PyfyD50="}'
+      INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION: "1"
+      OUTBOX_LEASE_SECONDS: "900"
+      OUTBOUND_EMAIL_MAX_ATTEMPTS: "8"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Pytest (full backend suite)
+        run: python -m pytest
+
+      - name: Migration check
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Secret scan
+        run: python scripts/scan_secrets.py
+
+  frontend:
+    name: Frontend (Vitest / ESLint / build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend/webapp
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/webapp/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Vitest
+        run: npm test
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+      - name: Dist check
+        run: npm run check:dist

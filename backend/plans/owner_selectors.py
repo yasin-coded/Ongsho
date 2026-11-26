@@ -132,7 +132,7 @@ def prefetch_owner_plan_context(subscriptions: list[Subscription], today: date) 
     members = list(
         Member.objects.filter(shared_plan__subscription_id__in=sub_ids)
         .exclude(status=MemberStatus.LEFT)
-        .select_related("user", "shared_plan")
+        .select_related("user", "shared_plan", "shared_plan__subscription")
         .order_by("joined_on", "id")
     )
     for m in members:
@@ -200,15 +200,19 @@ def _ensure_shared_cycle_ready(sub: Subscription, ctx: OwnerPlanContext, today: 
     return charge
 
 
-def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
+def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext, *, read_only: bool = False) -> dict:
     from core.dates import today_dhaka
     from dues import selectors as dues_selectors
 
-    today = today_dhaka()
+    today = today_dhaka() if not read_only else ctx.today
     shared = ctx.shared(sub.pk)
     taken = ctx.seats_taken(sub.pk)
     is_shared = _is_shared(sub, shared, taken)
-    charge = _ensure_shared_cycle_ready(sub, ctx, today)
+    charge = (
+        ctx.current_charge_by_sub.get(sub.pk)
+        if read_only
+        else _ensure_shared_cycle_ready(sub, ctx, today)
+    )
     member_dues = _member_dues_on_charge(
         charge, sub=sub, members_by_plan=ctx.members_by_sub, dues_by_charge=ctx.dues_by_charge
     )
@@ -233,7 +237,7 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
                 sub,
                 today,
                 due=due_by_member.get(m.pk),
-                sync_missing=True,
+                sync_missing=not read_only,
             )
             if snap["due_status"] == DueStatus.PENDING:
                 pending_count += 1
@@ -244,7 +248,7 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
                     "name": m.user.name,
                     "first_name": _first_name(m.user),
                     "avatar_id": m.user.avatar_id,
-                    "is_owner_seat": sharing_selectors.is_owner_seat(m),
+                    "is_owner_seat": sharing_selectors.is_owner_seat(m, owner_id=sub.owner_id),
                     "due_id": snap["due_id"],
                     "due_status": snap["due_status"],
                     "due_amount": snap["due_amount"],
@@ -265,9 +269,16 @@ def owner_list_extra(sub: Subscription, ctx: OwnerPlanContext) -> dict:
 def subscription_list_totals_from_ctx(
     all_owned: list[Subscription], ctx: OwnerPlanContext, user
 ) -> dict:
-    from plans.selectors import subscription_list_totals
+    from plans.selectors import (
+        subscription_list_base_totals,
+        subscription_list_totals,
+        subscriptions_have_price_annotations,
+    )
 
-    base = subscription_list_totals(user)
+    if subscriptions_have_price_annotations(all_owned):
+        base = subscription_list_base_totals(all_owned)
+    else:
+        base = subscription_list_totals(user)
 
     confirmed = Decimal("0")
     pending = Decimal("0")

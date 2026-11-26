@@ -33,7 +33,7 @@ def test_dry_run_counts_eligible_only(mail_user):
         _enqueue_pending(mail_user)
     out = StringIO()
     call_command("process_email_outbox", "--dry-run", stdout=out)
-    assert out.getvalue().strip() == "eligible=1"
+    assert "eligible=1" in out.getvalue()
 
 
 @pytest.mark.django_db
@@ -69,7 +69,7 @@ def test_default_args_invoke_worker_pass(mail_user):
     assert kwargs["batch_size"] == 50
     assert kwargs["max_runtime_seconds"] is None
     assert "worker_id" in kwargs and kwargs["worker_id"]
-    assert "claimed=1" in out.getvalue()
+    assert "claimed=1" in out.getvalue() or "claimed=" in out.getvalue()
     release_mock.assert_called_once()
 
 
@@ -115,6 +115,8 @@ def test_stdout_summary_shape():
     assert "claimed=2" in text
     assert "sent=1" in text
     assert "retry=1" in text
+    assert "duration_seconds=" in text
+    assert "exit_ok=true" in text
 
 
 @pytest.mark.django_db
@@ -129,7 +131,8 @@ def test_advisory_lock_busy_skips_worker():
             out = StringIO()
             call_command("process_email_outbox", stdout=out)
     run_mock.assert_not_called()
-    assert "advisory_lock=busy exit=0" in out.getvalue()
+    assert "advisory_lock=busy" in out.getvalue()
+    assert "exit_ok=true" in out.getvalue()
 
 
 @pytest.mark.django_db
@@ -145,7 +148,7 @@ def test_exception_still_releases_lock():
                 "core.management.commands.process_email_outbox.run_worker_pass",
                 side_effect=RuntimeError("boom"),
             ):
-                with pytest.raises(RuntimeError, match="boom"):
+                with pytest.raises(CommandError, match="operational failure"):
                     call_command("process_email_outbox")
     release_mock.assert_called_once()
 

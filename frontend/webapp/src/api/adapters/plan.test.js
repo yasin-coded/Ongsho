@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addDays, todayDhaka } from '@/lib/dates'
 import { buildCreatePayload, buildPatchPayload, mapListResponse, mapSubscriptionDetail } from './plan'
-import { mapOwnerTransfer } from './transfers'
-
 describe('buildPatchPayload', () => {
   it('omits locked trial_end_date so note-only edits save', () => {
     const body = buildPatchPayload({

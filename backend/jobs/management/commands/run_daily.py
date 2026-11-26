@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from core.dates import today_dhaka
 from jobs import services as job_services
+from jobs.results import format_daily_summary
 
 
 class Command(BaseCommand):
@@ -27,10 +28,8 @@ class Command(BaseCommand):
             run_date = today_dhaka()
 
         result = job_services.run_daily(run_date)
-        if result is None:
-            return
-        self.stdout.write(
-            "expired={expired} trials_activated={trials_activated} "
-            "plans_processed={plans_processed} charges_created={charges_created} "
-            "charge_errors={charge_errors} charges_locked={charges_locked}".format(**result)
-        )
+        self.stdout.write(format_daily_summary(result))
+        if result.lock_acquired and not result.success:
+            raise CommandError(
+                f"run_daily failed at step={result.failed_step} error_type={result.error_type}"
+            )

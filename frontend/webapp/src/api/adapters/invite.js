@@ -1,7 +1,5 @@
 import { lookupServiceKey } from '@/lib/services'
 import { toPaisa } from '@/lib/money'
-import { idStr } from './common'
-
 export function mapPublicInvite(data, token) {
   return {
     id: String(data.id),

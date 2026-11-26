@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import DecimalField, Exists, OuterRef, Q, Subquery
+from django.db.models import Count, DecimalField, Exists, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 
 from catalog.selectors import available_service_names
@@ -154,6 +154,24 @@ def price_now_dict(sub: Subscription) -> dict | None:
     }
 
 
+def subscriptions_have_price_annotations(subs) -> bool:
+    return bool(subs) and hasattr(subs[0], "current_amount")
+
+
+def subscription_list_base_totals(subs) -> dict:
+    total = Decimal("0")
+    count = 0
+    for sub in subs:
+        if sub.status not in (SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL):
+            continue
+        data = price_now_dict(sub)
+        if data is None:
+            continue
+        count += 1
+        total += Decimal(data["monthly_cost_bdt"])
+    return {"count": count, "to_providers": str(quantize_money(total))}
+
+
 def subscription_list_totals(user) -> dict:
     today = today_dhaka()
     current_amount = Subquery(
@@ -180,25 +198,25 @@ def subscription_list_totals(user) -> dict:
         ),
         latest_usd_rate=latest_rate,
     )
-    total = Decimal("0")
-    count = 0
-    for sub in qs:
-        data = price_now_dict(sub)
-        if data is None:
-            continue
-        count += 1
-        total += Decimal(data["monthly_cost_bdt"])
-    return {"count": count, "to_providers": str(quantize_money(total))}
+    return subscription_list_base_totals(qs)
 
 
 def subscription_list_counts(user) -> dict[str, int]:
-    base = Subscription.objects.filter(owner=user)
     pending_payment = Payment.objects.filter(
         shared_plan__subscription_id=OuterRef("pk"),
         review_status=ReviewStatus.PENDING,
     )
+    row = (
+        Subscription.objects.filter(owner=user)
+        .annotate(_needs_review=Exists(pending_payment))
+        .aggregate(
+            all=Count("pk"),
+            review=Count("pk", filter=Q(_needs_review=True)),
+            rarely=Count("pk", filter=Q(rarely_used=True)),
+        )
+    )
     return {
-        "all": base.count(),
-        "review": base.filter(Exists(pending_payment)).count(),
-        "rarely": base.filter(rarely_used=True).count(),
+        "all": row["all"] or 0,
+        "review": row["review"] or 0,
+        "rarely": row["rarely"] or 0,
     }

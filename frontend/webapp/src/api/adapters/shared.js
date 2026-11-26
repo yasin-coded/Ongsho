@@ -1,5 +1,5 @@
 import { lookupServiceKey } from '@/lib/services'
-import { fmtCycleDueLabel, fmtMonth, todayDhaka } from '@/lib/dates'
+import { fmtCycleDueLabel, todayDhaka } from '@/lib/dates'
 import { avatarColorFromId } from './me'
 import { idStr, moneyFromApi, paginatedBody } from './common'
 import { mapIncomingTransfer } from './transfers'

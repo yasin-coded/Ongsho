@@ -1,9 +1,8 @@
-import { StrictMode, Suspense, lazy } from 'react'
+import { StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { installLiveDelay } from './dev/liveDelay'
 import './index.css'
-
-const App = lazy(() => import('./App.jsx'))
+import App from './AppLazy.jsx'
 
 installLiveDelay()
 

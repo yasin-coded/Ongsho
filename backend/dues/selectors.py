@@ -256,13 +256,9 @@ def prefetch_member_payment_ctx(shared: SharedPlan, members: list[Member], today
     for m in members:
         due = dues.get(m.pk)
         snap = resolve_member_charge_due(
-            m, charge, sub, today, due=due, sync_missing=True
+            m, charge, sub, today, due=due, sync_missing=False
         )
-        due_row = (
-            Due.objects.filter(pk=snap["due_id"]).first()
-            if snap["due_id"]
-            else due
-        )
+        due_row = due or (dues.get(m.pk) if snap.get("due_id") else None)
         ctx[m.pk] = {
             **snap,
             "last_payment": _payment_brief(latest_payments.get(m.pk)),
@@ -508,7 +504,9 @@ def _member_roster_rows(member: Member, today: date) -> list[dict]:
             "name": m.user.name,
             "first_name": _first_name(m.user),
             "avatar_id": m.user.avatar_id,
-            "is_owner": sharing_selectors.is_owner_seat(m),
+            "is_owner": sharing_selectors.is_owner_seat(
+                m, owner_id=shared.subscription.owner_id
+            ),
             "is_you": is_you,
             "cycle_status": cycle_status,
         }

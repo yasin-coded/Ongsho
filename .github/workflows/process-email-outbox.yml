@@ -74,3 +74,5 @@ jobs:
 
       - name: Process email outbox
         run: python manage.py process_email_outbox --batch-size 50 --max-runtime 55
+        # Stdout is operator-safe key=value summary (claimed/sent/retry/failed/cancelled/duration_seconds/exit_ok).
+        # Row-level retries are not workflow failures; operational exceptions exit non-zero.
