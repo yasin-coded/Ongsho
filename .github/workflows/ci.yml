@@ -53,6 +53,8 @@ jobs:
       TRUST_PROXY_SSL: "false"
       CACHE_BACKEND: locmem
       DATABASE_URL: postgresql://ongsho:ci_test_only@localhost:5432/test_ongsho
+      # `manage.py check` uses pooled runtime config; same service as DATABASE_URL in CI (no PgBouncer).
+      DATABASE_URL_POOLED: postgresql://ongsho:ci_test_only@localhost:5432/test_ongsho
       EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
       INVITE_DELIVERY_ENCRYPTION_KEYS: '{"1": "xFEfHMLkadBG8Sb0XCV-VDjwNEjtw6z2kf0MuFdhyhg=", "2": "Qh7g_BUmq38bXW-on_RTmP2-SbX1q6xNo108PyfyD50="}'
       INVITE_DELIVERY_ENCRYPTION_ACTIVE_VERSION: "1"
