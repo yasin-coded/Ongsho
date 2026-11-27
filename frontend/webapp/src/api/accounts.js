@@ -7,6 +7,7 @@ export { checkPassword } from './mock/accounts'
 
 export const register = delegate(live, mock, 'register')
 export const verifyEmail = delegate(live, mock, 'verifyEmail')
+export const verifyEmailChange = delegate(live, mock, 'verifyEmailChange')
 export const resendVerification = delegate(live, mock, 'resendVerification')
 export const login = delegate(live, mock, 'login')
 export const logout = delegate(live, mock, 'logout')

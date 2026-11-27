@@ -327,7 +327,7 @@ class TestEmailChangeRequest:
         assert user.pending_email == "second-new@example.com"
         bad = client.post("/api/me/email/verify/", {"token": token_first}, format="json")
         assert bad.status_code == 400
-        assert bad.json()["error"]["code"] == "invalid_token"
+        assert bad.json()["error"]["code"] == "email_change_stale"
 
 
 @pytest.mark.django_db
@@ -387,7 +387,7 @@ class TestEmailChangeVerify:
         future = time.time() + int(timedelta(days=5).total_seconds())
         with patch("django.core.signing.time.time", return_value=future):
             expired = client.post("/api/me/email/verify/", {"token": payload}, format="json")
-        assert expired.json()["error"]["code"] == "invalid_token"
+        assert expired.json()["error"]["code"] == "expired_token"
 
     def test_audit_rows_and_idempotent(self):
         user, client, token, pending = self._pending()
@@ -425,5 +425,5 @@ class TestEmailChangeCancel:
         user.refresh_from_db()
         assert user.pending_email == ""
         bad = client.post("/api/me/email/verify/", {"token": token}, format="json")
-        assert bad.json()["error"]["code"] == "invalid_token"
+        assert bad.json()["error"]["code"] == "email_change_stale"
         assert AuditLog.objects.filter(user=user, action="email_change.cancelled").count() == 1

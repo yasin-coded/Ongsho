@@ -25,6 +25,13 @@ export async function verifyEmail({ token } = {}) {
   return { verified: true }
 }
 
+export async function verifyEmailChange({ token } = {}) {
+  if (!token) return mock.verifyEmailChange()
+  const data = await apiRequest('post', '/api/auth/verify-email-change/', { data: { token } })
+  clearAccessToken()
+  return { email: data.email, verified: true }
+}
+
 export async function resendVerification({ email } = {}) {
   await apiRequest('post', '/api/auth/resend-verification/', { data: { email } })
   return { sent: true }

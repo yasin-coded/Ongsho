@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Check, Circle, MailCheck } from 'lucide-react'
 import * as accounts from '@/api/accounts'
 import { useAuth } from '@/auth/auth-context'
@@ -16,6 +16,19 @@ function maskEmail(email) {
   const [name, domain] = (email ?? '').split('@')
   if (!domain) return email
   return `${name.charAt(0)}***@${domain}`
+}
+
+const EMAIL_CHANGE_VERIFY_ERRORS = {
+  invalid_token: 'This link is invalid or has already been used.',
+  expired_token: 'This link has expired. Open your profile and request a new confirmation email.',
+  email_change_stale: 'This link is no longer valid. You may have changed the request or cancelled it.',
+  email_taken: 'That email address is already in use on another account.',
+  account_inactive: 'This account is not active.',
+}
+
+function emailChangeVerifyMessage(error) {
+  if (!error) return null
+  return EMAIL_CHANGE_VERIFY_ERRORS[error.code] ?? error.message ?? 'We could not confirm this email change.'
 }
 
 function FormError({ error }) {
@@ -224,22 +237,76 @@ export function VerifyEmailPage() {
   const [params] = useSearchParams()
   const email = params.get('email') ?? ''
   const verifyToken = params.get('token')
+  const isEmailChange = params.get('type') === 'email-change'
+  const queryClient = useQueryClient()
+  const { endSession } = useAuth()
   const [left, setLeft] = useState(60)
   const resend = useMutation({ mutationFn: () => accounts.resendVerification({ email }), onSuccess: () => setLeft(60) })
-  const verified = useMutation({ mutationFn: () => accounts.verifyEmail({ token: verifyToken }) })
+  const verified = useMutation({
+    mutationFn: () => (isEmailChange ? accounts.verifyEmailChange({ token: verifyToken }) : accounts.verifyEmail({ token: verifyToken })),
+    onSuccess: () => {
+      if (isEmailChange) {
+        endSession()
+        queryClient.clear()
+      }
+    },
+  })
 
   useEffect(() => {
     if (!verifyToken) return undefined
     verified.mutate()
     return undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per token in the URL
-  }, [verifyToken])
+  }, [verifyToken, isEmailChange])
 
   useEffect(() => {
     if (left <= 0) return undefined
     const t = setTimeout(() => setLeft((v) => v - 1), 1000)
     return () => clearTimeout(t)
   }, [left])
+
+  if (isEmailChange && verifyToken) {
+    if (verified.isPending) {
+      return (
+        <AuthLayout title="Confirming your new email" subtitle="Hang on while we update your login address.">
+          <p className="t-meta" role="status">
+            Verifying…
+          </p>
+        </AuthLayout>
+      )
+    }
+    if (verified.isSuccess) {
+      const newEmail = verified.data?.email ?? ''
+      return (
+        <AuthLayout title="Email address updated successfully" subtitle="Your sign-in email has been changed.">
+          <div className="grid gap-4">
+            <p className="font-bold" role="status">
+              {newEmail
+                ? `You can now log in with ${newEmail}. Your password is unchanged.`
+                : 'You can log in with your new email address. Your password is unchanged.'}
+            </p>
+            <Link to="/login" className="neo-btn btn-accept neo-btn--block">
+              Log in
+            </Link>
+          </div>
+        </AuthLayout>
+      )
+    }
+    if (verified.isError) {
+      return (
+        <AuthLayout title="Could not confirm email change" subtitle="This link may be expired or no longer valid.">
+          <div className="grid gap-4">
+            <p role="alert" className="field__error">
+              {emailChangeVerifyMessage(verified.error)}
+            </p>
+            <Link to="/login" className="neo-btn btn-accept neo-btn--block">
+              Log in
+            </Link>
+          </div>
+        </AuthLayout>
+      )
+    }
+  }
 
   return (
     <AuthLayout title="Check your inbox" subtitle={`We sent a link to ${maskEmail(email)}. Open it to verify your email.`}>
@@ -248,6 +315,11 @@ export function VerifyEmailPage() {
           <MailCheck aria-hidden="true" className="size-6 flex-none" />
           <p className="t-meta">The link works once and expires in 24 hours. Check the spam folder if it is not there.</p>
         </div>
+        {verified.isError && !isEmailChange ? (
+          <p role="alert" className="field__error">
+            {verified.error?.message ?? 'We could not verify this link.'}
+          </p>
+        ) : null}
         <Button variant="ghost" block onClick={() => resend.mutate()} disabled={left > 0} busy={resend.isPending}>
           {left > 0 ? `Resend in ${left}s` : 'Resend the link'}
         </Button>

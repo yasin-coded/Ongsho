@@ -508,23 +508,41 @@ def request_email_change(user, *, new_email: str, password: str) -> None:
     )
 
 
-@transaction.atomic
-def verify_email_change(user, token: str) -> User:
+def _load_email_change_token_strict(token: str) -> dict:
+    """Parse an email-change signed token; map expiry to a distinct error code."""
+    from django.core import signing
+
     try:
-        payload = load_email_change_token(token)
+        return load_email_change_token(token)
+    except signing.SignatureExpired:
+        raise ValidationFailed(
+            "This verification link has expired.",
+            code="expired_token",
+        ) from None
     except Exception:
-        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+        raise ValidationFailed(
+            "Invalid or expired verification link.",
+            code="invalid_token",
+        ) from None
 
-    token_email = (payload.get("email") or "").lower()
-    if payload.get("user_id") != user.pk:
-        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
 
+def _complete_email_change_locked(user: User, token_email: str) -> User:
     user = User.objects.select_for_update().get(pk=user.pk)
+    if not user.is_active:
+        raise Forbidden(
+            "This account is not active.",
+            code="account_inactive",
+        )
+
     if user.email == token_email and not user.pending_email:
         return user
 
-    if not user.pending_email or user.pending_email != token_email:
-        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+    pending = (user.pending_email or "").strip().lower()
+    if not pending or pending != token_email:
+        raise ValidationFailed(
+            "This verification link is no longer valid.",
+            code="email_change_stale",
+        )
 
     if User.objects.filter(email__iexact=token_email).exclude(pk=user.pk).exists():
         raise ConflictError(
@@ -563,6 +581,30 @@ def verify_email_change(user, token: str) -> User:
         link="/app/profile",
     )
     return user
+
+
+@transaction.atomic
+def verify_email_change_for_token(token: str) -> User:
+    """Complete a pending email change using only the signed link token (no session)."""
+    payload = _load_email_change_token_strict(token)
+    token_email = (payload.get("email") or "").lower()
+    user_id = payload.get("user_id")
+    if not token_email or not user_id:
+        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+
+    user = User.objects.filter(pk=user_id).first()
+    if user is None:
+        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+    return _complete_email_change_locked(user, token_email)
+
+
+@transaction.atomic
+def verify_email_change(user, token: str) -> User:
+    payload = _load_email_change_token_strict(token)
+    token_email = (payload.get("email") or "").lower()
+    if payload.get("user_id") != user.pk:
+        raise ValidationFailed("Invalid or expired verification link.", code="invalid_token")
+    return _complete_email_change_locked(user, token_email)
 
 
 @transaction.atomic

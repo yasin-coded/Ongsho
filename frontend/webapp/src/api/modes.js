@@ -5,6 +5,7 @@ const LIVE_FUNCTIONS = new Set([
   // accounts
   'register',
   'verifyEmail',
+  'verifyEmailChange',
   'resendVerification',
   'login',
   'logout',

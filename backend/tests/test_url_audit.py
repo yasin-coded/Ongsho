@@ -16,6 +16,7 @@ ALLOWANY_URL_NAMES = frozenset(
         "auth-refresh",
         "auth-logout",
         "auth-verify-email",
+        "auth-verify-email-change",
         "auth-resend-verification",
         "auth-password-reset",
         "auth-password-reset-confirm",

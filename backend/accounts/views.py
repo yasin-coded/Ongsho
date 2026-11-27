@@ -81,6 +81,27 @@ def verify_email_view(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([VerifyEmailIpThrottle])
+def verify_email_change_view(request):
+    serializer = VerifyEmailSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        user = services.verify_email_change_for_token(serializer.validated_data["token"])
+    except DomainError as exc:
+        return _domain_response(exc, clear_refresh=True)
+    response = Response(
+        {
+            "email": user.email,
+            "message": "Email updated. Please sign in again.",
+        },
+        status=status.HTTP_200_OK,
+    )
+    clear_refresh_cookie(response)
+    return response
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
 @throttle_classes([LoginIpThrottle, LoginEmailThrottle])
 def login_view(request):
     serializer = LoginSerializer(data=request.data)

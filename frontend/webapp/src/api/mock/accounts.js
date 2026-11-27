@@ -55,6 +55,20 @@ export function verifyEmail() {
   return write(() => ({ verified: true }))
 }
 
+export function verifyEmailChange() {
+  return write(() => {
+    const me = userById(ME)
+    const pending = me.pendingEmail || 'changed@example.com'
+    const row = db.users.find((u) => u.id === ME)
+    if (row) {
+      row.email = pending
+      row.pendingEmail = ''
+    }
+    server.password = null
+    return { email: pending, verified: true }
+  })
+}
+
 export function resendVerification() {
   return write(() => ({ sent: true }))
 }

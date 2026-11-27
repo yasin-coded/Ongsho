@@ -24,6 +24,7 @@ WRITE_ENDPOINT_MATRIX: tuple[WriteEndpoint, ...] = (
     # Auth (public POST)
     WriteEndpoint("POST", "/api/auth/register/", "anon"),
     WriteEndpoint("POST", "/api/auth/verify-email/", "anon"),
+    WriteEndpoint("POST", "/api/auth/verify-email-change/", "anon"),
     WriteEndpoint("POST", "/api/auth/resend-verification/", "anon", hostile_reject=False),
     WriteEndpoint("POST", "/api/auth/login/", "anon"),
     WriteEndpoint("POST", "/api/auth/refresh/", "anon"),
