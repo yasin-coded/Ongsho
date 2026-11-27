@@ -91,10 +91,25 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
-      environment: 'node',
-      include: ['src/**/*.test.{js,jsx}'],
       setupFiles: ['./src/test/setup.js'],
-      environmentMatchGlobs: [['**/*.test.jsx', 'jsdom']],
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: 'unit',
+            include: ['src/**/*.test.js'],
+            environment: 'node',
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: 'dom',
+            include: ['src/**/*.test.jsx'],
+            environment: 'jsdom',
+          },
+        },
+      ],
     },
   }
 })
