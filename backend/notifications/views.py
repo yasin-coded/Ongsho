@@ -55,3 +55,13 @@ def notification_mark_read(request, pk: int):
 def notification_read_all(request):
     updated = services.mark_all_notifications_read(request.user)
     return Response({"updated": updated})
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def notification_delete(request, pk: int):
+    try:
+        services.delete_notification(request.user, pk)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return Response(status=204)

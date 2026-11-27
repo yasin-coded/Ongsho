@@ -75,4 +75,11 @@ export function markRead(id) {
   })
 }
 
+export function deleteNotification(id) {
+  return write(() => {
+    const i = db.notifications.findIndex((x) => x.id === id && x.userId === ME)
+    if (i >= 0) db.notifications.splice(i, 1)
+  })
+}
+
 export { paginate }

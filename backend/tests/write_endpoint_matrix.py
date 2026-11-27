@@ -93,6 +93,7 @@ WRITE_ENDPOINT_MATRIX: tuple[WriteEndpoint, ...] = (
     WriteEndpoint("POST", "/api/dues/{due_x}/waive/", "owner"),
     WriteEndpoint("POST", "/api/dues/{due_x}/set-due/", "owner", hostile_reject=False),
     WriteEndpoint("POST", "/api/notifications/read-all/", "owner", hostile_reject=False),
+    WriteEndpoint("DELETE", "/api/notifications/{notification}/", "owner", hostile_reject=False),
 )
 
 

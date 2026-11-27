@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Check, CheckCheck, Inbox, LogOut, X } from 'lucide-react'
+import { Check, CheckCheck, Inbox, LogOut, Trash2, X } from 'lucide-react'
 import { notificationLook } from '@/lib/notificationLook'
-import { getNotifications, markAllRead, markRead } from '@/api/dashboard'
+import { deleteNotification, getNotifications, markAllRead, markRead } from '@/api/dashboard'
 import { keys } from '@/api/keys'
 import { liveQueryOptions } from '@/hooks/useAppLiveSync'
 import { confirmPayment } from '@/api/payments'
@@ -82,8 +82,13 @@ function Actions({ n, onReject }) {
 
 function Row({ n, onReject }) {
   const { icon: Icon, tile } = notificationLook(n)
-  const read = useAction(() => markRead(n.id), { toastMessage: null, optimisticNav: 'decrement-unread', invalidate: ['notifications', 'nav'] })
   const unread = !n.readAt
+  const read = useAction(() => markRead(n.id), { toastMessage: null, optimisticNav: 'decrement-unread', invalidate: ['notifications', 'nav'] })
+  const remove = useAction(() => deleteNotification(n.id), {
+    toastMessage: 'Removed from your inbox.',
+    optimisticNav: unread ? 'decrement-unread' : 'snapshot',
+    invalidate: ['notifications', 'nav'],
+  })
   return (
     <li className="flex flex-wrap items-start gap-4 py-4">
       <span className="relative flex-none">
@@ -110,11 +115,21 @@ function Row({ n, onReject }) {
           {fmtWhen(n.createdAt)}
         </time>
         <Actions n={n} onReject={onReject} />
-        {unread && !n.needsAction && !n.link && (
-          <button type="button" className="text-link t-meta" onClick={() => read.run()}>
-            Mark as read
-          </button>
-        )}
+        <div className="row items-center gap-2">
+          {unread && !n.needsAction && !n.link && (
+            <button type="button" className="text-link t-meta" onClick={() => read.run()}>
+              Mark as read
+            </button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Trash2}
+            busy={remove.busy}
+            aria-label="Remove notification"
+            onClick={() => remove.run()}
+          />
+        </div>
       </div>
     </li>
   )

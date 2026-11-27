@@ -59,3 +59,7 @@ export async function markRead(id) {
   const data = await apiRequest('post', `/api/notifications/${Number(id)}/read/`)
   return mapNotificationItem(data)
 }
+
+export async function deleteNotification(id) {
+  await apiRequest('delete', `/api/notifications/${Number(id)}/`)
+}

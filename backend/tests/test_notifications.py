@@ -411,6 +411,17 @@ class TestNotificationApi:
         second = client.post("/api/notifications/read-all/", {}, format="json")
         assert second.json()["updated"] == 0
 
+    def test_delete_own_notification(self, plan_bundle):
+        owner = plan_bundle["owner"]
+        member = plan_bundle["member"]
+        note = Notification.objects.create(user=owner, kind="renewal", title="Drop me", message="m")
+        Notification.objects.create(user=member, kind="renewal", title="Keep", message="m")
+        client = client_for(owner)
+        assert client.delete(f"/api/notifications/{note.pk}/").status_code == 204
+        assert not Notification.objects.filter(pk=note.pk).exists()
+        assert Notification.objects.filter(user=member).count() == 1
+        assert client_for(member).delete(f"/api/notifications/{note.pk}/").status_code == 404
+
 
 @pytest.mark.django_db
 class TestResolveNotifications:

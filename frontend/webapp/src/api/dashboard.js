@@ -9,6 +9,7 @@ export const getNavCounts = delegate(live, mock, 'getNavCounts')
 export const getNotifications = delegate(live, mock, 'getNotifications')
 export const markAllRead = delegate(live, mock, 'markAllRead')
 export const markRead = delegate(live, mock, 'markRead')
+export const deleteNotification = delegate(live, mock, 'deleteNotification')
 
 export function snapshotNavCounts() {
   if (isLive('getNavCounts')) return live.snapshotNavCounts()

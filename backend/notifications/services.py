@@ -22,3 +22,8 @@ def mark_notification_read(user, notification_id: int) -> Notification:
 def mark_all_notifications_read(user) -> int:
     now = timezone.now()
     return Notification.objects.filter(user=user, read_at__isnull=True).update(read_at=now)
+
+
+def delete_notification(user, notification_id: int) -> None:
+    notification = _notification_for_user(user, notification_id)
+    notification.delete()

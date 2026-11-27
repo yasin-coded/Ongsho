@@ -71,6 +71,7 @@ const LIVE_FUNCTIONS = new Set([
   'getNotifications',
   'markRead',
   'markAllRead',
+  'deleteNotification',
   // shared
   'getMyShared',
   'getMySharedPlan',

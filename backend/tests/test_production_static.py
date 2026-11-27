@@ -23,19 +23,26 @@ def test_whitenoise_middleware_order():
     assert wn == sec + 1
 
 
-def test_staticfiles_storage_uses_whitenoise_manifest():
-    backend = settings.STORAGES["staticfiles"]["BACKEND"]
-    assert backend == "whitenoise.storage.CompressedManifestStaticFilesStorage"
+def test_production_staticfiles_storage_uses_whitenoise_manifest():
+    from config.settings import PRODUCTION_STATICFILES_STORAGE
+
+    assert PRODUCTION_STATICFILES_STORAGE == "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
 def test_default_storage_unchanged():
     assert settings.STORAGES["default"]["BACKEND"] == "django.core.files.storage.FileSystemStorage"
 
 
+_PRODUCTION_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
+
 @pytest.fixture()
 def collected_static(tmp_path):
     static_root = tmp_path / "collected"
-    with override_settings(STATIC_ROOT=static_root, DEBUG=False):
+    with override_settings(STATIC_ROOT=static_root, DEBUG=False, STORAGES=_PRODUCTION_STORAGES):
         call_command("collectstatic", verbosity=0, interactive=False, clear=True)
     return static_root
 
