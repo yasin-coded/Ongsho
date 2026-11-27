@@ -52,6 +52,7 @@ const LIVE_FUNCTIONS = new Set([
   'getReview',
   'getLedger',
   'downloadOwnerStatement',
+  'downloadRosterMemberStatement',
   'getMember',
   // payments
   'submitPayment',

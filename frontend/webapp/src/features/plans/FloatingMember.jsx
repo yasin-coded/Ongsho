@@ -1,12 +1,15 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BadgeCheck, Eye, HandCoins, RotateCcw, UserMinus, X } from 'lucide-react'
-import { getMember } from '@/api/plans'
+import { BadgeCheck, Download, Eye, HandCoins, UserMinus, X } from 'lucide-react'
+import { downloadRosterMemberStatement, getMember } from '@/api/plans'
 import { METHODS } from '@/lib/colors'
 import { formatBDT } from '@/lib/money'
+import { monthKey, todayDhaka } from '@/lib/dates'
+import { useAction } from '@/hooks/useAction'
 import { Button, LinkButton } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
 import { StatusPill } from '@/components/ui/Pill'
+import { Select } from '@/components/ui/Field'
 import { Box } from '@/components/ui/Box'
 import { ErrorBox, Skeleton } from '@/components/ui/Misc'
 
@@ -15,6 +18,33 @@ function EmptyWindow() {
     <Box className="float-win grid min-h-[12rem] content-center gap-3 text-center" aria-label="Member details">
       <p className="t-meta t-muted px-2">Pick a member and tap Open to see their latest payments on this plan.</p>
     </Box>
+  )
+}
+
+function MemberStatementDownload({ memberId, rows }) {
+  const months = useMemo(() => {
+    const entries = rows.map((r) => [monthKey(r.dueDate), r.monthLabel]).filter(([k]) => Boolean(k))
+    return [...new Map(entries).entries()]
+  }, [rows])
+  const [month, setMonth] = useState(() => monthKey(todayDhaka()))
+  const statementMonth = months.some(([k]) => k === month) ? month : (months[0]?.[0] ?? monthKey(todayDhaka()))
+  const download = useAction(() => downloadRosterMemberStatement(memberId, { month: statementMonth }), {
+    toastMessage: (r) => (r?.number ? `Downloaded statement ${r.number}.` : 'Statement downloaded.'),
+  })
+  if (!months.length) return null
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <Select
+        label="Statement month"
+        value={statementMonth}
+        onChange={(e) => setMonth(e.target.value)}
+        options={months.map(([value, label]) => ({ value, label }))}
+        fieldClass="min-w-[10rem]"
+      />
+      <Button variant="ghost" icon={Download} busy={download.busy} onClick={() => download.run()}>
+        Download statement
+      </Button>
+    </div>
   )
 }
 
@@ -50,7 +80,9 @@ function WindowBody({ member, planId, onClose, onRemove, onAction, rowRefs }) {
         {member.dueStatus && <StatusPill status={member.dueStatus} />}
       </div>
       <div>
-        <p className="t-label mb-2">Payments {member.rows.length > 0 && <span className="t-meta font-normal normal-case">(latest 5)</span>}</p>
+        <p className="t-label mb-2">
+          Payments {member.rows.length > 0 && <span className="t-meta font-normal normal-case">(latest 5)</span>}
+        </p>
         {member.rows.length ? (
           <ul className="dashed-rows">
             {member.rows.map((r) => (
@@ -71,15 +103,11 @@ function WindowBody({ member, planId, onClose, onRemove, onAction, rowRefs }) {
           <p className="t-meta">No payments yet.</p>
         )}
       </div>
+      <MemberStatementDownload memberId={member.id} rows={member.rows} />
       <div className="float-win__actions row flex-wrap justify-end gap-2">
         {member.isOwnerSeat && member.dueId && member.dueStatus === 'due' && (
           <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onAction?.('markPaid', member)}>
             Mark paid
-          </Button>
-        )}
-        {member.dueId && member.dueStatus === 'paid' && (
-          <Button variant="ghost" size="sm" icon={RotateCcw} onClick={() => onAction?.('setDue', member)}>
-            Set to Due
           </Button>
         )}
         {member.dueId && member.dueStatus === 'due' && (

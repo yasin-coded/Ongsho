@@ -271,3 +271,11 @@ export async function downloadOwnerStatement(planId, { month }) {
     throw enrichStatementError(err)
   }
 }
+
+export async function downloadRosterMemberStatement(memberId, { month }) {
+  try {
+    return await downloadFile(`/api/members/${Number(memberId)}/statement/`, { params: { month } })
+  } catch (err) {
+    throw enrichStatementError(err)
+  }
+}

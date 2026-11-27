@@ -480,3 +480,11 @@ export function downloadOwnerStatement(planId, { month }) {
     return { number: `ONG-${month.replace('-', '')}-${planId.slice(-4).toUpperCase()}-${String(db.audit.length + 101).padStart(4, '0')}` }
   })
 }
+
+export function downloadRosterMemberStatement(memberId, { month }) {
+  return write(() => {
+    const m = memberById(memberId)
+    ownedOr404(m.planId)
+    return { number: `ONG-${month.replace('-', '')}-M${String(memberId).slice(-4).toUpperCase()}-0001` }
+  })
+}

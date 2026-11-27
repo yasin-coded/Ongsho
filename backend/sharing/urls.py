@@ -27,6 +27,7 @@ urlpatterns = [
     path("invites/<str:token>/decline/", views.invite_decline_token, name="invite-decline-token"),
     path("invites/<str:token>/signup/", views.invite_signup, name="invite-signup"),
     path("members/<int:pk>/", views.member_detail, name="member-detail"),
+    path("members/<int:pk>/statement/", report_views.roster_member_statement, name="member-roster-statement"),
     path("members/<int:pk>/balance/", views.member_balance, name="member-balance"),
     path("members/<int:pk>/leave/", views.owner_leave_decision, name="member-leave-decision"),
     path("members/<int:pk>/replace/", views.member_replace, name="member-replace"),

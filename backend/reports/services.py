@@ -84,3 +84,16 @@ def issue_member_statement(user, plan_id: int, request, today: date) -> tuple[by
     if created:
         _audit_first_download(user, member.shared_plan, month, stmt)
     return pdf_builders.build_member_statement(data, compress=True), stmt
+
+
+def issue_roster_member_statement(
+    owner, member_id: int, request, today: date
+) -> tuple[bytes, str]:
+    """Owner downloads the member-scoped statement PDF for a roster member (no Statement row)."""
+    member = sharing_selectors.member_for_owner(owner, member_id)
+    month = statement_selectors.parse_statement_month_param(request, today)
+    data = statement_selectors.member_statement_payload(member, month)
+    plan_id = member.shared_plan.subscription_id
+    number = f"ONG-{month.strftime('%Y%m')}-{plan_id:04d}-M{member.pk:04d}"
+    data["number"] = number
+    return pdf_builders.build_member_statement(data, compress=True), number

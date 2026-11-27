@@ -39,6 +39,10 @@ def member_statement_url(plan_id, month):
     return f"/api/me/shared-plans/{plan_id}/statement/?month={month}"
 
 
+def roster_member_statement_url(member_pk, month):
+    return f"/api/members/{member_pk}/statement/?month={month}"
+
+
 def fetch_owner(client, world, month=None):
     month = month or statement_month(world)
     return client.get(owner_statement_url(world["plan_x"].pk, month))
@@ -153,6 +157,18 @@ def test_scoping_404_and_cross_roles(world):
     assert client_for(world["owner"]).get(member_statement_url(pid, month)).status_code == 404
     assert client_for(world["owner"]).get(member_statement_url(world["plan_y"].pk, month_y)).status_code == 200
     assert client_for(world["owner"]).get(owner_statement_url(world["plan_y"].pk, month_y)).status_code == 404
+
+
+@pytest.mark.django_db
+def test_owner_roster_member_statement_pdf(world):
+    owner = client_for(world["owner"])
+    month = statement_month(world)
+    r = owner.get(roster_member_statement_url(world["member_row"].pk, month))
+    assert r.status_code == 200
+    assert r["Content-Type"] == "application/pdf"
+    assert r.content[:4] == b"%PDF"
+    assert b"M" in r["X-Statement-Number"].encode()
+    assert client_for(world["outsider"]).get(roster_member_statement_url(world["member_row"].pk, month)).status_code == 404
 
 
 @pytest.mark.django_db

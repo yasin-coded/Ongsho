@@ -21,7 +21,7 @@ import { CopyField, EmptyState, FilterChip, Pagination, ProgressBar, SkeletonCar
 import { Loadable, ownerMeta } from '@/features/common/PlanBits'
 import { NotFoundPage } from '@/features/NotFoundPage'
 import { FloatingMember } from './FloatingMember'
-import { MarkPaidModal, SetDueModal, WaiveModal } from './PaymentModals'
+import { MarkPaidModal, WaiveModal } from './PaymentModals'
 import { ConfirmModal, DeletePlanModal, EditRateModal, InviteModal, LeaveModal, PriceChangeModal, RenewModal, TransferModal } from './OwnerModals'
 
 const TONE = { pending: STATUS.pending.fill, paid: STATUS.paid.fill, due: STATUS.due.fill, info: '#14b3f2' }
@@ -243,10 +243,6 @@ function MembersCard({ plan, onOpen, onInvite, onCancelInvite, openId, rowRefs, 
             ) : plan.mode === 'owner' && m.isOwnerSeat && m.dueId && m.dueStatus === 'due' ? (
               <Button variant="accept" size="sm" icon={BadgeCheck} onClick={() => onOpen('markPaid', m)}>
                 Mark paid
-              </Button>
-            ) : m.dueId && m.dueStatus === 'paid' ? (
-              <Button variant="ghost" size="sm" onClick={() => onOpen('setDue', m)}>
-                Set to Due
               </Button>
             ) : (
               <Button
@@ -746,14 +742,6 @@ function OwnerPlan({ plan }) {
         />
       )}
       {modal?.type === 'waive' && <WaiveModal dueId={modal.member.dueId} name={modal.member.firstName} onClose={() => setModal(null)} />}
-      {modal?.type === 'setDue' && (
-        <SetDueModal
-          dueId={modal.member.dueId}
-          name={modal.member.firstName}
-          ownSeat={modal.member.isOwnerSeat}
-          onClose={() => setModal(null)}
-        />
-      )}
     </div>
   )
 }

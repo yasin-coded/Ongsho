@@ -69,3 +69,16 @@ def member_statement(request, pk: int):
     except DomainError as exc:
         return _domain_response(exc)
     return _pdf_response(pdf, stmt.number)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+@throttle_classes([StatementDownloadUserThrottle])
+def roster_member_statement(request, pk: int):
+    """Plan owner: member-scoped statement for an opened roster member."""
+    today = today_dhaka()
+    try:
+        pdf, number = report_services.issue_roster_member_statement(request.user, pk, request, today)
+    except DomainError as exc:
+        return _domain_response(exc)
+    return _pdf_response(pdf, number)
