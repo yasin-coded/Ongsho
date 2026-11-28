@@ -51,19 +51,27 @@ export function register({ name, email, password }) {
   })
 }
 
-export function verifyEmail() {
-  return write(() => ({ verified: true }))
+function invalidLink() {
+  return new ApiError('Invalid or expired verification link.', { status: 400, code: 'invalid_token' })
 }
 
-export function verifyEmailChange() {
+export function verifyEmail({ token } = {}) {
   return write(() => {
+    if (!token) throw invalidLink()
+    return { verified: true }
+  })
+}
+
+export function verifyEmailChange({ token } = {}) {
+  return write(() => {
+    if (!token) throw invalidLink()
     const me = userById(ME)
-    const pending = me.pendingEmail || 'changed@example.com'
-    const row = db.users.find((u) => u.id === ME)
-    if (row) {
-      row.email = pending
-      row.pendingEmail = ''
+    const pending = me.pendingEmail
+    if (!pending) {
+      throw new ApiError('This verification link is no longer valid.', { status: 400, code: 'email_change_stale' })
     }
+    me.email = pending
+    me.pendingEmail = ''
     server.password = null
     return { email: pending, verified: true }
   })
@@ -122,6 +130,9 @@ export function changeEmail({ email, password }) {
     const me = userById(ME)
     if (!EMAIL_RE.test(email ?? '')) throw new ApiError('Enter an email address like name@example.com.', { fields: { email: 'Enter an email address like name@example.com.' } })
     if (email === me.email) throw new ApiError('That is already your email.', { fields: { email: 'That is already your email.' } })
+    if (db.users.some((u) => u.id !== ME && u.email?.toLowerCase() === email.toLowerCase())) {
+      throw new ApiError('A user with this email already exists.', { fields: { email: 'A user with this email already exists.' } })
+    }
     checkPassword(password)
     me.pendingEmail = email
     db.audit.push({ id: nextId('a'), ts: mockNow(), actor: ME, action: 'email_change_requested', value: email })

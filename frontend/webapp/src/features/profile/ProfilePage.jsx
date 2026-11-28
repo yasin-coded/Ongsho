@@ -10,7 +10,9 @@ import {
   validateRequiredPassword,
   validateServiceName,
 } from '@/lib/validation'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCountdown, useSingleFlight } from '@/hooks/useCountdown'
+import { ResendTimer } from '@/components/ui/ResendTimer'
 import { keys } from '@/api/keys'
 import { Check, Lock, LogOut, Plus, X } from 'lucide-react'
 import * as accounts from '@/api/accounts'
@@ -69,50 +71,152 @@ function AvatarPicker({ me }) {
   )
 }
 
-function ChangeEmailModal({ email, onClose }) {
+const EMAIL_SCOPES = ['me', 'nav', 'notifications']
+
+/** Must match RESEND_EMAIL_CHANGE_COOLDOWN_SECONDS in backend/accounts/services.py. */
+const EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS = 60
+
+function EmailSettings({ me }) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
   const [password, setPassword] = useState('')
   const [clientFields, setClientFields] = useState({})
-  const act = useAction(() => accounts.changeEmail({ email, password }), { onSuccess: onClose, tone: 'pending', toastMessage: `We sent a link to ${email}. Open it to confirm.` })
+  const [resendLeft, setResendLeft] = useCountdown(0)
+  const adoptMe = (user) => {
+    if (user) queryClient.setQueryData(keys.me, user)
+  }
+  const resend = useMutation({
+    mutationFn: () => accounts.resendEmailChange(),
+    onSuccess: () => setResendLeft(EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS),
+    onError: (err) => {
+      if (err?.retryAfter) setResendLeft(err.retryAfter)
+      if (err?.code === 'nothing_pending') queryClient.invalidateQueries({ queryKey: keys.me })
+    },
+  })
+  const runResend = useSingleFlight(resend)
+  const request = useAction((vars) => accounts.changeEmail(vars), {
+    tone: 'pending',
+    invalidate: EMAIL_SCOPES,
+    toastMessage: (_, vars) => `Verification link sent to ${vars.email}.`,
+    onSuccess: (user) => {
+      setOpen(false)
+      setNewEmail('')
+      resend.reset()
+      setResendLeft(EMAIL_CHANGE_RESEND_COOLDOWN_SECONDS)
+      adoptMe(user)
+    },
+  })
+  const cancel = useAction(accounts.cancelEmailChange, {
+    invalidate: EMAIL_SCOPES,
+    toastMessage: 'Email change cancelled. Nothing changed.',
+    tone: 'waived',
+    onSuccess: (user) => {
+      resend.reset()
+      setResendLeft(0)
+      adoptMe(user)
+    },
+  })
+  const closeForm = () => {
+    setOpen(false)
+    setNewEmail('')
+    setPassword('')
+    setClientFields({})
+    request.setFields({})
+  }
+
   return (
-    <Modal open onClose={onClose} title="Change your email?" subtitle={`To ${email}. Enter your current password to continue.`}>
-      <form
-        className="grid gap-5"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault()
-          const pw = validateRequiredPassword(password)
-          if (pw) {
-            setClientFields({ password: pw })
-            focusFirstInvalid()
-            return
-          }
-          setClientFields({})
-          act.run()
-        }}
-      >
-        <PasswordInput label="Current password" autoComplete="current-password" maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} error={clientFields.password ?? act.fields.password ?? act.fields.email} />
+    <div className="grid gap-4">
+      <Input label="Email" type="email" value={me.email} locked help="You log in with this address." />
+      {me.pendingEmail ? (
+        <div className="neo-box neo-box--flat grid gap-3 !bg-[#fff200] !p-4" role="status">
+          <p className="font-bold break-words">Waiting to verify {me.pendingEmail}</p>
+          <p className="t-meta break-words">
+            We sent a verification link to {me.pendingEmail}. Your current email, <span className="font-bold">{me.email}</span>, stays active for login until
+            the new address is verified.
+          </p>
+          <ResendTimer seconds={resendLeft} className="!justify-start" />
+          <div className="row gap-2">
+            <Button size="sm" variant="ghost" busy={resend.isPending} disabled={resendLeft > 0 || cancel.busy} onClick={() => runResend()}>
+              Resend
+            </Button>
+            <Button size="sm" variant="ghost" busy={cancel.busy} disabled={resend.isPending} onClick={() => cancel.run()}>
+              Cancel change
+            </Button>
+          </div>
+          {resend.isSuccess ? <p className="t-meta break-words">Sent again to {me.pendingEmail}.</p> : null}
+          {resend.isError ? (
+            <p role="alert" className="field__error">
+              {resend.error?.message ?? 'We could not resend the link. Try again in a moment.'}
+            </p>
+          ) : null}
+        </div>
+      ) : open ? (
+        <form
+          className="neo-box neo-box--flat grid gap-4 !p-4"
+          aria-label="Change email"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault()
+            const email = newEmail.trim().toLowerCase()
+            const fields = {}
+            const em = validateEmail(email)
+            if (em) fields.email = em
+            else if (email === me.email.toLowerCase()) fields.email = 'That is already your email.'
+            const pw = validateRequiredPassword(password)
+            if (pw) fields.password = pw
+            if (Object.keys(fields).length) {
+              setClientFields(fields)
+              focusFirstInvalid()
+              return
+            }
+            setClientFields({})
+            setPassword('')
+            request.run({ email, password })
+          }}
+        >
+          <Input
+            label="New email address"
+            type="email"
+            autoComplete="email"
+            maxLength={254}
+            autoFocus
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            error={clientFields.email ?? request.fields.email}
+          />
+          <PasswordInput
+            label="Current password"
+            autoComplete="current-password"
+            maxLength={128}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={clientFields.password ?? request.fields.password}
+          />
+          <div className="row flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={closeForm} disabled={request.busy}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="accept" busy={request.busy}>
+              Send verification link
+            </Button>
+          </div>
+        </form>
+      ) : (
         <div className="row justify-end">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="accept" busy={act.busy}>
-            Send the link
+          <Button variant="ghost" onClick={() => setOpen(true)}>
+            Change email
           </Button>
         </div>
-      </form>
-    </Modal>
+      )}
+    </div>
   )
 }
 
 function AccountDetails({ me }) {
   const [name, setName] = useState(me.name)
-  const [email, setEmail] = useState(me.email)
-  const [confirming, setConfirming] = useState(false)
   const [clientFields, setClientFields] = useState({})
   const saveName = useAction(() => accounts.updateMe({ name }), { toastMessage: 'Name saved.' })
-  const resend = useAction(accounts.resendEmailChange, { toastMessage: `Sent again to ${me.pendingEmail}.` })
-  const cancel = useAction(accounts.cancelEmailChange, { toastMessage: 'Email change cancelled. Nothing changed.', tone: 'waived' })
-  const emailChanged = email.trim() && email.trim().toLowerCase() !== me.email
 
   return (
     <Box>
@@ -122,21 +226,14 @@ function AccountDetails({ me }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault()
-          const fields = {}
           const nm = validateName(name)
-          if (nm) fields.name = nm
-          if (emailChanged) {
-            const em = validateEmail(email)
-            if (em) fields.email = em
-          }
-          if (Object.keys(fields).length) {
-            setClientFields(fields)
+          if (nm) {
+            setClientFields({ name: nm })
             focusFirstInvalid()
             return
           }
           setClientFields({})
-          if (name.trim() !== me.name) saveName.run()
-          if (emailChanged) setConfirming(true)
+          saveName.run()
         }}
       >
         <Input
@@ -156,47 +253,15 @@ function AccountDetails({ me }) {
           }}
           error={clientFields.name ?? saveName.fields.name}
         />
-        <Input
-          label="Email"
-          type="email"
-          autoComplete="email"
-          maxLength={254}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onBlur={() => {
-            if (!emailChanged) return
-            const em = validateEmail(email)
-            setClientFields((p) => {
-              const next = { ...p }
-              if (em) next.email = em
-              else delete next.email
-              return next
-            })
-          }}
-          error={clientFields.email ?? saveName.fields.email}
-          help="Changing it asks for your current password."
-        />
-        {me.pendingEmail && (
-          <div className="neo-box neo-box--flat grid gap-3 !bg-[#fff200] !p-4" role="status">
-            <p className="font-bold">Waiting to verify {me.pendingEmail}</p>
-            <p className="t-meta">Your dues and emails move to the new address once you confirm. Until then, nothing changes.</p>
-            <div className="row gap-2">
-              <Button size="sm" variant="ghost" busy={resend.busy} onClick={() => resend.run()}>
-                Resend
-              </Button>
-              <Button size="sm" variant="ghost" busy={cancel.busy} onClick={() => cancel.run()}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
         <div className="row justify-end">
-          <Button type="submit" variant="accept" busy={saveName.busy} disabled={name.trim() === me.name && !emailChanged}>
-            Save
+          <Button type="submit" variant="accept" busy={saveName.busy} disabled={name.trim() === me.name}>
+            Save name
           </Button>
         </div>
       </form>
-      {confirming && <ChangeEmailModal email={email.trim().toLowerCase()} onClose={() => setConfirming(false)} />}
+      <div className="mt-6 border-t-[0.1875rem] border-black pt-6">
+        <EmailSettings me={me} />
+      </div>
     </Box>
   )
 }
@@ -570,7 +635,7 @@ export function ProfilePage() {
                 <RemindersCard />
               </div>
               <div className="stack">
-                <AccountDetails key={`${me.name}|${me.email}|${me.pendingEmail}`} me={me} />
+                <AccountDetails key={`${me.name}|${me.email}`} me={me} />
                 <PasswordCard />
               </div>
             </div>

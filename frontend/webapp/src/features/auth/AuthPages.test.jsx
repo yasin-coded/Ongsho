@@ -1,80 +1,58 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { VerifyEmailPage } from './AuthPages'
+import { LoginPage } from './AuthPages'
+import { RegistrationCheckEmailPage } from './VerificationPages'
 import { ApiError } from '@/api/errors'
 
-const verifyEmail = vi.fn()
-const verifyEmailChange = vi.fn()
-const resendVerification = vi.fn()
-const endSession = vi.fn()
-
-vi.mock('@/api/accounts', () => ({
-  verifyEmail: (...args) => verifyEmail(...args),
-  verifyEmailChange: (...args) => verifyEmailChange(...args),
-  resendVerification: (...args) => resendVerification(...args),
-}))
+const login = vi.fn()
 
 vi.mock('@/auth/auth-context', () => ({
-  useAuth: () => ({ endSession }),
+  useAuth: () => ({ login }),
 }))
 
-function wrap(ui, initialEntries) {
+function wrap(ui) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={ui} />
+          <Route path="/register/check-email" element={<RegistrationCheckEmailPage />} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
 
+function submit(email) {
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: email } })
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret-pass-1' } })
+  fireEvent.click(screen.getByRole('button', { name: /log in/i }))
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  verifyEmail.mockResolvedValue({ verified: true })
-  verifyEmailChange.mockResolvedValue({ email: 'new@example.com', verified: true })
-  resendVerification.mockResolvedValue({ sent: true })
 })
 
-describe('VerifyEmailPage', () => {
-  it('calls verifyEmailChange when type is email-change', async () => {
-    wrap(<VerifyEmailPage />, ['/verify-email?type=email-change&token=abc123'])
-    await waitFor(() => expect(verifyEmailChange).toHaveBeenCalledWith({ token: 'abc123' }))
-    expect(verifyEmail).not.toHaveBeenCalled()
+describe('LoginPage', () => {
+  it('links an unverified account to the registration check-email page', async () => {
+    login.mockRejectedValue(new ApiError('Verify your email before signing in.', { status: 403, code: 'email_not_verified' }))
+    wrap(<LoginPage />)
+    submit('pat@example.com')
+    const link = await screen.findByRole('link', { name: /send a new verification email/i })
+    expect(link).toHaveAttribute('href', '/register/check-email')
+    fireEvent.click(link)
+    expect(await screen.findByRole('heading', { name: /check your inbox/i })).toBeInTheDocument()
+    expect(screen.getByText('pat@example.com')).toBeInTheDocument()
   })
 
-  it('calls verifyEmail for registration links', async () => {
-    wrap(<VerifyEmailPage />, ['/verify-email?token=reg-token'])
-    await waitFor(() => expect(verifyEmail).toHaveBeenCalledWith({ token: 'reg-token' }))
-    expect(verifyEmailChange).not.toHaveBeenCalled()
-  })
-
-  it('shows email-change success copy and login action', async () => {
-    wrap(<VerifyEmailPage />, ['/verify-email?type=email-change&token=ok'])
-    expect(await screen.findByRole('heading', { name: /email address updated successfully/i })).toBeInTheDocument()
-    expect(screen.getByText(/new@example.com/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^log in$/i })).toHaveAttribute('href', '/login')
-    expect(screen.queryByRole('button', { name: /resend/i })).not.toBeInTheDocument()
-  })
-
-  it('clears client session after successful email-change verification', async () => {
-    wrap(<VerifyEmailPage />, ['/verify-email?type=email-change&token=ok'])
-    await screen.findByRole('heading', { name: /email address updated successfully/i })
-    expect(endSession).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows mapped error for stale email-change links', async () => {
-    verifyEmailChange.mockRejectedValue(
-      new ApiError('stale', { code: 'email_change_stale', status: 400 }),
-    )
-    wrap(<VerifyEmailPage />, ['/verify-email?type=email-change&token=stale'])
-    expect(await screen.findByRole('alert')).toHaveTextContent(/no longer valid/i)
-  })
-
-  it('keeps registration resend UI when only email param is present', () => {
-    wrap(<VerifyEmailPage />, ['/verify-email?email=signup%40example.com'])
-    expect(screen.getByRole('button', { name: /resend/i })).toBeInTheDocument()
-    expect(verifyEmail).not.toHaveBeenCalled()
-    expect(verifyEmailChange).not.toHaveBeenCalled()
+  it('does not offer the verification link for wrong credentials', async () => {
+    login.mockRejectedValue(new ApiError('Invalid email or password.', { status: 401, code: 'invalid_credentials' }))
+    wrap(<LoginPage />)
+    submit('pat@example.com')
+    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid email or password/i)
+    expect(screen.queryByRole('link', { name: /send a new verification email/i })).not.toBeInTheDocument()
   })
 })

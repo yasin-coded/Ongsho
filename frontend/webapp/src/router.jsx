@@ -31,7 +31,10 @@ import {
   ResetPasswordPage,
   ReviewPaymentsPage,
   SharedPlansPage,
-  VerifyEmailPage,
+  VerifyEmailLinkPage,
+  RegistrationCheckEmailPage,
+  RegistrationVerifiedPage,
+  EmailChangeVerifiedPage,
 } from '@/routing/lazyRoutes'
 
 function wrapPage(Page, fallback) {
@@ -45,7 +48,10 @@ export const router = createBrowserRouter([
       { path: '/', element: wrapPage(LandingPage, <LandingFallback />) },
       { path: '/login', element: <GuestOnly>{wrapPage(LoginPage, <SkeletonCard lines={4} />)}</GuestOnly> },
       { path: '/register', element: <GuestOnly>{wrapPage(RegisterPage, <SkeletonCard lines={4} />)}</GuestOnly> },
-      { path: '/verify-email', element: wrapPage(VerifyEmailPage, <SkeletonCard lines={3} />) },
+      { path: '/register/check-email', element: wrapPage(RegistrationCheckEmailPage, <SkeletonCard lines={3} />) },
+      { path: '/verify-email', element: wrapPage(VerifyEmailLinkPage, <SkeletonCard lines={3} />) },
+      { path: '/verify-email/confirm', element: wrapPage(RegistrationVerifiedPage, <SkeletonCard lines={3} />) },
+      { path: '/email-change/confirm', element: wrapPage(EmailChangeVerifiedPage, <SkeletonCard lines={3} />) },
       { path: '/reset-password', element: wrapPage(ResetPasswordPage, <SkeletonCard lines={3} />) },
       {
         path: '/invite/:token',

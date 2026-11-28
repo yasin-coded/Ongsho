@@ -3,7 +3,18 @@ import { lazyPage } from './lazyPage'
 export const LandingPage = lazyPage(() => import('@/features/landing/LandingPage').then((m) => ({ default: m.LandingPage })))
 export const LoginPage = lazyPage(() => import('@/features/auth/AuthPages').then((m) => ({ default: m.LoginPage })))
 export const RegisterPage = lazyPage(() => import('@/features/auth/AuthPages').then((m) => ({ default: m.RegisterPage })))
-export const VerifyEmailPage = lazyPage(() => import('@/features/auth/AuthPages').then((m) => ({ default: m.VerifyEmailPage })))
+export const VerifyEmailLinkPage = lazyPage(() =>
+  import('@/features/auth/VerificationPages').then((m) => ({ default: m.VerifyEmailLinkPage })),
+)
+export const RegistrationCheckEmailPage = lazyPage(() =>
+  import('@/features/auth/VerificationPages').then((m) => ({ default: m.RegistrationCheckEmailPage })),
+)
+export const RegistrationVerifiedPage = lazyPage(() =>
+  import('@/features/auth/VerificationPages').then((m) => ({ default: m.RegistrationVerifiedPage })),
+)
+export const EmailChangeVerifiedPage = lazyPage(() =>
+  import('@/features/auth/VerificationPages').then((m) => ({ default: m.EmailChangeVerifiedPage })),
+)
 export const ResetPasswordPage = lazyPage(() => import('@/features/auth/AuthPages').then((m) => ({ default: m.ResetPasswordPage })))
 export const InvitePage = lazyPage(() => import('@/features/auth/InvitePage').then((m) => ({ default: m.InvitePage })))
 export const PlanJoinPage = lazyPage(() => import('@/features/auth/PlanJoinPage').then((m) => ({ default: m.PlanJoinPage })))

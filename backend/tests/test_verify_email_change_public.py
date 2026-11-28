@@ -10,6 +10,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core import mail, signing
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from accounts.cookies import REFRESH_COOKIE_NAME
 from accounts.tokens import EMAIL_CHANGE_SALT, make_email_change_token, make_email_verification_token
@@ -185,3 +186,121 @@ def test_authenticated_user_cannot_apply_another_users_token():
     token_b = extract_email_change_token(mail.outbox[-1].body)
     response = client_for(user_a).post("/api/me/email/verify/", {"token": token_b}, format="json")
     assert response.json()["error"]["code"] == "invalid_token"
+
+
+def _refresh_with(cookie_value: str):
+    return APIClient().post(
+        "/api/auth/refresh/",
+        format="json",
+        HTTP_COOKIE=f"{REFRESH_COOKIE_NAME}={cookie_value}",
+        **APP_HEADER,
+    )
+
+
+def _token_state(user) -> tuple[int, int]:
+    return (
+        OutstandingToken.objects.filter(user=user).count(),
+        BlacklistedToken.objects.filter(token__user=user).count(),
+    )
+
+
+def _signed_in_browser(email: str) -> tuple[APIClient, str]:
+    """A client holding a real refresh cookie from login, as a browser would."""
+    browser = APIClient()
+    login = login_with_cookie(browser, email)
+    assert login.status_code == 200
+    return browser, login.cookies[REFRESH_COOKIE_NAME].value
+
+
+@pytest.mark.django_db
+def test_success_clears_refresh_cookie_and_revokes_sessions():
+    user, token, pending = _pending()
+    browser, refresh_before = _signed_in_browser("base@example.com")
+    outstanding_before, _ = _token_state(user)
+    assert outstanding_before >= 1
+
+    response = browser.post(PUBLIC_VERIFY, {"token": token}, format="json")
+
+    assert response.status_code == 200
+    cleared = response.cookies[REFRESH_COOKIE_NAME]
+    assert cleared.value == ""
+    assert int(cleared["max-age"]) == 0
+    assert cleared["path"] == "/api/auth/"
+    outstanding, blacklisted = _token_state(user)
+    assert blacklisted == outstanding
+    assert _refresh_with(refresh_before).status_code == 401
+    user.refresh_from_db()
+    assert user.email == pending
+
+
+def _make_invalid():
+    user, _, _ = _pending()
+    return user, "garbage-token", "invalid_token"
+
+
+def _make_expired():
+    user, token, _ = _pending()
+    return user, token, "expired_token"
+
+
+def _make_stale():
+    user, token_first, _ = _pending()
+    mail.outbox.clear()
+    request_email_change(client_for(user), "second-fresh@example.com")
+    return user, token_first, "email_change_stale"
+
+
+def _make_taken():
+    user, token, _ = _pending(pending="taken-cookie@example.com")
+    make_verified("taken-cookie@example.com")
+    return user, token, "email_taken"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "make_case, expired",
+    [
+        (_make_invalid, False),
+        (_make_expired, True),
+        (_make_stale, False),
+        (_make_taken, False),
+    ],
+    ids=["invalid", "expired", "stale", "email_taken"],
+)
+def test_failure_keeps_refresh_cookie_and_sessions(make_case, expired):
+    user, token, expected_code = make_case()
+    user.refresh_from_db()
+    email_before, pending_before = user.email, user.pending_email
+    browser, refresh_before = _signed_in_browser(email_before)
+    state_before = _token_state(user)
+
+    if expired:
+        future = time.time() + int(timedelta(days=5).total_seconds())
+        with patch("django.core.signing.time.time", return_value=future):
+            response = browser.post(PUBLIC_VERIFY, {"token": token}, format="json")
+    else:
+        response = browser.post(PUBLIC_VERIFY, {"token": token}, format="json")
+
+    assert response.status_code in (400, 409)
+    assert_error_shape(response)
+    assert response.json()["error"]["code"] == expected_code
+    assert REFRESH_COOKIE_NAME not in response.cookies
+    assert _token_state(user) == state_before
+    user.refresh_from_db()
+    assert (user.email, user.pending_email) == (email_before, pending_before)
+    assert _refresh_with(refresh_before).status_code == 200
+
+
+@pytest.mark.django_db
+def test_inactive_account_failure_does_not_touch_cookie():
+    user, token, _ = _pending()
+    User.objects.filter(pk=user.pk).update(is_active=False)
+    response = APIClient().post(
+        PUBLIC_VERIFY,
+        {"token": token},
+        format="json",
+        HTTP_COOKIE=f"{REFRESH_COOKIE_NAME}=unchanged",
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "account_inactive"
+    assert REFRESH_COOKIE_NAME not in response.cookies

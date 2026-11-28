@@ -88,7 +88,7 @@ def verify_email_change_view(request):
     try:
         user = services.verify_email_change_for_token(serializer.validated_data["token"])
     except DomainError as exc:
-        return _domain_response(exc, clear_refresh=True)
+        return _domain_response(exc)
     response = Response(
         {
             "email": user.email,

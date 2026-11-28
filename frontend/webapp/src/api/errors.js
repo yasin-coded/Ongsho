@@ -33,13 +33,20 @@ export const API_FIELD_TO_FORM = {
 }
 
 export class ApiError extends Error {
-  constructor(message, { status = 400, fields = {}, code = null } = {}) {
+  constructor(message, { status = 400, fields = {}, code = null, retryAfter = null } = {}) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.fields = fields
     this.code = code
+    this.retryAfter = retryAfter
   }
+}
+
+function retryAfterSeconds(err) {
+  const raw = err?.response?.headers?.['retry-after']
+  const n = Number(raw)
+  return raw != null && Number.isFinite(n) && n > 0 ? Math.ceil(n) : null
 }
 
 function firstMessage(list) {
@@ -72,6 +79,7 @@ export function normalizeApiError(err, { fallbackMessage = 'Something went wrong
   if (err instanceof ApiError) return err
   const status = err?.response?.status ?? err?.status ?? 0
   const data = err?.response?.data
+  const retryAfter = retryAfterSeconds(err)
 
   if (data?.error) {
     const { code, message, fields } = data.error
@@ -79,6 +87,7 @@ export function normalizeApiError(err, { fallbackMessage = 'Something went wrong
       status,
       code: code ?? null,
       fields: flattenFields(fields),
+      retryAfter,
     })
   }
 
@@ -87,5 +96,5 @@ export function normalizeApiError(err, { fallbackMessage = 'Something went wrong
   }
 
   const message = typeof data === 'string' ? data : data?.detail ?? fallbackMessage
-  return new ApiError(message, { status })
+  return new ApiError(message, { status, retryAfter })
 }

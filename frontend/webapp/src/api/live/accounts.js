@@ -1,6 +1,6 @@
 import { clearAccessToken, setAccessToken } from '@/auth/tokenStore'
 import { rethrowAccountCloseError } from '@/lib/accountCloseErrors'
-import { apiRequest } from '../http'
+import { ApiError, apiRequest } from '../http'
 import { refreshAccessCoalesced } from '../sessionRefresh'
 import { mapMePatch, mapUserFromApi } from '../adapters/me'
 import { mapPublicInvite } from '../adapters/invite'
@@ -19,14 +19,18 @@ export async function register({ name, email, password }) {
   return { email }
 }
 
+function missingTokenError() {
+  return new ApiError('Invalid or expired verification link.', { status: 400, code: 'invalid_token' })
+}
+
 export async function verifyEmail({ token } = {}) {
-  if (!token) return mock.verifyEmail()
+  if (!token) throw missingTokenError()
   await apiRequest('post', '/api/auth/verify-email/', { data: { token } })
   return { verified: true }
 }
 
 export async function verifyEmailChange({ token } = {}) {
-  if (!token) return mock.verifyEmailChange()
+  if (!token) throw missingTokenError()
   const data = await apiRequest('post', '/api/auth/verify-email-change/', { data: { token } })
   clearAccessToken()
   return { email: data.email, verified: true }

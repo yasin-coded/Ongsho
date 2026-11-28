@@ -110,7 +110,7 @@ function Row({ n, onReject }) {
         </p>
         <p className="t-meta font-bold">{n.detail}</p>
       </div>
-      <div className="grid flex-none justify-items-end gap-2">
+      <div className="grid flex-none justify-items-start gap-2 sm:ml-auto sm:justify-items-end">
         <time className="t-meta" dateTime={n.createdAt}>
           {fmtWhen(n.createdAt)}
         </time>
