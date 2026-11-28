@@ -2,11 +2,11 @@
 
 <div align="center">
 
-<img src="docs/assets/readme-hero.svg?v=2" alt="Ongsho — split subscriptions, track every due, keep the record" width="100%" style="max-width:1200px;border:4px solid #000;border-radius:24px;box-shadow:8px 8px 0 #000;" />
+<img src="docs/assets/readme-hero.svg?v=3" alt="Ongsho — split subscriptions, track every due, keep the record" width="100%" style="max-width:1200px;border:4px solid #000;border-radius:24px;box-shadow:8px 8px 0 #000;" />
 
 <br />
 
-<img src="docs/assets/ongsho-mark.svg?v=2" alt="" width="72" height="72" />
+<img src="docs/assets/ongsho-mark.svg?v=3" alt="" width="88" height="88" />
 
 # Ongsho
 
@@ -352,7 +352,7 @@ Built by **Yasin Bin Ahsan**. Product identity and copy align with the live land
 ---
 
 <p align="center">
-  <img src="docs/assets/ongsho-mark.svg?v=2" alt="" width="48" height="48" />
+  <img src="docs/assets/ongsho-mark.svg?v=3" alt="" width="56" height="56" />
   <br />
   <strong>Ongsho</strong> — split fairly. Track clearly. Download when it counts.
 </p>
