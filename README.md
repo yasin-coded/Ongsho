@@ -192,8 +192,6 @@ Ongsho **generates real PDF files in memory** (ReportLab) and returns them as do
 
 ## Architecture
 
-<img src="docs/assets/architecture.svg" alt="Browser to Vercel frontend, Django API on Render, PostgreSQL on Neon, transactional email provider" width="100%" style="max-width:960px;border:3px solid #000;border-radius:20px;box-shadow:6px 6px 0 #000;" />
-
 1. The user loads the **React SPA** from frontend hosting.  
 2. Browser calls **same-origin `/api/...`**; hosting rewrites those requests to the **Django API**.  
 3. Django reads/writes **PostgreSQL** and enqueues **transactional email** when needed.  
