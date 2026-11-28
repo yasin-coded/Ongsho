@@ -1,5 +1,8 @@
-# Project docs (local / not for public repo)
-docs/
+# Project docs (local / not for public repo) — public README SVGs under docs/assets/ are tracked
+docs/*
+!docs/assets/
+docs/assets/*
+!docs/assets/*.svg
 
 # Secrets and local env
 .env

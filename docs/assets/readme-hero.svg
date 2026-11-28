@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-label="Ongsho hero artwork">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fdfbcf"/>
+      <stop offset="100%" stop-color="#fff8b0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="420" fill="url(#g)"/>
+  <rect x="48" y="48" width="320" height="72" rx="18" fill="#bf1d1d" stroke="#000" stroke-width="6"/>
+  <text x="78" y="98" font-family="system-ui,Segoe UI,sans-serif" font-size="42" font-weight="800" fill="#fdfbcf">ONGSHO</text>
+  <rect x="48" y="152" width="520" height="220" rx="32" fill="#fff" stroke="#000" stroke-width="6"/>
+  <rect x="400" y="152" width="28" height="220" fill="#ff9700" stroke="#000" stroke-width="4"/>
+  <text x="80" y="210" font-family="system-ui,Segoe UI,sans-serif" font-size="28" font-weight="700" fill="#000">Split subscriptions.</text>
+  <text x="80" y="252" font-family="system-ui,Segoe UI,sans-serif" font-size="28" font-weight="700" fill="#274f00">Track every due.</text>
+  <text x="80" y="294" font-family="system-ui,Segoe UI,sans-serif" font-size="28" font-weight="700" fill="#bf1d1d">Keep the record.</text>
+  <text x="80" y="340" font-family="system-ui,Segoe UI,sans-serif" font-size="18" font-weight="600" fill="#4a4a3a">Cooperative plan management for Bangladesh &amp; beyond.</text>
+  <g transform="translate(620 60)">
+    <rect x="0" y="0" width="520" height="300" rx="36" fill="#000" opacity="0.08"/>
+    <rect x="20" y="20" width="480" height="260" rx="28" fill="#fff" stroke="#000" stroke-width="6"/>
+    <circle cx="120" cy="120" r="56" fill="#ff00ff" stroke="#000" stroke-width="5"/>
+    <circle cx="260" cy="90" r="44" fill="#14b3f2" stroke="#000" stroke-width="5"/>
+    <circle cx="380" cy="150" r="52" fill="#22c400" stroke="#000" stroke-width="5"/>
+    <circle cx="280" cy="200" r="40" fill="#ff9700" stroke="#000" stroke-width="5"/>
+    <path d="M120 176 L260 134 L380 150" fill="none" stroke="#000" stroke-width="4" stroke-dasharray="10 8"/>
+    <path d="M260 134 L280 200 L120 176" fill="none" stroke="#000" stroke-width="4" stroke-dasharray="10 8"/>
+    <rect x="60" y="230" width="120" height="36" rx="10" fill="#fff200" stroke="#000" stroke-width="4"/>
+    <text x="78" y="254" font-size="14" font-weight="700" fill="#000">PENDING</text>
+    <rect x="220" y="230" width="88" height="36" rx="10" fill="#22c400" stroke="#000" stroke-width="4"/>
+    <text x="238" y="254" font-size="14" font-weight="700" fill="#000">PAID</text>
+    <rect x="340" y="230" width="72" height="36" rx="10" fill="#ff1a1a" stroke="#000" stroke-width="4"/>
+    <text x="358" y="254" font-size="14" font-weight="700" fill="#fff">DUE</text>
+  </g>
+  <rect x="900" y="48" width="252" height="56" rx="14" fill="#00aa45" stroke="#000" stroke-width="5"/>
+  <text x="928" y="84" font-size="20" font-weight="700" fill="#fff">LIVE DASHBOARD</text>
+  <rect x="900" y="124" width="252" height="56" rx="14" fill="#e87400" stroke="#000" stroke-width="5"/>
+  <text x="928" y="160" font-size="20" font-weight="700" fill="#fff">PDF STATEMENTS</text>
+</svg>
